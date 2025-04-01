@@ -50,3 +50,39 @@ Run it with a particular python version
 ```bash
 uv run -p 3.12 src/main.py
 ```
+
+## Import System
+
+This project includes a custom import system that allows you to import modules like `from services.aws_utils import AWSUtils` from anywhere in the project.
+
+### How to Import Services in Your Code
+
+#### Option 1: Using the setup_path helper (Recommended)
+
+For scripts at the project root level:
+
+```python
+# First import the setup_path module
+import setup_path
+
+# Now you can import from services directly
+from services.aws_utils import AWSUtils
+```
+
+For notebooks in the notebooks directory:
+
+```python
+# First import the setup_path module
+import setup_path
+
+# Now you can import from services directly
+from services.aws_utils import AWSUtils
+```
+
+#### Option 2: Direct Import (Only for code inside src directory)
+
+If your code is inside the src directory, you can directly import from services:
+
+```python
+from services.aws_utils import AWSUtils
+```

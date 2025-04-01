@@ -4,7 +4,24 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "boto3==1.35.88",
+    "opensearch-py==2.8.0",
+    "torch>=2.0.0,<3.0.0",
+    "transformers==4.45.2",
+    "python-dotenv==1.0.1",
+    "pinecone>=5.0,<6.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt", "*.md"]
 
 [dependency-groups]
 dev = [
