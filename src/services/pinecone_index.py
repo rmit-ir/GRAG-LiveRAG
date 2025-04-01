@@ -38,7 +38,7 @@ class PineconeService:
             embedding_model_name: Name of the embedding model to use
             index_name: Name of the Pinecone index
             namespace: Namespace in the Pinecone index
-            region_name: AWS region name (defaults to AWS_REGION environment variable)
+            region_name: AWS region name (defaults to AWS_LIVE_RAG_REGION environment variable)
         """
         self.aws_utils = AWSUtils(region_name)
         self.embedding_utils = EmbeddingUtils(embedding_model_name)

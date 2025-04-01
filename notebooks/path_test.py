@@ -3,9 +3,6 @@ Test script to verify that notebooks/setup_path.py works correctly.
 """
 print("Testing notebooks path setup...")
 
-# Import setup_path to configure Python path
-import setup_path
-
 # Try importing from services package
 try:
     from services import aws_utils

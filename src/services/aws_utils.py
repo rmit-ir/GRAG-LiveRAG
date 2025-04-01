@@ -19,9 +19,9 @@ class AWSUtils:
         Args:
             region_name: AWS region name (defaults to AWS_REGION environment variable)
         """
-        self.aws_region_name = region_name or os.environ.get('AWS_REGION')
+        self.aws_region_name = region_name or os.environ.get('AWS_LIVE_RAG_REGION')
         if not self.aws_region_name:
-            raise ValueError("AWS_REGION environment variable is required")
+            raise ValueError("AWS_LIVE_RAG_REGION environment variable is required")
 
     def get_session(self):
         """
@@ -31,11 +31,11 @@ class AWSUtils:
             boto3.Session: Configured AWS session
         """
         # Get AWS credentials from environment variables
-        access_key = os.environ.get('AWS_ACCESS_KEY_ID')
-        secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
+        access_key = os.environ.get('AWS_LIVE_RAG_ACCESS_KEY_ID')
+        secret_key = os.environ.get('AWS_LIVE_RAG_SECRET_ACCESS_KEY')
         
         if not access_key or not secret_key:
-            raise ValueError("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required")
+            raise ValueError("AWS_LIVE_RAG_ACCESS_KEY_ID and AWS_LIVE_RAG_SECRET_ACCESS_KEY environment variables are required")
             
         return boto3.Session(
             aws_access_key_id=access_key,
