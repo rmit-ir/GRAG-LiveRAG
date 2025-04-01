@@ -116,26 +116,96 @@ class OpenSearchService:
         return client.msearch(body=request)
 
     @staticmethod
-    def show_opensearch_results(results: Dict[str, Any]) -> None:
+    def show_opensearch_results(results: Dict[str, Any], max_text_length: Optional[int] = None, 
+                               show_metadata_fields: Optional[List[str]] = None) -> None:
         """
-        Display OpenSearch query results in a readable format.
+        Display OpenSearch query results in a readable format with improved formatting.
         
         Args:
             results: OpenSearch query results
+            max_text_length: Optional maximum length for text display (None for full text)
+            show_metadata_fields: Optional list of metadata fields to display besides 'text'
         """
         if "hits" in results:
             # Single query results
-            for match in results["hits"]["hits"]:
-                print("chunk:", match["_id"], "score:", match["_score"])
-                print(match["_source"]["text"])
-                print()
+            hits = results["hits"]["hits"]
+            if not hits:
+                print("No matches found.")
+                return
+                
+            print(f"Found {len(hits)} matches:")
+            print("-" * 80)
+            
+            for i, match in enumerate(hits, 1):
+                # Format the score
+                score = match["_score"]
+                
+                # Create a header with result number, ID and score
+                print(f"🔍 RESULT #{i} | ID: {match['_id']} | SCORE: {score}")
+                
+                # Handle text content with optional truncation
+                if "_source" in match and "text" in match["_source"]:
+                    text = match["_source"]["text"]
+                    if max_text_length and len(text) > max_text_length:
+                        display_text = text[:max_text_length] + "..."
+                    else:
+                        display_text = text
+                    
+                    print("\nCONTENT:")
+                    print(f"{display_text}")
+                else:
+                    print("\nCONTENT: <No text available>")
+                    
+                # Show additional metadata fields if requested
+                if show_metadata_fields and "_source" in match:
+                    print("\nADDITIONAL METADATA:")
+                    for field in show_metadata_fields:
+                        if field != "text" and field in match["_source"]:
+                            print(f"  {field}: {match['_source'][field]}")
+                
+                # Add separator between results
+                print("-" * 80)
+                
         elif "responses" in results:
             # Batch query results
-            for response in results["responses"]:
-                for match in response["hits"]["hits"]:
-                    print("chunk:", match["_id"], "score:", match["_score"])
-                    print(match["_source"]["text"])
-                    print()
+            for resp_idx, response in enumerate(results["responses"], 1):
+                hits = response["hits"]["hits"]
+                if not hits:
+                    print(f"Query #{resp_idx}: No matches found.")
+                    continue
+                    
+                print(f"\nQuery #{resp_idx}: Found {len(hits)} matches:")
+                print("-" * 80)
+                
+                for i, match in enumerate(hits, 1):
+                    # Format the score
+                    score = match["_score"]
+                    
+                    # Create a header with result number, ID and score
+                    print(f"🔍 RESULT #{i} | ID: {match['_id']} | SCORE: {score}")
+                    
+                    # Handle text content with optional truncation
+                    if "_source" in match and "text" in match["_source"]:
+                        text = match["_source"]["text"]
+                        if max_text_length and len(text) > max_text_length:
+                            display_text = text[:max_text_length] + "..."
+                        else:
+                            display_text = text
+                        
+                        print("\nCONTENT:")
+                        print(f"{display_text}")
+                    else:
+                        print("\nCONTENT: <No text available>")
+                        
+                    # Show additional metadata fields if requested
+                    if show_metadata_fields and "_source" in match:
+                        print("\nADDITIONAL METADATA:")
+                        for field in show_metadata_fields:
+                            if field != "text" and field in match["_source"]:
+                                print(f"  {field}: {match['_source'][field]}")
+                    
+                    # Add separator between results
+                    print("-" * 80)
 
 
 # Example usage
@@ -143,15 +213,25 @@ if __name__ == "__main__":
     # Initialize the service
     service = OpenSearchService()
     
-    # Example OpenSearch query
-    print("=== OpenSearch Single Query Example ===")
-    results = service.query_opensearch("What is a second brain?")
+    # Example 1: Basic usage with default parameters
+    print("=== Example 1: Basic OpenSearch Query Results ===")
+    results = service.query_opensearch("What is a second brain?", top_k=3)
     service.show_opensearch_results(results)
     
-    # Example batch OpenSearch query
-    print("\n=== OpenSearch Batch Query Example ===")
+    # Example 2: With text truncation
+    print("\n=== Example 2: Truncated Text (100 characters) ===")
+    results = service.query_opensearch("What is a second brain?", top_k=2)
+    service.show_opensearch_results(results, max_text_length=100)
+    
+    # Example 3: Display additional metadata fields if they exist
+    print("\n=== Example 3: Showing Additional Metadata Fields ===")
+    results = service.query_opensearch("What is a second brain?", top_k=2)
+    service.show_opensearch_results(results, show_metadata_fields=["source", "url", "title"])
+    
+    # Example 4: Batch query with multiple prompts
+    print("\n=== Example 4: Batch Query Example ===")
     batch_results = service.batch_query_opensearch(
-        ["What is a second brain?", "how does a brain work?", "Where is Paris?"],
+        ["How does a brain work?", "Where is Paris?", "What is artificial intelligence?"],
         top_k=1
     )
-    service.show_opensearch_results(batch_results)
+    service.show_opensearch_results(batch_results, max_text_length=150)

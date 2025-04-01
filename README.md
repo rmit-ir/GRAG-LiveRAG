@@ -37,6 +37,27 @@ cd LiveRAG
 uv sync
 ```
 
+## Environment Variables
+
+This project uses environment variables for configuration. Create a `.env` file in the project root with the following variables:
+
+```
+# AWS Configuration (required for AWS services and SSM parameter access)
+AWS_REGION=us-east-1 # MUST be this region
+AWS_ACCESS_KEY_ID=your_access_key_id
+AWS_SECRET_ACCESS_KEY=your_secret_access_key
+
+# Other service configurations can be added as needed
+```
+
+A `.env.example` file is provided as a template. Copy it to create your own `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+And edit the `.env` file with your own values.
+
 ## Usage
 
 Run the main script:
