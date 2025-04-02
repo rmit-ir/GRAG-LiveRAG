@@ -45,19 +45,7 @@ So you can import the package from anywhere in the project:
 uv pip install -e .
 ```
 
-## Environment Variables
-
-This project uses environment variables for configuration. Create a `.env` file in the project root with the following variables:
-
-```bash
-# AWS Configuration (required for AWS services and SSM parameter access)
-# Note: AWS_REGION must be set to us-east-1 for this project
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_access_key_id
-AWS_SECRET_ACCESS_KEY=your_secret_access_key
-
-# Other service configurations can be added as needed
-```
+4. Environment variables
 
 A `.env.example` file is provided as a template. Copy it to create your own `.env` file:
 
