@@ -4,8 +4,6 @@ Vector index service module for vector operations.
 This module imports specialized services for AWS utilities, embedding utilities,
 and specific vector database implementations (Pinecone and OpenSearch).
 """
-import os
-from typing import List, Literal, Dict, Any, Optional
 from dotenv import load_dotenv
 
 # Import specialized services

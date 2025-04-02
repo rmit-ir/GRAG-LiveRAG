@@ -57,6 +57,8 @@ cp .env.example .env
 
 And edit the `.env` file with your own values.
 
+Note, the access details can be found at https://linear.app/rmit-liverag-2025/document/access-to-platforms-eb73586791f5
+
 ## Usage
 
 Run the main script:

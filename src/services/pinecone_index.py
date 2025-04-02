@@ -4,7 +4,6 @@ Manages Pinecone index connections and queries.
 Provides functionality for querying Pinecone vector databases,
 handling authentication, and processing results.
 """
-import os
 from typing import List, Dict, Any, Optional
 from multiprocessing.pool import ThreadPool
 from dotenv import load_dotenv

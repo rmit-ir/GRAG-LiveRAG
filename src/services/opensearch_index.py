@@ -5,7 +5,6 @@ Provides functionality for querying OpenSearch vector databases,
 handling authentication, and processing results.
 """
 from typing import List, Dict, Any, Optional
-import boto3
 from dotenv import load_dotenv
 from opensearchpy import OpenSearch, AWSV4SignerAuth, RequestsHttpConnection
 
