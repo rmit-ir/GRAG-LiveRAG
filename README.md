@@ -27,12 +27,14 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### Set up the project
 
 1. Clone this repository:
+
 ```bash
 git clone https://github.com/rmit-ir/LiveRAG
 cd LiveRAG
 ```
 
 2. Install dependencies
+
 ```bash
 uv sync
 ```
