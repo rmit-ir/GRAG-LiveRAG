@@ -11,6 +11,7 @@ dependencies = [
     "transformers==4.45.2",
     "python-dotenv==1.0.1",
     "pinecone>=5.0,<6.0.0",
+    "pandas>=2.2.3",
 ]
 
 [build-system]

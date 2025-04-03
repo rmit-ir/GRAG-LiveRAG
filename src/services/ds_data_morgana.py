@@ -6,10 +6,43 @@ benchmarks tailored to RAG applications. It enables detailed configurations of u
 and question categories and provides control over their distribution within the benchmark.
 """
 import os
-import json
 import requests
 import pandas as pd
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
+from typing import TypedDict
+
+
+class CategoryDict(TypedDict):
+    categorization_name: str
+    category_name: str
+
+
+@dataclass
+class QAPair:
+    """
+    Represents a question-answer pair with associated metadata.
+    """
+    question: str
+    answer: str
+    context: List[str]
+    question_categories: List[CategoryDict]
+    user_categories: List[CategoryDict]
+    document_ids: List[str]
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'QAPair':
+        """
+        Create a QAPair instance from a dictionary.
+        """
+        return cls(
+            question=data.get('question', ''),
+            answer=data.get('answer', ''),
+            context=data.get('context', []),
+            question_categories=data.get('question_categories', []),
+            user_categories=data.get('user_categories', []),
+            document_ids=data.get('document_ids', [])
+        )
 
 
 class DataMorgana:
@@ -29,6 +62,8 @@ class DataMorgana:
         question_categories={...},
         user_categories={...}
     )
+    print(f"Question: {qa_pair.question}")
+    print(f"Answer: {qa_pair.answer}")
 
     # Generate bulk QA pairs asynchronously
     generation = dm.generate_qa_pair_bulk(
@@ -41,13 +76,12 @@ class DataMorgana:
     generation_id = generation["generation_id"]
 
     # Wait for and retrieve generation results
-    results = dm.wait_generation_results(generation_id)
+    qa_pairs = dm.wait_generation_results(generation_id)
 
     # Access the generated QA pairs
-    qa_pairs = results.get("qa_pairs", [])
     for qa in qa_pairs:
-        print(f"Question: {qa['question']}")
-        print(f"Answer: {qa['answer']}")
+        print(f"Question: {qa.question}")
+        print(f"Answer: {qa.answer}")
     ```
     """
 
@@ -83,7 +117,7 @@ class DataMorgana:
         question_categories: Dict[str, Dict[str, str]],
         user_categories: Optional[Dict[str, Dict[str, str]]] = None,
         document_ids: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+    ) -> QAPair:
         """
         Generate a question-answer pair synchronously.
 
@@ -107,7 +141,7 @@ class DataMorgana:
             document_ids: List of document IDs to use for generation
 
         Returns:
-            Generated QA pair response
+            Generated QAPair object
         """
         url = f"{self.base_url}/generate_sync_qa_pair"
 
@@ -125,7 +159,14 @@ class DataMorgana:
             url, headers=self._get_headers(), json=payload)
         response.raise_for_status()
 
-        return response.json()
+        result = response.json()
+        
+        # Extract the QA pair from the nested structure
+        if "response" in result and "result" in result["response"] and len(result["response"]["result"]) > 0:
+            qa_data = result["response"]["result"][0]
+            return QAPair.from_dict(qa_data)
+        else:
+            raise ValueError(f"Unexpected response format: {result}")
 
     def generate_qa_pair_bulk(
         self,
@@ -197,57 +238,6 @@ class DataMorgana:
 
         return response.json()
 
-    def parse_qa_pairs(self, file_path_or_url: str) -> List[Dict[str, Any]]:
-        """
-        Parse QA pairs from a JSONL file, which can be either a local file path or a URL.
-
-        Args:
-            file_path_or_url: Path to local JSONL file or URL to remote JSONL file
-
-        Returns:
-            List of parsed QA pairs
-
-        Examples:
-            ```python
-            # From a URL (e.g., from fetch_generation_results)
-            qa_pairs = dm.parse_qa_pairs("https://example.com/results.jsonl")
-
-            # From a local file
-            qa_pairs = dm.parse_qa_pairs("/path/to/local/file.jsonl")
-            ```
-        """
-        # Check if input is a URL or local file path
-        if file_path_or_url.startswith(('http://', 'https://')):
-            # Handle URL: Download and parse
-            response = requests.get(file_path_or_url)
-            response.raise_for_status()
-            content = response.text
-        else:
-            # Handle local file path
-            try:
-                with open(file_path_or_url, 'r', encoding='utf-8') as f:
-                    content = f.read()
-            except FileNotFoundError:
-                raise FileNotFoundError(
-                    f"JSONL file not found: {file_path_or_url}")
-            except PermissionError:
-                raise PermissionError(
-                    f"Permission denied when trying to read: {file_path_or_url}")
-            except Exception as e:
-                raise Exception(f"Error reading JSONL file: {str(e)}")
-
-        # Parse JSONL content (each line is a separate JSON object)
-        qa_pairs = []
-        for line in content.strip().split('\n'):
-            if line:
-                try:
-                    qa_pairs.append(json.loads(line))
-                except json.JSONDecodeError as e:
-                    print(f"Warning: Skipping invalid JSON line: {str(e)}")
-                    continue
-
-        return qa_pairs
-
     def retry_generation(self, generation_id: str) -> Dict[str, Any]:
         """
         Retry a failed bulk generation request.
@@ -270,10 +260,48 @@ class DataMorgana:
 
         return response.json()
 
-    def wait_generation_results(self, generation_id: str, sleep_sec=2, parse_results=True) -> Dict[str, Any]:
+    def save_generation_to_file(self, file_url: str, generation_id: str) -> str:
+        """
+        Save generation results from URL to a local file.
+        
+        Args:
+            file_url: URL to the JSONL file containing QA pairs
+            generation_id: ID of the generation request (used as fallback filename)
+            
+        Returns:
+            Path where the file was saved
+        """
+        import os
+        import urllib.parse
+        from utils.path_utils import get_project_root
+        
+        # Extract the filename from URL
+        filename = os.path.basename(urllib.parse.urlparse(file_url).path)
+        
+        # If filename is empty, use the generation ID
+        if not filename or filename == '':
+            filename = f"results_id_{generation_id}.jsonl"
+        
+        # Create save path using the project root
+        project_root = get_project_root()
+        save_dir = os.path.join(project_root, "data", "generated_qa_pairs")
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, filename)
+        
+        # Read the data
+        df = pd.read_json(file_url, lines=True)
+        
+        # Save to local file
+        df.to_json(save_path, orient='records', lines=True)
+        print(f"Saved results to {save_path}")
+        
+        return save_path
+
+    def wait_generation_results(self, generation_id: str, sleep_sec=2) -> List[QAPair]:
         """
         Wait for generation results with polling.
         If the status is 'in_progress', retry every 2 seconds until completion.
+        When completed, saves the results to project_folder/data/generated_qa_pairs/ directory.
 
         Args:
             generation_id: ID of the generation request
@@ -281,8 +309,8 @@ class DataMorgana:
             parse_results: If True, automatically download and parse QA pairs when completed
 
         Returns:
+            If parse_results is True: List of QAPair objects
             If parse_results is False: Status and raw results of the generation request
-            If parse_results is True: Status, file URL, credits, and parsed QA pairs
         """
         import time
 
@@ -293,16 +321,46 @@ class DataMorgana:
             if status != 'in_progress':
                 print(f"Generation status: {status}")
 
-                if status == 'completed' and parse_results and 'file' in result:
+                if status == 'completed' and 'file' in result:
                     try:
-                        qa_pairs = self.parse_qa_pairs(result['file'])
-                        print(f"Retrieved {len(qa_pairs)} QA pairs")
-                        result['qa_pairs'] = qa_pairs
+                        print(f"\nFile URL: {result['file']}")
+                        print(f"Credits used: {result.get('credits', '?')}")
+
+                        file_url = result['file']
+                        
+                        # Save to local file
+                        save_path = self.save_generation_to_file(file_url, generation_id)
+                        
+                        # Read and parse the data
+                        df = pd.read_json(save_path, lines=True)
+                        print(f"Retrieved {len(df)} QA pairs")
+                        qa_pairs = []
+                        for record in df.to_dict('records'):
+                            qa_pairs.append(QAPair.from_dict(record))
+                        return qa_pairs
                     except Exception as e:
                         print(f"Error parsing QA pairs: {str(e)}")
-
-                return result
+                        return []
+                else:
+                    print(f"Generation failed: {result}")
 
             print(
                 f"Status: {status}, waiting {sleep_sec} seconds before retrying...")
             time.sleep(sleep_sec)
+            
+    @staticmethod
+    def to_dataframe(qa_pairs: List[QAPair]) -> pd.DataFrame:
+        data = []
+        for qa in qa_pairs:
+            # Convert each QAPair to a dictionary
+            row = {
+                'question': qa.question,
+                'answer': qa.answer,
+                'context': qa.context,
+                'question_categories': qa.question_categories,
+                'user_categories': qa.user_categories,
+                'document_ids': qa.document_ids
+            }
+            data.append(row)
+        
+        return pd.DataFrame(data)
