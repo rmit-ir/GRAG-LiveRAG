@@ -8,7 +8,8 @@ and question categories and provides control over their distribution within the 
 import os
 import json
 import requests
-from typing import Dict, List, Optional, Any
+import pandas as pd
+from typing import Dict, List, Optional, Any, Union
 
 
 class DataMorgana:
@@ -195,26 +196,56 @@ class DataMorgana:
         response.raise_for_status()
 
         return response.json()
-        
-    def parse_qa_pairs(self, file_url: str) -> List[Dict[str, Any]]:
+
+    def parse_qa_pairs(self, file_path_or_url: str) -> List[Dict[str, Any]]:
         """
-        Download and parse QA pairs from a JSONL file URL returned by fetch_generation_results.
-        
+        Parse QA pairs from a JSONL file, which can be either a local file path or a URL.
+
         Args:
-            file_url: URL to the JSONL file containing QA pairs
-            
+            file_path_or_url: Path to local JSONL file or URL to remote JSONL file
+
         Returns:
             List of parsed QA pairs
+
+        Examples:
+            ```python
+            # From a URL (e.g., from fetch_generation_results)
+            qa_pairs = dm.parse_qa_pairs("https://example.com/results.jsonl")
+
+            # From a local file
+            qa_pairs = dm.parse_qa_pairs("/path/to/local/file.jsonl")
+            ```
         """
-        response = requests.get(file_url)
-        response.raise_for_status()
-        
+        # Check if input is a URL or local file path
+        if file_path_or_url.startswith(('http://', 'https://')):
+            # Handle URL: Download and parse
+            response = requests.get(file_path_or_url)
+            response.raise_for_status()
+            content = response.text
+        else:
+            # Handle local file path
+            try:
+                with open(file_path_or_url, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except FileNotFoundError:
+                raise FileNotFoundError(
+                    f"JSONL file not found: {file_path_or_url}")
+            except PermissionError:
+                raise PermissionError(
+                    f"Permission denied when trying to read: {file_path_or_url}")
+            except Exception as e:
+                raise Exception(f"Error reading JSONL file: {str(e)}")
+
         # Parse JSONL content (each line is a separate JSON object)
         qa_pairs = []
-        for line in response.text.strip().split('\n'):
+        for line in content.strip().split('\n'):
             if line:
-                qa_pairs.append(json.loads(line))
-                
+                try:
+                    qa_pairs.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    print(f"Warning: Skipping invalid JSON line: {str(e)}")
+                    continue
+
         return qa_pairs
 
     def retry_generation(self, generation_id: str) -> Dict[str, Any]:
@@ -261,7 +292,7 @@ class DataMorgana:
 
             if status != 'in_progress':
                 print(f"Generation status: {status}")
-                
+
                 if status == 'completed' and parse_results and 'file' in result:
                     try:
                         qa_pairs = self.parse_qa_pairs(result['file'])
@@ -269,8 +300,9 @@ class DataMorgana:
                         result['qa_pairs'] = qa_pairs
                     except Exception as e:
                         print(f"Error parsing QA pairs: {str(e)}")
-                
+
                 return result
 
-            print(f"Status: {status}, waiting {sleep_sec} seconds before retrying...")
+            print(
+                f"Status: {status}, waiting {sleep_sec} seconds before retrying...")
             time.sleep(sleep_sec)
