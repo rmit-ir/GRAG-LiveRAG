@@ -2,6 +2,9 @@
 Utility functions for path handling in LiveRAG.
 """
 import os
+from utils.logging_utils import get_logger
+
+log = get_logger("path_utils")
 
 def get_project_root():
     """
@@ -17,6 +20,7 @@ def get_project_root():
     # Go up to the project root (src/utils -> src -> project_root)
     project_root = os.path.dirname(os.path.dirname(current_module_dir))
     
+    log.debug(f"Project root determined as: {project_root}")
     return project_root
 
 def get_data_dir():
@@ -26,4 +30,6 @@ def get_data_dir():
     Returns:
         str: Absolute path to the data directory
     """
-    return os.path.join(get_project_root(), 'data')
+    data_dir = os.path.join(get_project_root(), 'data')
+    log.debug(f"Data directory path: {data_dir}")
+    return data_dir

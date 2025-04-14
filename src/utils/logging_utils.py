@@ -3,12 +3,12 @@ import os
 import logging
 import structlog
 
-# Get log level from environment variable, default to INFO
+# Get log level from environment variable
 log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
 log_level = getattr(logging, log_level_name, logging.INFO)
 
-structlog.stdlib.recreate_defaults(
-    log_level=log_level)  # so we have logger names
+# Configure structlog, so we have logger names
+structlog.stdlib.recreate_defaults(log_level=log_level)
 
 
 def get_logger(module: str) -> structlog.BoundLogger:
@@ -29,9 +29,6 @@ if __name__ == "__main__":
     """
     # Initialize logger with component name
     log = get_logger("example")
-
-    log = structlog.get_logger("some_logger")
-
     log.debug("debugging is hard", a_list=[1, 2, 3])
     log.info("informative!", some_key="some_value")
     log.warning("uh-uh!")

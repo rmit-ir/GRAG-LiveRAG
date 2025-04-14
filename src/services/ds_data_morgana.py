@@ -11,6 +11,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from typing import TypedDict
+from utils.logging_utils import get_logger
 
 
 class CategoryDict(TypedDict):
@@ -84,6 +85,8 @@ class DataMorgana:
         print(f"Answer: {qa.answer}")
     ```
     """
+    
+    log = get_logger("ds_data_morgana")
 
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -293,7 +296,7 @@ class DataMorgana:
         
         # Save to local file
         df.to_json(save_path, orient='records', lines=True)
-        print(f"Saved results to {save_path}")
+        self.log.info(f"Saved results to {save_path}")
         
         return save_path
 
@@ -319,12 +322,12 @@ class DataMorgana:
             status = result.get('status', '').lower()
 
             if status != 'in_progress':
-                print(f"Generation status: {status}")
+                self.log.info(f"Generation status: {status}")
 
                 if status == 'completed' and 'file' in result:
                     try:
-                        print(f"\nFile URL: {result['file']}")
-                        print(f"Credits used: {result.get('credits', '?')}")
+                        self.log.info(f"File URL: {result['file']}")
+                        self.log.info(f"Credits used: {result.get('credits', '?')}")
 
                         file_url = result['file']
                         
@@ -333,18 +336,18 @@ class DataMorgana:
                         
                         # Read and parse the data
                         df = pd.read_json(save_path, lines=True)
-                        print(f"Retrieved {len(df)} QA pairs")
+                        self.log.info(f"Retrieved {len(df)} QA pairs")
                         qa_pairs = []
                         for record in df.to_dict('records'):
                             qa_pairs.append(QAPair.from_dict(record))
                         return qa_pairs
                     except Exception as e:
-                        print(f"Error parsing QA pairs: {str(e)}")
+                        self.log.error(f"Error parsing QA pairs: {str(e)}")
                         return []
                 else:
-                    print(f"Generation failed: {result}")
+                    self.log.error(f"Generation failed: {result}")
 
-            print(
+            self.log.debug(
                 f"Status: {status}, waiting {sleep_sec} seconds before retrying...")
             time.sleep(sleep_sec)
             

@@ -4,6 +4,7 @@ AWS utility functions for authentication and parameter retrieval.
 import boto3
 import os
 from typing import Optional
+from utils.logging_utils import get_logger
 
 
 class AWSUtils:
@@ -11,6 +12,7 @@ class AWSUtils:
     Utility class for AWS operations, including SSM parameter retrieval
     and session management.
     """
+    log = get_logger("aws_utils")
 
     def __init__(self, region_name: Optional[str] = None):
         """

@@ -5,6 +5,7 @@ import torch
 from typing import List, Literal
 from functools import cache
 from transformers import AutoModel, AutoTokenizer
+from utils.logging_utils import get_logger
 
 
 class EmbeddingUtils:
@@ -13,6 +14,8 @@ class EmbeddingUtils:
     Handles model loading, tokenization, and embedding generation with
     various pooling strategies.
     """
+    
+    log = get_logger("embedding_utils")
 
     def __init__(self, embedding_model_name: str = "intfloat/e5-base-v2"):
         """
@@ -40,18 +43,23 @@ class EmbeddingUtils:
     def get_tokenizer(self):
         """Get the tokenizer for the embedding model."""
         if self._tokenizer is None:
+            self.log.debug(f"Loading tokenizer for model: {self.embedding_model_name}")
             self._tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name)
         return self._tokenizer
 
     def get_model(self):
         """Get the embedding model, loaded to the appropriate device."""
         if self._model is None:
+            self.log.debug(f"Loading model: {self.embedding_model_name}")
             model = AutoModel.from_pretrained(self.embedding_model_name, trust_remote_code=True)
             if self.has_mps():
+                self.log.debug("Using MPS device for inference")
                 model = model.to("mps")
             elif self.has_cuda():
+                self.log.debug("Using CUDA device for inference")
                 model = model.to("cuda")
             else:
+                self.log.debug("Using CPU for inference")
                 model = model.to("cpu")
             self._model = model
         return self._model
@@ -111,6 +119,7 @@ class EmbeddingUtils:
         Returns:
             List of embeddings as lists of floats
         """
+        self.log.debug(f"Embedding {len(queries)} queries with {pooling} pooling")
         with_prefixes = [" ".join([query_prefix, query]) for query in queries]
         tokenizer = self.get_tokenizer()
         model = self.get_model()

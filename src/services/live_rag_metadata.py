@@ -1,5 +1,8 @@
 from typing import Dict, Any
 from dataclasses import dataclass
+from utils.logging_utils import get_logger
+
+log = get_logger("live_rag_metadata")
 
 
 @dataclass
@@ -26,6 +29,7 @@ class LiveRAGMetadata:
         Returns:
             LiveRAGMetadata instance with values from the dictionary
         """
+        log.debug(f"Creating LiveRAGMetadata from dict with doc_id: {data.get('doc_id', 'unknown')}")
         return cls(
             chunk_order=data.get('chunk_order', 0.0),
             doc_id=data.get('doc_id', ''),
