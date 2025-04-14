@@ -14,31 +14,6 @@
           "probability": 0.5
         }
       ]
-    },
-    {
-      "categorization_name": "health-categorization",
-      "categories": [
-        {
-          "name": "patient",
-          "description": "a regular patient who uses the system to get basic health information, symptom checking, and guidance on preventive care",
-          "probability": 0.25
-        },
-        {
-          "name": "medical-doctor",
-          "description": "a medical doctor who needs to access some advanced information",
-          "probability": 0.25
-        },
-        {
-          "name": "clinical-researcher",
-          "description": "a clinical researcher who uses the system to access population health data, conduct initial patient surveys, track disease progression patterns, etc",
-          "probability": 0.25
-        },
-        {
-          "name": "public-health-authority",
-          "description": "a public health authority who uses the system to manage community health information dissemination, be informed on health emergencies, etc",
-          "probability": 0.25
-        }
-      ]
     }
   ],
   "question_categories": [
