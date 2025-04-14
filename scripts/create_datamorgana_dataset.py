@@ -9,7 +9,7 @@ Usage:
     uv run scripts/create_datamorgana_dataset.py [options]
 
 Options:
-    --n_questions=<n>       Number of questions to generate [default: 10]
+    --n_questions=<n>       Number of questions to generate [default: 2]
     --output=<path>         Path to save the output file [default: auto-generated in data/generated_qa_pairs/]
     --format=<format>       Output format (tsv, excel, parquet, jsonl) [default: tsv]
     --document_ids=<ids>    Comma-separated list of document IDs to use (optional)
@@ -34,8 +34,34 @@ from utils.path_utils import get_data_dir
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Create a DataMorgana query answer dataset")
-    parser.add_argument("--n_questions", type=int, default=10, help="Number of questions to generate")
+    parser = argparse.ArgumentParser(
+        description="Create a DataMorgana query answer dataset",
+        epilog="""
+Examples:
+    # Basic usage with default parameters (generates 2 questions in TSV format)
+    uv run scripts/create_datamorgana_dataset.py
+    
+    # Generate 50 questions
+    uv run scripts/create_datamorgana_dataset.py --n_questions=50
+    
+    # Generate questions and save as Excel file
+    uv run scripts/create_datamorgana_dataset.py --format=excel
+    
+    # Generate questions and save to a specific path
+    uv run scripts/create_datamorgana_dataset.py --output=data/my_dataset.tsv
+    
+    # Generate questions using specific document IDs
+    uv run scripts/create_datamorgana_dataset.py --document_ids=doc1,doc2,doc3
+    
+    # Generate questions with a custom configuration file
+    uv run scripts/create_datamorgana_dataset.py --config=path/to/custom_config.json
+    
+    # Generate 20 questions in JSONL format with longer wait time between polling
+    uv run scripts/create_datamorgana_dataset.py --n_questions=20 --format=jsonl --wait_time=5
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--n_questions", type=int, default=2, help="Number of questions to generate")
     parser.add_argument("--output", type=str, default=None, help="Path to save the output file")
     parser.add_argument("--format", type=str, default="tsv", choices=["tsv", "excel", "parquet", "jsonl"], 
                         help="Output format")
