@@ -218,9 +218,10 @@ def main():
     if args.output:
         output_path = args.output
     else:
-        # Generate default output path
+        # Generate default output path with number of records
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"datamorgana_dataset_{timestamp}.{args.format}"
+        record_count = len(df)
+        filename = f"datamorgana_dataset_{timestamp}.n{record_count}.{args.format}"
         output_path = os.path.join(get_data_dir(), "generated_qa_pairs", filename)
     
     save_dataframe(df, output_path, args.format)
