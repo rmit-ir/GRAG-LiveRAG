@@ -74,6 +74,10 @@ This tells setuptools to look for packages in the `src` directory, making the pa
 5. Optimize for both relevance and faithfulness in RAG responses
 6. Provide comprehensive evaluation tools for RAG performance
 
+## Technical Preferences
+
+- Use tsv instead of csv for data storage
+
 ## Reference Notebooks
 
 The following notebooks provide examples and documentation for using key services:

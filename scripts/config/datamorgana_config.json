@@ -1,0 +1,116 @@
+{
+  "user_categories": [
+    {
+      "categorization_name": "expertise-categorization",
+      "categories": [
+        {
+          "name": "expert",
+          "description": "a specialized user with deep understanding of the corpus",
+          "probability": 0.5
+        },
+        {
+          "name": "novice",
+          "description": "a regular user with no understanding of specialized terms",
+          "probability": 0.5
+        }
+      ]
+    },
+    {
+      "categorization_name": "health-categorization",
+      "categories": [
+        {
+          "name": "patient",
+          "description": "a regular patient who uses the system to get basic health information, symptom checking, and guidance on preventive care",
+          "probability": 0.25
+        },
+        {
+          "name": "medical-doctor",
+          "description": "a medical doctor who needs to access some advanced information",
+          "probability": 0.25
+        },
+        {
+          "name": "clinical-researcher",
+          "description": "a clinical researcher who uses the system to access population health data, conduct initial patient surveys, track disease progression patterns, etc",
+          "probability": 0.25
+        },
+        {
+          "name": "public-health-authority",
+          "description": "a public health authority who uses the system to manage community health information dissemination, be informed on health emergencies, etc",
+          "probability": 0.25
+        }
+      ]
+    }
+  ],
+  "question_categories": [
+    {
+      "categorization_name": "factuality",
+      "categories": [
+        {
+          "name": "factoid",
+          "description": "question seeking a specific, concise piece of information or a short fact about a particular subject, such as a name, date, or number",
+          "probability": 0.5
+        },
+        {
+          "name": "open-ended",
+          "description": "question inviting detailed or exploratory responses, encouraging discussion or elaboration",
+          "probability": 0.5
+        }
+      ]
+    },
+    {
+      "categorization_name": "premise",
+      "categories": [
+        {
+          "name": "direct",
+          "description": "question that does not contain any premise or any information about the user",
+          "probability": 0.5
+        },
+        {
+          "name": "with-premise",
+          "description": "question starting with a very short premise, where the user reveals their needs or some information about themselves",
+          "probability": 0.5
+        }
+      ]
+    },
+    {
+      "categorization_name": "phrasing",
+      "categories": [
+        {
+          "name": "concise-and-natural",
+          "description": "phrased in the way people typically speak, reflecting everyday language use, without formal or artificial structure. It is a concise direct question consisting of less than 10 words",
+          "probability": 0.25
+        },
+        {
+          "name": "verbose-and-natural",
+          "description": "phrased in the way people typically speak, reflecting everyday language use, without formal or artificial structure. It is a relatively long question consisting of more than 9 words",
+          "probability": 0.25
+        },
+        {
+          "name": "short-search-query",
+          "description": "phrased as a typed web query for search engines (only keywords, without punctuation and without a natural-sounding structure). It consists of less than 7 words",
+          "probability": 0.25
+        },
+        {
+          "name": "long-search-query",
+          "description": "phrased as a typed web query for search engines (only keywords, without punctuation and without a natural-sounding structure). It consists of more than 6 words",
+          "probability": 0.25
+        }
+      ]
+    },
+    {
+      "categorization_name": "linguistic_variation",
+      "categories": [
+        {
+          "name": "similar-to-document",
+          "description": "phrased using the same terminology and phrases appearing in the document",
+          "probability": 0.5
+        },
+        {
+          "name": "distant-from-document",
+          "description": "phrased using terms completely different from the ones appearing in the document",
+          "probability": 0.5
+        }
+      ]
+    }
+  ]
+}
