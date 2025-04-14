@@ -53,7 +53,7 @@ flowchart TD
   - Simple, direct code is easier to maintain
 - Use tsv instead of csv for data storage
 - Use `uv add` for package management
-- Use `uv run` for running scripts, not `python xxx`
+- Use `uv run` for running scripts, or `uv run python xxx`, never directly run `python xxx`
 - `src/` is installed in editable mode, importing without `src.` prefix
 - Use defaults, do not repeat defaults as configuration in code
 - For logging, use `from logging_utils import get_logger` and `logger = get_logger('component')`, and `logger.info("hello, %s!", "world", key="value!", more_than_strings=[1, 2, 3])`. Do not verbose log messages, just the key ones.
@@ -70,3 +70,4 @@ flowchart TD
 
 - **Utils Module**: Contains helper utilities
   - `path_utils.py`: File and directory path management
+  - `logging_utils.py`: Logging
