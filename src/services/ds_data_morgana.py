@@ -54,7 +54,7 @@ class DataMorgana:
     Ideal Usage Examples
     ```python
     # Initialize DataMorgana client
-    dm = DataMorgana()  # Uses DATAMORGANA_API_KEY environment variable
+    dm = DataMorgana()  # Uses AI71_API_KEY environment variable
     # or
     dm = DataMorgana(api_key="your-api-key")
 
@@ -93,12 +93,12 @@ class DataMorgana:
         Initialize the DataMorgana client with API configuration.
 
         Args:
-            api_key: DataMorgana API key (defaults to DATAMORGANA_API_KEY environment variable)
+            api_key: DataMorgana API key (defaults to AI71_API_KEY environment variable)
         """
-        self.api_key = api_key or os.environ.get('DATAMORGANA_API_KEY')
+        self.api_key = api_key or os.environ.get('AI71_API_KEY')
         if not self.api_key:
             raise ValueError(
-                "DATAMORGANA_API_KEY environment variable is required")
+                "AI71_API_KEY environment variable is required")
 
         self.base_url = "https://api.ai71.ai/v1"
 
