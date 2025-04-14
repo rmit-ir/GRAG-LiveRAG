@@ -26,6 +26,7 @@ import argparse
 import pandas as pd
 from datetime import datetime
 from typing import List
+from dotenv import load_dotenv
 
 # Import project modules using the correct import format
 from services.ds_data_morgana import DataMorgana, QAPair
@@ -164,6 +165,9 @@ def save_dataframe(df: pd.DataFrame, output_path: str, format: str):
 
 def main():
     """Main function to create a DataMorgana dataset."""
+    # Load environment variables from .env file
+    load_dotenv()
+    
     args = parse_arguments()
     
     # Initialize DataMorgana client
