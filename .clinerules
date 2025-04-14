@@ -32,6 +32,7 @@ flowchart TD
    - User experience goals
 
 3. `activeContext.md`
+   - Ignored by git
    - Current work focus
    - Recent changes
    - Next steps
@@ -54,6 +55,7 @@ flowchart TD
    - Tool usage patterns
 
 6. `progress.md`
+   - Ignored by git
    - What works
    - What's left to build
    - Current status

@@ -130,7 +130,7 @@ This project uses a memory bank to maintain comprehensive documentation and proj
 2. `productContext.md` - Why this project exists, problems it solves, and user experience goals
 3. `systemPatterns.md` - System architecture, design patterns, and component relationships
 4. `techContext.md` - Technologies used, development setup, and technical constraints
-5. `activeContext.md` - Current work focus, recent changes, and next steps
-6. `progress.md` - What works, what's left to build, and current status
+5. `activeContext.md` - Current work focus, recent changes, and next steps, ignored by git
+6. `progress.md` - What works, what's left to build, and current status, ignored by git
 
 The memory bank serves as the central knowledge repository for the project, allowing for consistent understanding and progress tracking across development sessions. It should be kept up-to-date as the project evolves.
