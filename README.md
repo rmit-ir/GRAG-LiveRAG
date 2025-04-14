@@ -1,10 +1,12 @@
 # LiveRAG
 
-A research project for live retrieval-augmented generation.
+A research project for live retrieval-augmented generation for the SIGIR 2025 LiveRAG Challenge.
 
 ## Overview
 
 Project management: [rmit-liverag-2025 on Linear](https://linear.app/rmit-liverag-2025/team/RMI/view/kanban-2d49ab9d373f)
+
+This project is part of the SIGIR 2025 LiveRAG Challenge, which focuses on building effective Retrieval-Augmented Generation systems. The challenge documentation and resources are available in the `hf-space-LiveRAG-challenge` git submodule.
 
 ## Installation
 
@@ -26,11 +28,18 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### Set up the project
 
-1. Clone this repository:
+1. Clone this repository with submodules:
 
 ```bash
-git clone https://github.com/rmit-ir/LiveRAG
+git clone --recurse-submodules https://github.com/rmit-ir/LiveRAG
 cd LiveRAG
+```
+
+If you've already cloned the repository without submodules, you can initialize and update them:
+
+```bash
+git submodule init
+git submodule update
 ```
 
 2. Install dependencies
@@ -112,3 +121,16 @@ from services.pinecone_index import PineconeService
 ```
 
 No path manipulation or special import helpers are needed. This approach works consistently across all project files, including notebooks.
+
+## Memory Bank
+
+This project uses a memory bank to maintain comprehensive documentation and project context. The memory bank is located in the `memory-bank` directory and consists of the following core files:
+
+1. `projectbrief.md` - Foundation document defining core requirements and goals
+2. `productContext.md` - Why this project exists, problems it solves, and user experience goals
+3. `systemPatterns.md` - System architecture, design patterns, and component relationships
+4. `techContext.md` - Technologies used, development setup, and technical constraints
+5. `activeContext.md` - Current work focus, recent changes, and next steps
+6. `progress.md` - What works, what's left to build, and current status
+
+The memory bank serves as the central knowledge repository for the project, allowing for consistent understanding and progress tracking across development sessions. It should be kept up-to-date as the project evolves.
