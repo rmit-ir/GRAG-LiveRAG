@@ -1,0 +1,11 @@
+{
+  "prompt": "What is retrieval-augmented generation (RAG)?",
+  "model": "anthropic.claude-3-5-haiku-20241022-v1:0",
+  "timestamp": "20250415_022535",
+  "response": {
+    "model": "anthropic.claude-3-5-haiku-20241022-v1:0",
+    "prompt": "What is retrieval-augmented generation (RAG)?",
+    "response": "Retrieval-Augmented Generation (RAG) is an AI technique that enhances large language models by dynamically retrieving relevant external information to improve the accuracy and contextuality of generated responses. Here's a breakdown:\n\nKey Components:\n1. Retrieval: Searching a knowledge base or external database for relevant documents or information\n2. Augmentation: Incorporating the retrieved information into the model's context\n3. Generation: Producing a response using both the original prompt and the retrieved information\n\nHow it Works:\n- When a query is received, the system first searches a knowledge base\n- Relevant documents or passages are retrieved\n- These are combined with the original query\n- The language model then generates a response using both the query and retrieved context\n\nBenefits:\n- Reduces hallucinations (false information)\n- Provides more accurate and up-to-date responses\n- Allows models to access information beyond their original training data\n- Increases transparency by showing sources of information\n\nCommon Applications:\n- Question answering\n- Research assistance\n- Customer support\n- Content generation with citations\n\nExample: A RAG system answering a question about recent scientific research would first retrieve the latest relevant papers, then use those to inform its response.",
+    "timestamp": "2025-04-15T02:25:35.238038"
+  }
+}

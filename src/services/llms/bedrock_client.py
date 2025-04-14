@@ -4,7 +4,7 @@ Client for interacting with Amazon Bedrock API using LangChain.
 import os
 import json
 import time
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, Tuple, Any
 from datetime import datetime
 from langchain_aws import ChatBedrock
 from botocore.exceptions import BotoCoreError, ClientError
@@ -48,20 +48,23 @@ class BedrockClient:
         if region_name is None:
             region_name = os.environ.get("RACE_AWS_REGION", "us-west-2")
 
+        # Set up model kwargs with temperature and max_tokens
+        model_kwargs = {
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+
         # Initialize ChatBedrock with the specified model
         self.chat_model = ChatBedrock(
             model_id=model_id,
             region_name=region_name,
-            model_kwargs={
-                "temperature": temperature,
-                "max_tokens": max_tokens
-            }
+            model_kwargs=model_kwargs
         )
         self.model_id = model_id
         self.system_message = system_message
         logger.debug(f"Initialized Bedrock client with model: {model_id}")
 
-    def query(self, prompt: str) -> str:
+    def query(self, prompt: str) -> Tuple[Any, str]:
         """
         Send a query to the Bedrock API and get the response.
 
@@ -69,7 +72,9 @@ class BedrockClient:
             prompt (str): The prompt to send to the API
 
         Returns:
-            str: The generated text content from the model
+            Tuple[Any, str]: A tuple containing:
+                - raw_response: The complete API response object
+                - content: The generated text content from the model
         """
         # Start timing the API request
         start_time = time.time()
@@ -91,15 +96,21 @@ class BedrockClient:
                 response_time_ms=round(response_time * 1000)
             )
 
-            # Save response for reproducibility
-            self._save_raw_response({
+            # Extract content from the response
+            content = response.content
+
+            # Create response metadata for saving
+            response_metadata = {
                 "model": self.model_id,
                 "prompt": prompt,
-                "response": response.content,
+                "response": content,
                 "timestamp": datetime.now().isoformat()
-            }, prompt)
+            }
 
-            return response.content
+            # Save response for reproducibility
+            self._save_raw_response(response_metadata, prompt)
+
+            return response, content
 
         except (BotoCoreError, ClientError) as e:
             logger.error(f"AWS error: {str(e)}")
@@ -157,24 +168,17 @@ if __name__ == "__main__":
         logger.warning(
             "RACE_AWS_REGION environment variable not set, using default: us-west-2")
 
-    # Example prompt
-    prompt = "What is retrieval-augmented generation (RAG)?"
+    # Create a BedrockClient instance
+    client = BedrockClient(
+        model_id="anthropic.claude-3-5-haiku-20241022-v1:0",
+        system_message="You are an AI assistant that provides clear, concise explanations."
+    )
 
-    try:
-        # Create a BedrockClient instance
-        client = BedrockClient(
-            model_id="anthropic.claude-3-5-haiku-20241022-v1:0",
-            system_message="You are an AI assistant that provides clear, concise explanations."
-        )
+    # Send the query and get the response
+    raw_response, content = client.query("What is retrieval-augmented generation (RAG)?")
 
-        # Send the query and get the response
-        response = client.query(prompt)
-
-        # Print the response
-        print("\nResponse from Bedrock API:")
-        print("-" * 50)
-        print(response)
-        print("-" * 50)
-
-    except Exception as e:
-        logger.error(f"Error in main: {str(e)}")
+    # Print the response content
+    print("\nResponse from Bedrock API:")
+    print("-" * 50)
+    print(content)
+    print("-" * 50)
