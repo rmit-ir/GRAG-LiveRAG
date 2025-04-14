@@ -264,3 +264,6 @@ if __name__ == "__main__":
     fusion_df.info()
     log.info("Raw DataFrame from fusion search:")
     log.info(f"{fusion_df}")
+    # Print first row as a dictionary
+    log.info("First row as dict:")
+    log.info(fusion_df.iloc[0].to_dict())
