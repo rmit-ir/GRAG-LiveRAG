@@ -1,28 +1,38 @@
 # Technical Context: LiveRAG
 
-## Technologies Used
+## Architecture Overview
 
-### Core Technologies
+LiveRAG follows a modular architecture with the following key components:
 
-- **Python**: Primary programming language (requires Python 3.11+)
-- **Vector Databases**:
-  - **Pinecone**: Cloud-based vector database service
-  - **OpenSearch**: Search and analytics engine with vector search capabilities
-- **Embedding Models**: 
-  - **E5-base-v2**: Default embedding model for text-to-vector conversion
-- **Large Language Models**:
-  - **Falcon3-10B-Instruct**: LLM for generating responses
-- **AWS**: Cloud infrastructure for deployment and scaling
-- **DataMorgana**: Tool for generating diverse Q&A benchmarks, Markdown version of the original paper is under docs/data-morgana.md
+```mermaid
+flowchart TD
+  A[Query Processing] --> B[Embedding Service]
+  B --> C[Vector Search]
+  C --> D[Context Processing]
+  D --> E[LLM Integration]
+  E --> F[Output Generation]
+```
 
-### Libraries and Frameworks
+## Evaluation Flow
 
-- **Jupyter Notebooks**: For interactive development and testing
-- **PyTorch**: For machine learning operations and model inference
-- **Transformers**: For loading and using embedding and language models
-- **Boto3**: For AWS service integration
-- **Python-dotenv**: For environment variable management
-- **Pandas**: For data manipulation and analysis
+The evaluation process follows this sequence:
+
+```mermaid
+flowchart TD
+  A[DataMorgana QA Pairs] --> B[Query]
+  B --> C[Response Generation]
+  C --> D[Metric Calculation]
+  D --> F[Feedback Loop]
+  F -.-> B
+```
+
+## Design Patterns
+
+1. **Service-Oriented Architecture**: Each component (embedding, vector search, etc.) is implemented as a separate service
+2. **Interface Pattern**: Multiple interchangeable vector database implementations (Pinecone, OpenSearch)
+3. **Repository Pattern**: Abstraction layer for data access operations
+4. **Dependency Injection**: Services receive their dependencies rather than creating them
+5. Composition over Inheritance
 
 ## Development Setup
 
@@ -30,90 +40,33 @@
 - Dependencies managed via `pyproject.toml` and `uv.lock` (see `pyproject.toml` for specific dependencies)
 - Environment variables configured through `.env` files (see `.env.example` for required variables)
 - Python version specified in `.python-version` file
-- Package installed in editable mode for easy imports
 
-## Technical Constraints
+## Coding Preferences
 
-- Vector database performance limitations
-- Embedding model size and computational requirements
-- API rate limits for external services
-- Cost considerations for cloud-based vector databases
-- 200-token limit for RAG responses in the challenge
-- Evaluation metrics focused on relevance and faithfulness
-
-## Import System
-
-The project is structured as a Python package that can be installed in editable mode:
-
-```bash
-uv pip install -e .
-```
-
-This allows importing project modules from anywhere:
-
-```python
-from services.aws_utils import AWSUtils
-from services.pinecone_index import PineconeService
-```
-
-The package structure is defined in `pyproject.toml` with this configuration:
-
-```toml
-[tool.setuptools.packages.find]
-where = ["src"]
-```
-
-This tells setuptools to look for packages in the `src` directory, making the packages inside `src/` directly importable.
-
-## Project Requirements
-
-1. Implement efficient vector search capabilities using multiple index providers (Pinecone, OpenSearch)
-2. Create embedding utilities for converting text to vector representations
-3. Build a system that can generate and evaluate question-answer pairs using DataMorgana
-4. Integrate with Falcon3-10B-Instruct LLM for answer generation
-5. Optimize for both relevance and faithfulness in RAG responses
-6. Provide comprehensive evaluation tools for RAG performance
-
-## Technical Preferences
-
+- First rule, AVOID verbose code!
+  - Keep code simple and direct
+  - Don't add unnecessary abstractions or layers
+  - Write clear, focused functions that do one thing well
+- If code is not repeated, do not abstract it
+  - Only create abstractions when there's clear duplication
+  - Premature abstraction leads to unnecessary complexity
+  - Simple, direct code is easier to maintain
 - Use tsv instead of csv for data storage
+- Use `uv add` for package management
+- Use `uv run` for running scripts, not `python xxx`
+- `src/` is installed in editable mode, importing without `src.` prefix
+- Use defaults, do not repeat defaults as configuration in code
+- For logging, use `from logging_utils import get_logger` and `logger = get_logger('component')`, and `logger.info("hello, %s!", "world", key="value!", more_than_strings=[1, 2, 3])`. Do not verbose log messages, just the key ones.
 
-## Reference Notebooks
+## Component Relationships
 
-The following notebooks provide examples and documentation for using key services:
+- **Services Module**: Contains core functionality implementations
+  - `pinecone_index.py`: Pinecone vector database integration
+  - `opensearch_index.py`: OpenSearch vector database integration
+  - `embedding_utils.py`: Text-to-vector embedding utilities
+  - `aws_utils.py`: AWS integration services
+  - `indicies.py`: Common interface for vector indices
+  - `ds_data_morgana.py`: DataMorgana integration for Q&A generation
 
-### HF Space LiveRAG Challenge Reference Notebooks
-
-- **`hf-space-LiveRAG-challenge/Operational_Instructions/DM_API_usage_example.ipynb`**:  
-  Demonstrates DataMorgana API usage including:
-  - Checking API budget
-  - Generating single and bulk Q&A pairs
-  - Creating custom question and user categorizations
-  - Working with multi-document questions
-  - Retrieving and processing generation results
-
-- **`hf-space-LiveRAG-challenge/Operational_Instructions/Indices_Usage_Examples_for_LiveRAG.ipynb`**:  
-  Shows how to use pre-built vector indices including:
-  - AWS setup and credential configuration
-  - Pinecone vector search implementation
-  - OpenSearch vector search implementation
-  - Batch query processing for both services
-  - Text embedding generation with E5-base-v2
-
-### Project Implementation Notebooks
-
-- **`notebooks/test_data_morgana.ipynb`**:  
-  Tests the project's DataMorgana service implementation:
-  - Synchronous Q&A pair generation
-  - Bulk generation with multiple categorizations
-  - Working with default and custom categories
-  - Parsing results from JSONL files
-  - Converting results to DataFrame format
-
-- **`notebooks/test-indicies.ipynb`**:  
-  Tests the project's vector index services:
-  - AWS utilities for parameter and secret retrieval
-  - Embedding generation with hardware acceleration
-  - Pinecone service for vector search
-  - OpenSearch service for vector search
-  - Batch query processing
+- **Utils Module**: Contains helper utilities
+  - `path_utils.py`: File and directory path management

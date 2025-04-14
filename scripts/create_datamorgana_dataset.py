@@ -31,6 +31,10 @@ from dotenv import load_dotenv
 # Import project modules using the correct import format
 from services.ds_data_morgana import DataMorgana, QAPair
 from utils.path_utils import get_data_dir
+from utils.logging_utils import get_logger
+
+# Initialize logger
+logger = get_logger("datamorgana_dataset")
 
 
 def parse_arguments():
@@ -75,26 +79,13 @@ Examples:
     return parser.parse_args()
 
 
-def get_script_dir():
-    """Get the directory of the current script."""
-    return os.path.dirname(os.path.abspath(__file__))
-
-
 def load_config(config_path=None):
     if config_path is None:
-        config_path = os.path.join(get_script_dir(), 'config', 'datamorgana_config.json')
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(script_dir, 'config', 'datamorgana_config.json')
     
     with open(config_path, 'r') as f:
         return json.load(f)
-
-
-def get_question_categories(config_data):
-    return config_data.get('question_categories', [])
-
-
-def get_user_categories(config_data):
-    return config_data.get('user_categories', [])
-
 
 def qa_pairs_to_enhanced_dataframe(qa_pairs: List[QAPair]) -> pd.DataFrame:
     """
@@ -151,16 +142,19 @@ def save_dataframe(df: pd.DataFrame, output_path: str, format: str):
     # Save in the specified format
     if format == 'tsv':
         df.to_csv(output_path, index=False, sep='\t')
+        logger.info("Saved dataset as TSV", path=output_path, rows=len(df))
     elif format == 'excel':
         df.to_excel(output_path, index=False)
+        logger.info("Saved dataset as Excel", path=output_path, rows=len(df))
     elif format == 'parquet':
         df.to_parquet(output_path, index=False)
+        logger.info("Saved dataset as Parquet", path=output_path, rows=len(df))
     elif format == 'jsonl':
         df.to_json(output_path, orient='records', lines=True)
+        logger.info("Saved dataset as JSONL", path=output_path, rows=len(df))
     else:
+        logger.error("Unsupported format", format=format)
         raise ValueError(f"Unsupported format: {format}")
-    
-    print(f"Dataset saved to {output_path}")
 
 
 def main():
@@ -168,51 +162,65 @@ def main():
     # Load environment variables from .env file
     load_dotenv()
     
+    logger.info("Starting DataMorgana dataset creation")
     args = parse_arguments()
+    logger.debug("Arguments parsed", n_questions=args.n_questions, format=args.format, 
+                wait_time=args.wait_time, config_path=args.config)
     
     # Initialize DataMorgana client
-    print("Initializing DataMorgana client...")
+    logger.info("Initializing DataMorgana client")
     dm = DataMorgana()
     
     # Parse document IDs if provided
     document_ids = None
     if args.document_ids:
         document_ids = args.document_ids.split(',')
-        print(f"Using document IDs: {document_ids}")
+        logger.info("Using specific document IDs", document_ids=document_ids)
     
     # Load config and get categories
-    config_data = load_config(args.config)
-    question_categorizations = get_question_categories(config_data)
-    user_categorizations = get_user_categories(config_data)
+    try:
+        config_data = load_config(args.config)
+        question_categorizations = config_data.get('question_categories', [])
+        user_categorizations = config_data.get('user_categories', [])
+        logger.debug("Config loaded", 
+                    question_categories_count=len(question_categorizations),
+                    user_categories_count=len(user_categorizations))
+    except Exception as e:
+        logger.error("Failed to load config", error=str(e), config_path=args.config)
+        raise
     
     # Generate bulk QA pairs
-    print(f"Generating {args.n_questions} QA pairs...")
-    generation = dm.generate_qa_pair_bulk(
-        n_questions=args.n_questions,
-        question_categorizations=question_categorizations,
-        user_categorizations=user_categorizations,
-        document_ids=document_ids
-    )
-    
-    # Get the generation ID
-    generation_id = generation["request_id"]
-    print(f"Generation ID: {generation_id}")
-    
-    # Wait for and retrieve generation results
-    print("Waiting for generation results...")
-    qa_pairs = dm.wait_generation_results(generation_id, sleep_sec=args.wait_time)
-    print(f"Retrieved {len(qa_pairs)} QA pairs")
+    logger.info("Generating QA pairs", count=args.n_questions)
+    try:
+        generation = dm.generate_qa_pair_bulk(
+            n_questions=args.n_questions,
+            question_categorizations=question_categorizations,
+            user_categorizations=user_categorizations,
+            document_ids=document_ids
+        )
+        
+        # Get the generation ID
+        generation_id = generation["request_id"]
+        logger.info("Generation request submitted", generation_id=generation_id)
+        
+        # Wait for and retrieve generation results
+        logger.info("Waiting for generation results", wait_time=args.wait_time)
+        qa_pairs = dm.wait_generation_results(generation_id, sleep_sec=args.wait_time)
+        logger.info("Retrieved QA pairs", count=len(qa_pairs))
+    except Exception as e:
+        logger.error("Failed to generate QA pairs", error=str(e))
+        raise
     
     # Convert to enhanced DataFrame
-    print("Converting to DataFrame...")
+    logger.debug("Converting to DataFrame")
     df = qa_pairs_to_enhanced_dataframe(qa_pairs)
     
-    # Display DataFrame info
-    print("\nDataFrame Information:")
-    print(f"Shape: {df.shape}")
-    print("\nColumns:")
-    for col in df.columns:
-        print(f"  - {col}")
+    # Log DataFrame info
+    logger.info("DataFrame created", 
+               shape=df.shape, 
+               columns=list(df.columns),
+               avg_question_length=df['question_length'].mean(),
+               avg_answer_length=df['answer_length'].mean())
     
     # Save DataFrame
     if args.output:
@@ -223,28 +231,33 @@ def main():
         record_count = len(df)
         filename = f"datamorgana_dataset_{timestamp}.n{record_count}.{args.format}"
         output_path = os.path.join(get_data_dir(), "generated_qa_pairs", filename)
+        logger.debug("Generated output path", path=output_path)
     
     save_dataframe(df, output_path, args.format)
     
-    # Print summary statistics
-    print("\nDataset Summary:")
-    print(f"Total QA pairs: {len(df)}")
+    # Log summary statistics
+    logger.info("Dataset summary", total_qa_pairs=len(df))
     
     # Question categories distribution
-    print("\nQuestion Categories Distribution:")
-    for col in [c for c in df.columns if c.startswith('question_')]:
-        if col != 'question_length':
-            print(f"\n{col}:")
-            print(df[col].value_counts())
+    question_categories = {}
+    for col in [c for c in df.columns if c.startswith('question_') and c != 'question_length']:
+        question_categories[col] = df[col].value_counts().to_dict()
+    logger.info("Question categories distribution", categories=question_categories)
     
     # User categories distribution
-    print("\nUser Categories Distribution:")
+    user_categories = {}
     for col in [c for c in df.columns if c.startswith('user_')]:
-        print(f"\n{col}:")
-        print(df[col].value_counts())
+        user_categories[col] = df[col].value_counts().to_dict()
+    logger.info("User categories distribution", categories=user_categories)
     
+    logger.info("DataMorgana dataset creation completed successfully", output_path=output_path)
     return df
 
 
 if __name__ == "__main__":
-    df = main()
+    try:
+        df = main()
+        logger.info("Script executed successfully")
+    except Exception as e:
+        logger.error("Script execution failed", error=str(e), exc_info=True)
+        raise e

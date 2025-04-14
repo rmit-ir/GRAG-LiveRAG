@@ -82,6 +82,15 @@ Run it with a particular python version
 uv run -p 3.12 src/main.py
 ```
 
+## Dependency Management
+
+Add a dependency
+
+```bash
+# uv add <package-name>
+uv add pandas
+```
+
 ## Import System
 
 This project is structured as a Python package that you can install in editable mode, allowing you to import project modules from anywhere.
