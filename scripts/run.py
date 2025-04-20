@@ -16,6 +16,7 @@ Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_syste
 import os
 import sys
 import csv
+import time
 import argparse
 import importlib
 import concurrent.futures
@@ -249,6 +250,9 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str,
     system_params = system_params or {}
     total_questions = len(questions)
     
+    # Start timing the entire process
+    start_time = time.time()
+    
     logger.info("Starting to process questions", 
                total_questions=total_questions,
                system_class=system_class.__name__,
@@ -311,9 +315,21 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str,
     # Sort results by qid to maintain order
     results.sort(key=lambda r: int(r.qid) if r.qid and r.qid.isdigit() else float('inf'))
     
+    # Calculate total processing time
+    total_time_ms = (time.time() - start_time) * 1000
+    avg_time_per_question_ms = total_time_ms / len(results) if results else 0
+    
+    # Sum up individual question processing times
+    sum_individual_times_ms = sum(result.total_time_ms for result in results)
+    avg_individual_time_ms = sum_individual_times_ms / len(results) if results else 0
+    
     logger.info("Finished processing all questions", 
                total_processed=len(results),
-               total_questions=total_questions)
+               total_questions=total_questions,
+               total_time_ms=total_time_ms,
+               avg_time_per_question_ms=avg_time_per_question_ms,
+               sum_individual_times_ms=sum_individual_times_ms,
+               avg_individual_time_ms=avg_individual_time_ms)
     
     return results
 
@@ -392,6 +408,7 @@ def create_parser_with_system_params(system_class=None):
 
 def main():
     """Main entry point for the script."""
+    start_time = time.time()
     # First, create a parser with just the system argument
     parser = create_parser_with_system_params()
     
@@ -452,6 +469,10 @@ def main():
         # Run the system on the questions
         results = run_system(system_class, questions, system_params, 
                             parallel=args.parallel, num_threads=args.num_threads)
+        overall_time_ms = (time.time() - start_time) * 1000
+        
+        # Calculate timing information
+        total_time_ms = sum(result.total_time_ms for result in results)
         
         # Save results to TSV
         save_results_to_tsv(results, tsv_output_path)
@@ -466,7 +487,10 @@ def main():
                    trec_output=trec_output_path)
         
         print(f"\nProcessing complete!")
-        print(f"Results saved to:")
+        print(f"Total time: {overall_time_ms:.2f} ms ({overall_time_ms/1000:.2f} s)")
+        print(f"Question time: {total_time_ms:.2f} ms ({total_time_ms/1000:.2f} s)")
+        print(f"Questions processed: {len(results)}")
+        print(f"\nResults saved to:")
         print(f"  - TSV: {tsv_output_path}")
         print(f"  - TREC Run: {trec_output_path}")
     
