@@ -132,17 +132,15 @@ class OpenSearchService:
 
     def __init__(
         self,
-        index_name: str = "fineweb10bt-512-0w-e5-base-v2",
-        region_name: Optional[str] = None
+        index_name: str = "fineweb10bt-512-0w-e5-base-v2"
     ):
         """
         Initialize the OpenSearchService with configuration parameters.
 
         Args:
             index_name: Name of the OpenSearch index
-            region_name: AWS region name (defaults to AWS_LIVE_RAG_REGION environment variable)
         """
-        self.aws_utils = AWSUtils(region_name)
+        self.aws_utils = AWSUtils()
         self.index_name = index_name
         self._opensearch_client = None
         self.log.info("OpenSearchService initialized",

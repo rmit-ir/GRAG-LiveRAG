@@ -70,18 +70,15 @@ class QueryService:
         pinecone_embedding_model_name: str = "intfloat/e5-base-v2",
         pinecone_index_name: str = "fineweb10bt-512-0w-e5-base-v2",
         pinecone_namespace: str = "default",
-        opensearch_index_name: str = "fineweb10bt-512-0w-e5-base-v2",
-        region_name: Optional[str] = None
+        opensearch_index_name: str = "fineweb10bt-512-0w-e5-base-v2"
     ):
         self.pinecone_service = PineconeService(
             embedding_model_name=pinecone_embedding_model_name,
             index_name=pinecone_index_name,
-            namespace=pinecone_namespace,
-            region_name=region_name
+            namespace=pinecone_namespace
         )
         self.opensearch_service = OpenSearchService(
-            index_name=opensearch_index_name,
-            region_name=region_name
+            index_name=opensearch_index_name
         )
 
     def query_embedding(

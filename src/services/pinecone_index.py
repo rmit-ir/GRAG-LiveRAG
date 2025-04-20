@@ -91,8 +91,7 @@ class PineconeService:
         self,
         embedding_model_name: str = "intfloat/e5-base-v2",
         index_name: str = "fineweb10bt-512-0w-e5-base-v2",
-        namespace: str = "default",
-        region_name: Optional[str] = None
+        namespace: str = "default"
     ):
         """
         Initialize the PineconeService with configuration parameters.
@@ -101,9 +100,8 @@ class PineconeService:
             embedding_model_name: Name of the embedding model to use
             index_name: Name of the Pinecone index
             namespace: Namespace in the Pinecone index
-            region_name: AWS region name (defaults to AWS_LIVE_RAG_REGION environment variable)
         """
-        self.aws_utils = AWSUtils(region_name)
+        self.aws_utils = AWSUtils()
         self.embedding_utils = EmbeddingUtils(embedding_model_name)
         self.index_name = index_name
         self.namespace = namespace

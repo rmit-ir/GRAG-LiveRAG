@@ -14,14 +14,11 @@ class AWSUtils:
     """
     log = get_logger("aws_utils")
 
-    def __init__(self, region_name: Optional[str] = None):
+    def __init__(self):
         """
         Initialize the AWSUtils with AWS region configuration.
-
-        Args:
-            region_name: AWS region name (defaults to AWS_REGION environment variable)
         """
-        self.aws_region_name = region_name or os.environ.get('AWS_LIVE_RAG_REGION')
+        self.aws_region_name = os.environ.get('AWS_LIVE_RAG_REGION')
         if not self.aws_region_name:
             raise ValueError("AWS_LIVE_RAG_REGION environment variable is required")
 

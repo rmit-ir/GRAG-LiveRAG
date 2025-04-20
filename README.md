@@ -93,6 +93,13 @@ This repository includes several scripts and notebooks for working with the Live
   uv run scripts/create_datamorgana_dataset.py --n_questions=10
   ```
 
+- [run.py](scripts/run.py): Run a specified RAG system on a dataset of questions and save the results
+
+  ```bash
+  # Run a RAG system with specific parameters
+  uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/your_dataset.tsv
+  ```
+
 #### Notebooks
 
 - [test_data_morgana.ipynb](notebooks/test_data_morgana.ipynb): Demonstrates how to use the DataMorgana API for synthetic conversation generation
@@ -104,6 +111,7 @@ This repository includes several scripts and notebooks for working with the Live
 #### LLM Services
 
 - **BedrockClient**: Amazon Bedrock API client for LLM interactions
+
   ```python
   from services.llms.bedrock_client import BedrockClient
   
@@ -112,6 +120,7 @@ This repository includes several scripts and notebooks for working with the Live
   ```
 
 - **AI71Client**: AI71 API client for LLM interactions
+
   ```python
   from services.llms.ai71_client import AI71Client
   
@@ -122,6 +131,7 @@ This repository includes several scripts and notebooks for working with the Live
 #### Data Generation
 
 - **DataMorgana**: Client for generating synthetic Q&A pairs
+
   ```python
   from services.ds_data_morgana import DataMorgana
   
@@ -134,6 +144,7 @@ This repository includes several scripts and notebooks for working with the Live
 #### Vector Search
 
 - **PineconeService**: Client for Pinecone vector database
+
   ```python
   from services.pinecone_index import PineconeService
   
@@ -142,6 +153,7 @@ This repository includes several scripts and notebooks for working with the Live
   ```
 
 - **OpenSearchService**: Client for OpenSearch vector database
+
   ```python
   from services.opensearch_index import OpenSearchService
   
@@ -152,6 +164,7 @@ This repository includes several scripts and notebooks for working with the Live
 #### Utilities
 
 - **Logging**: Structured logging with context data
+
   ```python
   from utils.logging_utils import get_logger
   
@@ -160,6 +173,7 @@ This repository includes several scripts and notebooks for working with the Live
   ```
 
 - **Path Utilities**: Helper functions for project paths
+
   ```python
   from utils.path_utils import get_project_root, get_data_dir
   

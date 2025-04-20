@@ -9,6 +9,9 @@ This script:
 4. Gathers answers
 5. Saves results to a TSV file
 6. Creates a standard TREC Run file alongside the TSV file
+
+When called with --help, it will dynamically show parameters from the specified system's __init__ method.
+Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
 """
 import os
 import sys
@@ -21,6 +24,7 @@ import json
 
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
+from utils.system_params import extract_system_parameters, get_system_params_from_args
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
 
@@ -234,13 +238,31 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str,
     return results
 
 
-def main():
-    """Main entry point for the script."""
-    parser = argparse.ArgumentParser(description='Run a RAG system on a dataset of questions.')
+
+def create_parser_with_system_params(system_class=None):
+    """
+    Create an argument parser with system-specific parameters if a system class is provided.
     
+    Args:
+        system_class: Optional system class to extract parameters from
+        
+    Returns:
+        An argparse.ArgumentParser instance
+    """
+    # Create description based on system class if available
+    if system_class:
+        description = (f'Run the {system_class.__name__} system on a dataset of questions.\n\n'
+                      f'System description: {system_class.__doc__.strip() if system_class.__doc__ else "No description available."}')
+    else:
+        description = 'Run a RAG system on a dataset of questions.'
+    
+    parser = argparse.ArgumentParser(description=description)
+    
+    # Add the system argument
     parser.add_argument('--system', type=str, required=True,
                         help='Full path to the system class (e.g., systems.basic_rag.basic_rag_system.BasicRAGSystem)')
     
+    # Add input and output arguments
     parser.add_argument('--input', type=str, required=True,
                         help='Path to the input TSV file with questions')
     
@@ -250,29 +272,62 @@ def main():
     parser.add_argument('--output-prefix', type=str, default=None,
                         help='Prefix for output filenames (default: system name)')
     
-    parser.add_argument('--embedding-model', type=str, default="intfloat/e5-base-v2",
-                        help='Embedding model name (default: intfloat/e5-base-v2)')
+    # Add system-specific parameters if a system class is provided
+    if system_class:
+        system_params = extract_system_parameters(system_class)
+        
+        for name, param_info in system_params.items():
+            arg_name = f'--{name}'  # Use underscores in CLI arguments
+            
+            # Determine the type
+            param_type = param_info['type']
+            if param_type == bool:
+                parser.add_argument(arg_name, action='store_true',
+                                    help=f"{param_info['description']} (default: {param_info['default']})")
+            else:
+                # Convert type annotation to actual type if needed
+                if hasattr(param_type, '__origin__') and param_type.__origin__ is Optional:
+                    # Handle Optional[Type]
+                    param_type = param_type.__args__[0]
+                
+                # Use str as default type if type is None or complex
+                if param_type in (None, Any) or hasattr(param_type, '__origin__'):
+                    param_type = str
+                
+                default_value = param_info['default']
+                default_str = f"default: {default_value}" if default_value is not None else "default: None"
+                
+                parser.add_argument(arg_name, type=param_type, default=default_value,
+                                    help=f"{param_info['description']} ({default_str})")
     
-    parser.add_argument('--pinecone-index', type=str, default="fineweb10bt-512-0w-e5-base-v2",
-                        help='Pinecone index name (default: fineweb10bt-512-0w-e5-base-v2)')
+    return parser
+
+
+def main():
+    """Main entry point for the script."""
+    # First, create a parser with just the system argument
+    parser = create_parser_with_system_params()
     
-    parser.add_argument('--pinecone-namespace', type=str, default="default",
-                        help='Pinecone namespace (default: default)')
-    
-    parser.add_argument('--opensearch-index', type=str, default="fineweb10bt-512-0w-e5-base-v2",
-                        help='OpenSearch index name (default: fineweb10bt-512-0w-e5-base-v2)')
-    
-    parser.add_argument('--region-name', type=str, default=None,
-                        help='AWS region name (default: None)')
-    
-    parser.add_argument('--max-documents', type=int, default=10,
-                        help='Maximum number of documents to retrieve (default: 10)')
-    
-    parser.add_argument('--temperature', type=float, default=0.7,
-                        help='Temperature parameter for generation (default: 0.7)')
-    
-    parser.add_argument('--max-tokens', type=int, default=1024,
-                        help='Maximum number of tokens to generate (default: 1024)')
+    # Check if --help is in the arguments
+    if '--help' in sys.argv:
+        if '--system' in sys.argv:
+            # Get the system class path
+            system_idx = sys.argv.index('--system')
+            if system_idx + 1 < len(sys.argv):
+                system_class_path = sys.argv[system_idx + 1]
+                try:
+                    # Load the system class
+                    system_class = load_system_class(system_class_path)
+                    
+                    # Create a new parser with system-specific parameters
+                    parser = create_parser_with_system_params(system_class)
+                except Exception as e:
+                    # If there's an error loading the system class, continue with the basic parser
+                    print(f"Warning: Could not load system class '{system_class_path}': {e}")
+        else:
+            # Remind user to pass --system to see system-specific parameters
+            print("\nNOTE: To view system-specific parameters, please pass the --system argument.")
+            print("Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help\n")
     
     args = parser.parse_args()
     
@@ -304,17 +359,8 @@ def main():
         # Load questions from TSV
         questions = load_questions_from_tsv(args.input)
         
-        # Set up system parameters
-        system_params = {
-            'embedding_model_name': args.embedding_model,
-            'pinecone_index_name': args.pinecone_index,
-            'pinecone_namespace': args.pinecone_namespace,
-            'opensearch_index_name': args.opensearch_index,
-            'region_name': args.region_name,
-            'max_documents': args.max_documents,
-            'temperature': args.temperature,
-            'max_tokens': args.max_tokens
-        }
+        # Extract system parameters from args
+        system_params = get_system_params_from_args(system_class, args)
         
         # Run the system on the questions
         results = run_system(system_class, questions, system_params)

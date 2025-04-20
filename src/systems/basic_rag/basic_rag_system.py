@@ -36,7 +36,6 @@ class BasicRAGSystem(RAGSystemInterface):
         pinecone_index_name: str = "fineweb10bt-512-0w-e5-base-v2",
         pinecone_namespace: str = "default",
         opensearch_index_name: str = "fineweb10bt-512-0w-e5-base-v2",
-        region_name: Optional[str] = None,
         max_documents: int = 10,
         temperature: float = 0.7,
         max_tokens: int = 1024
@@ -49,7 +48,6 @@ class BasicRAGSystem(RAGSystemInterface):
             pinecone_index_name: The Pinecone index name to use
             pinecone_namespace: The Pinecone namespace to use
             opensearch_index_name: The OpenSearch index name to use
-            region_name: The AWS region name to use
             max_documents: Maximum number of documents to retrieve
             temperature: The temperature parameter for generation
             max_tokens: Maximum number of tokens to generate
@@ -58,8 +56,7 @@ class BasicRAGSystem(RAGSystemInterface):
             pinecone_embedding_model_name=embedding_model_name,
             pinecone_index_name=pinecone_index_name,
             pinecone_namespace=pinecone_namespace,
-            opensearch_index_name=opensearch_index_name,
-            region_name=region_name
+            opensearch_index_name=opensearch_index_name
         )
         
         self.llm_client = AI71Client(
