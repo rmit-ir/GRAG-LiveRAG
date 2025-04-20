@@ -78,6 +78,8 @@ The LiveRAG project follows a structured workflow for developing, running, and e
    uv run scripts/create_datamorgana_dataset.py --n_questions=10
    ```
 
+   The generated dataset will be saved in [data/generated_qa_pairs/](data/generated_qa_pairs/).
+
    For detailed configuration options, refer to [DataMorgana.md](docs/DataMorgana.md).
 
    You can also take an existing (recent) dataset from [data/generated_qa_pairs/](data/generated_qa_pairs/) and use it for next step directly.
@@ -90,6 +92,8 @@ The LiveRAG project follows a structured workflow for developing, running, and e
      --num-threads 5
    ```
 
+   This generates results in [data/rag_results/](data/rag_results/) (git ignored).
+
    For detailed usage of RAG systems, refer to [systems/README.md](src/systems/README.md).
 
 3. **Evaluate Results**: Compare RAG system outputs against reference answers
@@ -100,6 +104,8 @@ The LiveRAG project follows a structured workflow for developing, running, and e
      --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv \
      --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv
    ```
+
+   This generates evaluation results in [data/evaluation_results/](data/evaluation_results/) (git ignored).
 
    For detailed usage of evaluators, refer to [evaluators/README.md](src/evaluators/README.md).
 
