@@ -131,15 +131,20 @@ from services.pinecone_index import PineconeService
 
 No path manipulation or special import helpers are needed. This approach works consistently across all project files, including notebooks.
 
-## Memory Bank
+## Available Scripts and Notebooks
 
-This project uses a memory bank to maintain comprehensive documentation and project context. The memory bank is located in the `memory-bank` directory and consists of the following core files:
+This repository includes several scripts and notebooks for working with the LiveRAG system:
 
-1. `projectbrief.md` - Foundation document defining core requirements and goals
-2. `productContext.md` - Why this project exists, problems it solves, and user experience goals
-3. `systemPatterns.md` - System architecture, design patterns, and component relationships
-4. `techContext.md` - Technologies used, development setup, and technical constraints
-5. `activeContext.md` - Current work focus, recent changes, and next steps, ignored by git
-6. `progress.md` - What works, what's left to build, and current status, ignored by git
+### Scripts
 
-The memory bank serves as the central knowledge repository for the project, allowing for consistent understanding and progress tracking across development sessions. It should be kept up-to-date as the project evolves.
+- [**create_datamorgana_dataset.py**](scripts/create_datamorgana_dataset.py): Generate synthetic Q&A datasets using DataMorgana
+  ```bash
+  # Generate 10 questions in TSV format
+  uv run scripts/create_datamorgana_dataset.py --n_questions=10
+  ```
+
+### Notebooks
+
+- [**test_data_morgana.ipynb**](notebooks/test_data_morgana.ipynb): Demonstrates how to use the DataMorgana API for synthetic conversation generation
+- [**test-indicies.ipynb**](notebooks/test-indicies.ipynb): Shows how to use vector index services (Pinecone and OpenSearch) for vector search
+- [**import_test.ipynb**](notebooks/import_test.ipynb): Simple test for package imports

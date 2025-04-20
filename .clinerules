@@ -12,6 +12,8 @@
 - Dependencies managed via `pyproject.toml` and `uv.lock` (see `pyproject.toml` for specific dependencies)
 - Environment variables configured through `.env` files (see `.env.example` for required variables)
 - Python version specified in `.python-version` file
+- Use `uv add` for package management
+- Use `uv run` for running scripts, or `uv run python xxx`, never directly run `python xxx`
 
 ## Coding Preferences
 
@@ -24,8 +26,6 @@
   - Premature abstraction leads to unnecessary complexity
   - Simple, direct code is easier to maintain
 - Use tsv instead of csv for data storage
-- Use `uv add` for package management
-- Use `uv run` for running scripts, or `uv run python xxx`, never directly run `python xxx`
 - `src/` is installed in editable mode, importing without `src.` prefix
 - Use defaults, do not repeat defaults as configuration in code
 - For logging, use `from logging_utils import get_logger` and `logger = get_logger('component')`, and `logger.info("hello, %s!", "world", key="value!", more_than_strings=[1, 2, 3])`. Do not verbose log messages, just the key ones.
