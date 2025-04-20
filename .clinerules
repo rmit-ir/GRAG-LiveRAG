@@ -28,4 +28,4 @@
 - Use tsv instead of csv for data storage
 - `src/` is installed in editable mode, importing without `src.` prefix
 - Use defaults, do not repeat defaults as configuration in code
-- For logging, use `from logging_utils import get_logger` and `logger = get_logger('component')`, and `logger.info("hello, %s!", "world", key="value!", more_than_strings=[1, 2, 3])`. Do not verbose log messages, just the key ones.
+- For logging, use `from logging_utils import get_logger` and `logger = get_logger('component')`, and `logger.info("hello, %s!", "world", key="value!", more_than_strings=[1, 2, 3])`. Do not verbose log info messages, just the key ones, otherwise use debug messages.

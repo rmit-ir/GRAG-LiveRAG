@@ -82,6 +82,26 @@ Run it with a particular python version
 uv run -p 3.12 src/main.py
 ```
 
+## Logging
+
+To log messages:
+
+```python
+from utils.logging_utils import get_logger
+
+logger = get_logger("component_name")
+logger.info("Default info message", context_data={"key": "value"})
+logger.debug("Debug message", context_data={"key": "value"})
+```
+
+Normally, when running scripts, only info messages will be shown, to see debug messages:
+
+```bash
+LOG_LEVEL=DEBUG uv run scripts/your_script.py
+```
+
+Or set `LOG_LEVEL=DEBUG` in your `.env` file.
+
 ## Dependency Management
 
 Add a dependency
