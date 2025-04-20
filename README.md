@@ -70,17 +70,34 @@ Note, the access details can be found at https://linear.app/rmit-liverag-2025/do
 
 ## Usage
 
-Run the main script:
+Run your scripts:
 
 ```bash
-uv run src/main.py
+uv run scripts/your_script.py
+# with a specific python version
+uv run -p 3.12 scripts/your_script.py
 ```
 
-Run it with a particular python version
+Or notebooks, just open them in VS Code and run them using the python environment from `.venv`.
 
-```bash
-uv run -p 3.12 src/main.py
-```
+### Available Scripts and Notebooks
+
+This repository includes several scripts and notebooks for working with the LiveRAG system:
+
+#### Scripts
+
+- [create_datamorgana_dataset.py](scripts/create_datamorgana_dataset.py): Generate synthetic Q&A datasets using DataMorgana
+
+  ```bash
+  # Generate 10 questions in TSV format
+  uv run scripts/create_datamorgana_dataset.py --n_questions=10
+  ```
+
+#### Notebooks
+
+- [test_data_morgana.ipynb](notebooks/test_data_morgana.ipynb): Demonstrates how to use the DataMorgana API for synthetic conversation generation
+- [test-indicies.ipynb](notebooks/test-indicies.ipynb): Shows how to use vector index services (Pinecone and OpenSearch) for vector search
+- [import_test.ipynb](notebooks/import_test.ipynb): Simple test for package imports
 
 ## Logging
 
@@ -150,21 +167,3 @@ from services.pinecone_index import PineconeService
 ```
 
 No path manipulation or special import helpers are needed. This approach works consistently across all project files, including notebooks.
-
-## Available Scripts and Notebooks
-
-This repository includes several scripts and notebooks for working with the LiveRAG system:
-
-### Scripts
-
-- [create_datamorgana_dataset.py](scripts/create_datamorgana_dataset.py): Generate synthetic Q&A datasets using DataMorgana
-  ```bash
-  # Generate 10 questions in TSV format
-  uv run scripts/create_datamorgana_dataset.py --n_questions=10
-  ```
-
-### Notebooks
-
-- [test_data_morgana.ipynb](notebooks/test_data_morgana.ipynb): Demonstrates how to use the DataMorgana API for synthetic conversation generation
-- [test-indicies.ipynb](notebooks/test-indicies.ipynb): Shows how to use vector index services (Pinecone and OpenSearch) for vector search
-- [import_test.ipynb](notebooks/import_test.ipynb): Simple test for package imports
