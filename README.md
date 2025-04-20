@@ -99,6 +99,74 @@ This repository includes several scripts and notebooks for working with the Live
 - [test-indicies.ipynb](notebooks/test-indicies.ipynb): Shows how to use vector index services (Pinecone and OpenSearch) for vector search
 - [import_test.ipynb](notebooks/import_test.ipynb): Simple test for package imports
 
+#### Services and Utilities
+
+##### LLM Services
+
+- **BedrockClient**: Amazon Bedrock API client for LLM interactions
+  ```python
+  from services.llms.bedrock_client import BedrockClient
+  
+  client = BedrockClient(model_id="anthropic.claude-3-5-haiku-20241022-v1:0")
+  response, content = client.query("What is retrieval-augmented generation?")
+  ```
+
+- **AI71Client**: AI71 API client for LLM interactions
+  ```python
+  from services.llms.ai71_client import AI71Client
+  
+  client = AI71Client(model_id="tiiuae/falcon3-10b-instruct")
+  response, content = client.query("What is retrieval-augmented generation?")
+  ```
+
+##### Data Generation
+
+- **DataMorgana**: Client for generating synthetic Q&A pairs
+  ```python
+  from services.ds_data_morgana import DataMorgana
+  
+  dm = DataMorgana()  # Uses AI71_API_KEY environment variable
+  qa_pairs = dm.wait_generation_results(
+      dm.generate_qa_pair_bulk(n_questions=10, question_categorizations=[...])["generation_id"]
+  )
+  ```
+
+##### Vector Search
+
+- **PineconeService**: Client for Pinecone vector database
+  ```python
+  from services.pinecone_index import PineconeService
+  
+  service = PineconeService()
+  results = service.query_pinecone("What is a second brain?", top_k=3)
+  ```
+
+- **OpenSearchService**: Client for OpenSearch vector database
+  ```python
+  from services.opensearch_index import OpenSearchService
+  
+  service = OpenSearchService()
+  results = service.query_opensearch("What is a second brain?", top_k=3)
+  ```
+
+##### Utilities
+
+- **Logging**: Structured logging with context data
+  ```python
+  from utils.logging_utils import get_logger
+  
+  logger = get_logger("component_name")
+  logger.info("Message with context", key="value", data={"nested": "data"})
+  ```
+
+- **Path Utilities**: Helper functions for project paths
+  ```python
+  from utils.path_utils import get_project_root, get_data_dir
+  
+  project_root = get_project_root()  # Get absolute path to project root
+  data_dir = get_data_dir()  # Get absolute path to data directory
+  ```
+
 ## Logging
 
 To log messages:
@@ -130,40 +198,17 @@ uv add pandas
 
 ## Import System
 
-This project is structured as a Python package that you can install in editable mode, allowing you to import project modules from anywhere.
-
-### Install the Package in Editable Mode
-
-Before using any scripts or notebooks, install the package in editable mode:
+This project is structured as a Python package installed in editable mode, allowing you to import modules directly.
 
 ```bash
-# From the project root directory
+# Install the package in editable mode (already done in setup)
 uv pip install -e .
 ```
 
-### How the Import System Works
-
-The package structure is defined in `pyproject.toml` with this configuration:
-
-```toml
-[tool.setuptools.packages.find]
-where = ["src"]
-```
-
-This tells setuptools to look for packages in the `src` directory. When the package is installed with `uv pip install -e .`:
-
-1. Python adds the project to your Python path
-2. The packages inside `src/` become directly importable
-3. `src/services/` becomes available as simply `services` in your imports
-
-### How to Import Services in Your Code
-
-Once the package is installed in editable mode, you can directly import services from anywhere in the project:
+After installation, you can import services directly:
 
 ```python
-# In any script or notebook
+# Import services in any script or notebook
 from services.aws_utils import AWSUtils
 from services.pinecone_index import PineconeService
 ```
-
-No path manipulation or special import helpers are needed. This approach works consistently across all project files, including notebooks.
