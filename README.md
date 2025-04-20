@@ -99,9 +99,9 @@ This repository includes several scripts and notebooks for working with the Live
 - [test-indicies.ipynb](notebooks/test-indicies.ipynb): Shows how to use vector index services (Pinecone and OpenSearch) for vector search
 - [import_test.ipynb](notebooks/import_test.ipynb): Simple test for package imports
 
-#### Services and Utilities
+### Services and Utilities
 
-##### LLM Services
+#### LLM Services
 
 - **BedrockClient**: Amazon Bedrock API client for LLM interactions
   ```python
@@ -119,7 +119,7 @@ This repository includes several scripts and notebooks for working with the Live
   response, content = client.query("What is retrieval-augmented generation?")
   ```
 
-##### Data Generation
+#### Data Generation
 
 - **DataMorgana**: Client for generating synthetic Q&A pairs
   ```python
@@ -131,7 +131,7 @@ This repository includes several scripts and notebooks for working with the Live
   )
   ```
 
-##### Vector Search
+#### Vector Search
 
 - **PineconeService**: Client for Pinecone vector database
   ```python
@@ -149,7 +149,7 @@ This repository includes several scripts and notebooks for working with the Live
   results = service.query_opensearch("What is a second brain?", top_k=3)
   ```
 
-##### Utilities
+#### Utilities
 
 - **Logging**: Structured logging with context data
   ```python
