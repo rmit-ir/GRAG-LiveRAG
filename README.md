@@ -80,6 +80,8 @@ The LiveRAG project follows a structured workflow for developing, running, and e
 
    For detailed configuration options, refer to [DataMorgana.md](docs/DataMorgana.md).
 
+   You can also take an existing (recent) dataset from [data/generated_qa_pairs/](data/generated_qa_pairs/) and use it for next step directly.
+
 2. **Run RAG System**: Process questions through a RAG system to generate answers
 
    ```bash
