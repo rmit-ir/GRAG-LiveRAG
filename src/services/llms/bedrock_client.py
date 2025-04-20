@@ -114,6 +114,9 @@ class BedrockClient:
 
         except (BotoCoreError, ClientError) as e:
             logger.error(f"AWS error: {str(e)}")
+            # Check if this is an expired token exception
+            if isinstance(e, ClientError) and "ExpiredTokenException" in str(e):
+                logger.warning("AWS token has expired. Please refresh your AWS credentials (environment variables).")
             raise
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")

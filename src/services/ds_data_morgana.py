@@ -294,7 +294,7 @@ class DataMorgana:
         # Read the data
         df = pd.read_json(file_url, lines=True)
         
-        # Save to local file
+        # Save raw generated qa_pairs to local file
         df.to_json(save_path, orient='records', lines=True)
         self.log.info(f"Saved results to {save_path}")
         
@@ -353,10 +353,14 @@ class DataMorgana:
             
     @staticmethod
     def to_dataframe(qa_pairs: List[QAPair]) -> pd.DataFrame:
+        """
+        Convert a list of QAPair objects to a pandas DataFrame.
+        """
         data = []
-        for qa in qa_pairs:
+        for idx, qa in enumerate(qa_pairs, start=1):
             # Convert each QAPair to a dictionary
             row = {
+                'qid': idx,  # Add qid starting from 1
                 'question': qa.question,
                 'answer': qa.answer,
                 'context': qa.context,

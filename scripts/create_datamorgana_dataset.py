@@ -13,7 +13,7 @@ Options:
     --output=<path>         Path to save the output file [default: auto-generated in data/generated_qa_pairs/]
     --format=<format>       Output format (tsv, excel, parquet, jsonl) [default: tsv]
     --document_ids=<ids>    Comma-separated list of document IDs to use (optional)
-    --wait_time=<seconds>   Time to wait between polling attempts in seconds [default: 2]
+    --wait_time=<seconds>   Time to wait between polling attempts in seconds [default: 5]
     --config=<path>         Path to config file [default: scripts/config/datamorgana_config.json]
 
 The script uses a JSON configuration file to define question and user categories for DataMorgana.
@@ -62,7 +62,7 @@ Examples:
     uv run scripts/create_datamorgana_dataset.py --config=path/to/custom_config.json
     
     # Generate 20 questions in JSONL format with longer wait time between polling
-    uv run scripts/create_datamorgana_dataset.py --n_questions=20 --format=jsonl --wait_time=5
+    uv run scripts/create_datamorgana_dataset.py --n_questions=20 --format=jsonl --wait_time=10
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -72,7 +72,7 @@ Examples:
                         help="Output format")
     parser.add_argument("--document_ids", type=str, default=None, 
                         help="Comma-separated list of document IDs to use")
-    parser.add_argument("--wait_time", type=int, default=2, 
+    parser.add_argument("--wait_time", type=int, default=5, 
                         help="Time to wait between polling attempts in seconds")
     parser.add_argument("--config", type=str, default=None,
                         help="Path to config file")
@@ -92,7 +92,8 @@ def qa_pairs_to_enhanced_dataframe(qa_pairs: List[QAPair]) -> pd.DataFrame:
     Convert a list of QAPair objects to a pandas DataFrame with enhanced columns.
     
     This function creates a DataFrame with columns for the question, answer, and context,
-    as well as additional columns for each question and user category.
+    
+    enhanced?: additional columns for each question and user category.
     
     Args:
         qa_pairs: List of QAPair objects
@@ -102,9 +103,10 @@ def qa_pairs_to_enhanced_dataframe(qa_pairs: List[QAPair]) -> pd.DataFrame:
     """
     # Basic data extraction
     data = []
-    for qa in qa_pairs:
+    for idx, qa in enumerate(qa_pairs, start=1):
         # Start with basic fields
         row = {
+            'qid': idx,  # Add qid starting from 1
             'question': qa.question,
             'answer': qa.answer,
             'context': qa.context,
