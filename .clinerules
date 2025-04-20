@@ -1,3 +1,5 @@
+# Cline Agent Rules for LiveRAG Project
+
 ## Design Patterns
 
 1. **Service-Oriented Architecture**: Each component (embedding, vector search, etc.) is implemented as a separate service
