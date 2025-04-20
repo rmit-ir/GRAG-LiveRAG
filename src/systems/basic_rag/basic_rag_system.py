@@ -1,5 +1,7 @@
+"""
+uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
+"""
 import time
-from typing import List
 from datetime import datetime
 
 from utils.logging_utils import get_logger
@@ -13,9 +15,6 @@ from systems.basic_rag.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE
 class BasicRAGSystem(RAGSystemInterface):
     """
     Basic RAG system implementation.
-    
-    Run this RAG system with:
-    uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
     """
     
     log = get_logger("basic_rag_system")
