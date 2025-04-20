@@ -79,6 +79,7 @@ def evaluate(self, rag_results: List[RAGResult], references: List[QAPair]) -> Ev
 2. **Handle edge cases** (empty answers, missing references)
 3. **Use the logging utility**: `from utils.logging_utils import get_logger`
 4. **Refer to existing evaluators** for implementation patterns
+5. **Test often** write a `__main__` block to run your evaluator independently
 
 ## Available Evaluators
 

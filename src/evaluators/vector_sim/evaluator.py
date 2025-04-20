@@ -187,5 +187,6 @@ class VectorSimEvaluator(EvaluatorInterface):
             evaluator_name=self.__class__.__name__,
             sample_count=len(rows),
             rows=rows,
-            system_name=system_name
+            system_name=system_name,
+            total_time_ms=total_time_ms
         )

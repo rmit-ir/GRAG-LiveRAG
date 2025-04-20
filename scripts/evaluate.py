@@ -11,6 +11,7 @@ This script:
 import os
 import sys
 import json
+import time
 import argparse
 import importlib
 import inspect
@@ -334,6 +335,9 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
                 "timestamp": result.timestamp.isoformat()
             }
             
+            if result.total_time_ms is not None:
+                aggregated_dict["total_time_ms"] = result.total_time_ms
+            
             with open(aggregated_file, 'w', encoding='utf-8') as f:
                 f.write(json.dumps(aggregated_dict) + '\n')
             
@@ -352,6 +356,9 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
                 "timestamp": result.timestamp.isoformat(),
                 "is_aggregated": True
             }
+            
+            if result.total_time_ms is not None:
+                agg_row["total_time_ms"] = result.total_time_ms
             
             # Flatten metrics into the row
             for metric_key, metric_value in result.metrics.items():
@@ -464,6 +471,9 @@ def create_parser_with_evaluator_params(evaluator_class=None):
 
 def main():
     """Main entry point for the script."""
+    # Start timing the entire process
+    start_time = time.time()
+    
     # First, create a basic parser to get the evaluator argument
     basic_parser = argparse.ArgumentParser(add_help=False)
     basic_parser.add_argument('--evaluator', type=str, default='evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator')
@@ -542,11 +552,19 @@ def main():
                    system_name=evaluation_result.system_name,
                    evaluator_name=evaluation_result.evaluator_name,
                    sample_count=evaluation_result.sample_count,
+                   total_time_ms=evaluation_result.total_time_ms,
                    rows_file=rows_file if evaluation_result.rows else None,
                    evaluated_count=evaluation_result.sample_count)
+
+        # Calculate overall time
+        overall_time_ms = (time.time() - start_time) * 1000
         
         print(f"\nEvaluation complete!")
+        print(f"Total time: {overall_time_ms:.2f} ms ({overall_time_ms/1000:.2f} s)")
         print(f"Results evaluated: {evaluation_result.sample_count}")
+        if evaluation_result.total_time_ms is not None:
+            print(f"Evaluation time: {evaluation_result.total_time_ms:.2f} ms ({evaluation_result.total_time_ms/1000:.2f} s)")
+            print(f"Average query eval time: {evaluation_result.total_time_ms / evaluation_result.sample_count:.2f} ms")
         print(f"Output saved to:")
         print(f"  - Aggregated results: {aggregated_file}")
         if evaluation_result.rows:
