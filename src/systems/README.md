@@ -26,7 +26,7 @@ For a complete overview of the end-to-end workflow, see [The LiveRAG Workflow](.
 ```bash
 uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem \
   --input data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv \
-  --parallel --num-threads 5
+  --num-threads 5
 ```
 
 This generates results in `data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv`

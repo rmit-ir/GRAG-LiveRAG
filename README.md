@@ -78,13 +78,17 @@ The LiveRAG project follows a structured workflow for developing, running, and e
    uv run scripts/create_datamorgana_dataset.py --n_questions=10
    ```
 
+   For detailed configuration options, refer to [DataMorgana.md](docs/DataMorgana.md).
+
 2. **Run RAG System**: Process questions through a RAG system to generate answers
 
    ```bash
    uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem \
      --input data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv \
-     --parallel --num-threads 5
+     --num-threads 5
    ```
+
+   For detailed usage of RAG systems, refer to [systems/README.md](src/systems/README.md).
 
 3. **Evaluate Results**: Compare RAG system outputs against reference answers
 
@@ -94,6 +98,8 @@ The LiveRAG project follows a structured workflow for developing, running, and e
      --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv \
      --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv
    ```
+
+   For detailed usage of evaluators, refer to [evaluators/README.md](src/evaluators/README.md).
 
 4. **Analyze & Iterate**: Review evaluation metrics, identify areas for improvement, and refine your RAG system
 
@@ -118,25 +124,8 @@ This repository includes several scripts and notebooks for working with the Live
 #### Scripts
 
 - [create_datamorgana_dataset.py](scripts/create_datamorgana_dataset.py): Generate synthetic Q&A datasets using DataMorgana
-
-  ```bash
-  # Generate 10 questions in TSV format
-  uv run scripts/create_datamorgana_dataset.py --n_questions=10
-  ```
-
 - [run.py](scripts/run.py): Run a specified RAG system on a dataset of questions and save the results
-
-  ```bash
-  # Run a RAG system with specific parameters
-  uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/<dmds_id.tsv>
-  ```
-
 - [evaluate.py](scripts/evaluate.py): Evaluate RAG system results against reference answers (DataMorgana dataset) using specified evaluators
-
-  ```bash
-  # Evaluate RAG results using the basic EditDistanceEvaluator
-  uv run scripts/evaluate.py --results data/rag_results/<dmds_id_system.tsv> --reference data/generated_qa_pairs/<dmds_id.tsv>
-  ```
 
 #### Notebooks
 

@@ -131,9 +131,9 @@ def qa_pairs_to_enhanced_dataframe(qa_pairs: List[QAPair]) -> pd.DataFrame:
     
     # Add metadata columns
     df['generation_timestamp'] = datetime.now().isoformat()
-    df['question_length'] = df['question'].str.len()
-    df['answer_length'] = df['answer'].str.len()
-    df['context_length'] = df['context'].apply(lambda x: sum(len(c) for c in x) if isinstance(x, list) else 0)
+    df['question_length'] = df['question'].apply(lambda x: len(x.split()))
+    df['answer_length'] = df['answer'].apply(lambda x: len(x.split()))
+    df['context_length'] = df['context'].apply(lambda x: sum(len(c.split()) for c in x) if isinstance(x, list) else 0)
     
     return df
 

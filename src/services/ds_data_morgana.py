@@ -241,6 +241,7 @@ class DataMorgana:
         response = requests.get(url, headers=self._get_headers())
         response.raise_for_status()
 
+        # only contains job id, caller will need to call wait_generation_results to get actual results
         return response.json()
 
     def retry_generation(self, generation_id: str) -> Dict[str, Any]:

@@ -8,7 +8,6 @@ This script:
 3. Runs all questions through the specified RAG system
 4. Gathers answers
 5. Saves results to a TSV file
-6. Creates a standard TREC Run file alongside the TSV file
 
 When called with --help, it will dynamically show parameters from the specified system's __init__ method.
 Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
@@ -20,7 +19,6 @@ import time
 import argparse
 import importlib
 import concurrent.futures
-from datetime import datetime
 from typing import List, Dict, Any, Type, Optional, Tuple
 import json
 
@@ -233,7 +231,7 @@ def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any]
 
 def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str, Any]], 
                system_params: Optional[Dict[str, Any]] = None, 
-               parallel: bool = False, num_threads: int = 1) -> List[RAGResult]:
+               num_threads: int = 1) -> List[RAGResult]:
     """
     Run the specified system on a list of questions.
     
@@ -241,7 +239,6 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str,
         system_class: The system class to instantiate
         questions: List of dictionaries containing question data
         system_params: Optional parameters to pass to the system constructor
-        parallel: Whether to process questions in parallel
         num_threads: Number of threads to use for parallel processing
         
     Returns:
@@ -253,15 +250,18 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str,
     # Start timing the entire process
     start_time = time.time()
     
+    # Determine if we're using parallel processing based on thread count
+    parallel = num_threads > 1
+    
     logger.info("Starting to process questions", 
                total_questions=total_questions,
                system_class=system_class.__name__,
                parallel=parallel,
-               num_threads=num_threads if parallel else 1)
+               num_threads=num_threads)
     
     results = []
     
-    if not parallel or num_threads <= 1:
+    if num_threads <= 1:
         # Sequential processing
         system = system_class(**system_params)
         
@@ -368,12 +368,9 @@ def create_parser_with_system_params(system_class=None):
     parser.add_argument('--output-prefix', type=str, default=None,
                         help='Prefix for output filenames (default: system name)')
     
-    # Add parallel processing arguments
-    parser.add_argument('--parallel', action='store_true',
-                        help='Process questions in parallel using multiple threads')
-    
+    # Add thread count argument for parallel processing
     parser.add_argument('--num-threads', type=int, default=1,
-                        help='Number of threads to use for parallel processing (default: 1)')
+                        help='Number of threads to use for processing (default: 1, values > 1 enable parallel processing)')
     
     # Add system-specific parameters if a system class is provided
     if system_class:
@@ -466,7 +463,7 @@ def main():
         
         # Run the system on the questions
         results = run_system(system_class, questions, system_params, 
-                            parallel=args.parallel, num_threads=args.num_threads)
+                            num_threads=args.num_threads)
         overall_time_ms = (time.time() - start_time) * 1000
         
         # Calculate timing information
