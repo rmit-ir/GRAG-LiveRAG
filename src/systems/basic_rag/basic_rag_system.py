@@ -27,7 +27,6 @@ class BasicRAGSystem(RAGSystemInterface):
             system_message=SYSTEM_PROMPT
         )
         
-        self.max_documents = 10
         self.log.info("BasicRAGSystem initialized", 
                      llm_model="tiiuae/falcon3-10b-instruct")
     
@@ -36,7 +35,7 @@ class BasicRAGSystem(RAGSystemInterface):
         self.log.info("Processing question", question=question, qid=qid)
         
         # Search for documents using keyword search
-        hits = self.query_service.query_keywords(question, k=self.max_documents)
+        hits = self.query_service.query_keywords(question, k=10)
         self.log.debug("Retrieved documents", hits_count=len(hits))
         
         # Extract document contents and IDs

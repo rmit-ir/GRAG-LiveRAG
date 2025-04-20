@@ -18,8 +18,9 @@ import sys
 import csv
 import argparse
 import importlib
+import concurrent.futures
 from datetime import datetime
-from typing import List, Dict, Any, Type, Optional
+from typing import List, Dict, Any, Type, Optional, Tuple
 import json
 
 from utils.logging_utils import get_logger
@@ -180,8 +181,58 @@ def create_trec_run_file(results: List[RAGResult], output_file: str, system_name
         raise
 
 
+def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any], Dict[str, Any], int, int]) -> Optional[RAGResult]:
+    """
+    Process a single question with the specified system.
+    
+    Args:
+        args: Tuple containing:
+            - system_class: The system class to instantiate
+            - system_params: Parameters to pass to the system constructor
+            - question_data: Dictionary containing question data
+            - index: Index of the question in the original list
+            - total_questions: Total number of questions
+            
+    Returns:
+        RAGResult object or None if an error occurred
+    """
+    system_class, system_params, question_data, i, total_questions = args
+    
+    try:
+        # Initialize a new system instance for each question when in parallel mode
+        system = system_class(**system_params)
+        
+        # Extract the question text
+        question = question_data['question']
+        
+        # Get qid from question data or generate one
+        qid = question_data.get('qid', str(i + 1))
+        
+        # Process the question
+        logger.info(f"Processing question {i+1}/{total_questions}", 
+                   question=question,
+                   qid=qid)
+        
+        result = system.process_question(question, qid=qid)
+        
+        logger.info(f"Completed question {i+1}/{total_questions}", 
+                   question=question,
+                   answer_length=result.answer_words_count,
+                   processing_time_ms=result.total_time_ms)
+        
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error processing question {i+1}/{total_questions}", 
+                    question=question_data.get('question', 'Unknown'),
+                    error=str(e))
+        # Return None to indicate an error
+        return None
+
+
 def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str, Any]], 
-               system_params: Optional[Dict[str, Any]] = None) -> List[RAGResult]:
+               system_params: Optional[Dict[str, Any]] = None, 
+               parallel: bool = False, num_threads: int = 1) -> List[RAGResult]:
     """
     Run the specified system on a list of questions.
     
@@ -189,47 +240,76 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str,
         system_class: The system class to instantiate
         questions: List of dictionaries containing question data
         system_params: Optional parameters to pass to the system constructor
+        parallel: Whether to process questions in parallel
+        num_threads: Number of threads to use for parallel processing
         
     Returns:
         List of RAGResult objects
     """
-    # Initialize the system with provided parameters or defaults
     system_params = system_params or {}
-    system = system_class(**system_params)
-    
-    results = []
     total_questions = len(questions)
     
     logger.info("Starting to process questions", 
                total_questions=total_questions,
-               system_class=system_class.__name__)
+               system_class=system_class.__name__,
+               parallel=parallel,
+               num_threads=num_threads if parallel else 1)
     
-    for i, question_data in enumerate(questions):
-        try:
-            # Extract the question text
-            question = question_data['question']
-            
-            # Get qid from question data or generate one
-            qid = question_data.get('qid', str(i + 1))
-            
-            # Process the question
-            logger.info(f"Processing question {i+1}/{total_questions}", 
-                       question=question,
-                       qid=qid)
-            
-            result = system.process_question(question, qid=qid)
-            results.append(result)
-            
-            logger.info(f"Completed question {i+1}/{total_questions}", 
-                       question=question,
-                       answer_length=result.answer_words_count,
-                       processing_time_ms=result.total_time_ms)
+    results = []
+    
+    if not parallel or num_threads <= 1:
+        # Sequential processing
+        system = system_class(**system_params)
         
-        except Exception as e:
-            logger.error(f"Error processing question {i+1}/{total_questions}", 
-                        question=question_data.get('question', 'Unknown'),
-                        error=str(e))
-            # Continue with the next question
+        for i, question_data in enumerate(questions):
+            try:
+                # Extract the question text
+                question = question_data['question']
+                
+                # Get qid from question data or generate one
+                qid = question_data.get('qid', str(i + 1))
+                
+                # Process the question
+                logger.info(f"Processing question {i+1}/{total_questions}", 
+                           question=question,
+                           qid=qid)
+                
+                result = system.process_question(question, qid=qid)
+                results.append(result)
+                
+                logger.info(f"Completed question {i+1}/{total_questions}", 
+                           question=question,
+                           answer_length=result.answer_words_count,
+                           processing_time_ms=result.total_time_ms)
+            
+            except Exception as e:
+                logger.error(f"Error processing question {i+1}/{total_questions}", 
+                            question=question_data.get('question', 'Unknown'),
+                            error=str(e))
+                # Continue with the next question
+    else:
+        # Parallel processing
+        logger.info(f"Using ThreadPoolExecutor with {num_threads} threads")
+        
+        # Prepare arguments for each question
+        question_args = [
+            (system_class, system_params, question_data, i, total_questions)
+            for i, question_data in enumerate(questions)
+        ]
+        
+        # Process questions in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+            # Submit all tasks and collect futures
+            futures = [executor.submit(process_single_question, args) for args in question_args]
+            
+            # Collect results in order
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    results.append(result)
+    
+    # Sort results by qid to maintain order
+    results.sort(key=lambda r: int(r.qid) if r.qid and r.qid.isdigit() else float('inf'))
     
     logger.info("Finished processing all questions", 
                total_processed=len(results),
@@ -271,6 +351,13 @@ def create_parser_with_system_params(system_class=None):
     
     parser.add_argument('--output-prefix', type=str, default=None,
                         help='Prefix for output filenames (default: system name)')
+    
+    # Add parallel processing arguments
+    parser.add_argument('--parallel', action='store_true',
+                        help='Process questions in parallel using multiple threads')
+    
+    parser.add_argument('--num-threads', type=int, default=1,
+                        help='Number of threads to use for parallel processing (default: 1)')
     
     # Add system-specific parameters if a system class is provided
     if system_class:
@@ -363,7 +450,8 @@ def main():
         system_params = get_system_params_from_args(system_class, args)
         
         # Run the system on the questions
-        results = run_system(system_class, questions, system_params)
+        results = run_system(system_class, questions, system_params, 
+                            parallel=args.parallel, num_threads=args.num_threads)
         
         # Save results to TSV
         save_results_to_tsv(results, tsv_output_path)
