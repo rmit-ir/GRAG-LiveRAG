@@ -2,7 +2,7 @@
 Interface for RAG system results.
 """
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 
@@ -18,13 +18,41 @@ class RAGResult:
     answer: str
     context: List[str]
     doc_ids: List[str]
-    query_words_count: int
-    answer_words_count: int
     total_time_ms: float
-    qid: str = None
+    qid: Optional[str] = None
     timestamp: datetime = field(default_factory=datetime.now)
-    generated_queries: List[str] = None
-    rewritten_docs: List[str] = None
+    generated_queries: Optional[List[str]] = None
+    rewritten_docs: Optional[List[str]] = None
+    query_words_count: Optional[int] = None
+    answer_words_count: Optional[int] = None
+    
+    def __post_init__(self):
+        """
+        Calculate word counts if not provided.
+        """
+        if self.query_words_count is None:
+            self.query_words_count = self.calculate_query_words_count()
+        
+        if self.answer_words_count is None:
+            self.answer_words_count = self.calculate_answer_words_count()
+    
+    def calculate_query_words_count(self) -> int:
+        """
+        Calculate the number of words in the query.
+        
+        Returns:
+            Number of words in the query
+        """
+        return len(self.query.split())
+    
+    def calculate_answer_words_count(self) -> int:
+        """
+        Calculate the number of words in the answer.
+        
+        Returns:
+            Number of words in the answer
+        """
+        return len(self.answer.split())
     
     def to_dict(self) -> Dict[str, Any]:
         """

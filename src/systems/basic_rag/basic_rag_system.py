@@ -13,6 +13,9 @@ from systems.basic_rag.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE
 class BasicRAGSystem(RAGSystemInterface):
     """
     Basic RAG system implementation.
+    
+    Run this RAG system with:
+    uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
     """
     
     log = get_logger("basic_rag_system")
@@ -29,73 +32,46 @@ class BasicRAGSystem(RAGSystemInterface):
         self.log.info("BasicRAGSystem initialized", 
                      llm_model="tiiuae/falcon3-10b-instruct")
     
-    def generate_queries(self, question: str) -> List[str]:
-        return [question]
-        
-    
     def process_question(self, question: str, qid: str = None) -> RAGResult:
         start_time = time.time()
         self.log.info("Processing question", question=question, qid=qid)
         
-        # Generate search queries
-        queries = self.generate_queries(question)
-        self.log.debug("Generated queries", queries=queries, count=len(queries))
-        
-        # Search for documents using each query and collect all results
-        all_hits = []
-        for query in queries:
-            hits = self.query_service.query_keywords(query, k=self.max_documents)
-            all_hits.extend(hits)
-            self.log.debug("Retrieved documents for query", 
-                          query=query, 
-                          hits_count=len(hits))
-        
-        # Take the first max_documents unique documents
-        unique_docs = {}
-        for hit in all_hits:
-            if hit.id not in unique_docs and len(unique_docs) < self.max_documents:
-                unique_docs[hit.id] = hit
+        # Search for documents using keyword search
+        hits = self.query_service.query_keywords(question, k=self.max_documents)
+        self.log.debug("Retrieved documents", hits_count=len(hits))
         
         # Extract document contents and IDs
-        doc_contents = [hit.metadata.text for hit in unique_docs.values()]
-        doc_ids = [hit.id for hit in unique_docs.values()]
+        doc_contents = [hit.metadata.text for hit in hits]
+        context = "\n\n".join(doc_contents)
+        doc_ids = [hit.id for hit in hits]
         
         self.log.debug("Selected documents for context", 
                       doc_count=len(doc_contents),
                       doc_ids=doc_ids)
         
-        # Create context for the LLM
-        context = "\n\n".join(doc_contents)
-        
-        # Generate prompt for the LLM
-        prompt = ANSWER_PROMPT_TEMPLATE.format(context=context, question=question)
-        
         # Generate answer using the LLM
+        prompt = ANSWER_PROMPT_TEMPLATE.format(context=context, question=question)
         _, answer = self.llm_client.query(prompt)
         
-        # Calculate metrics
-        query_words_count = len(question.split())
-        answer_words_count = len(answer.split())
+        # Calculate total processing time
         total_time_ms = (time.time() - start_time) * 1000
-        
-        self.log.info("Generated answer", 
-                     answer_length=answer_words_count,
-                     processing_time_ms=total_time_ms,
-                     qid=qid)
         
         result = RAGResult(
             query=question,
             answer=answer,
             context=doc_contents,
             doc_ids=doc_ids,
-            query_words_count=query_words_count,
-            answer_words_count=answer_words_count,
             total_time_ms=total_time_ms,
             timestamp=datetime.now(),
-            generated_queries=queries if queries != [question] else None,
+            generated_queries=None,
             rewritten_docs=None,
             qid=qid
         )
+        
+        self.log.info("Generated answer", 
+                     answer_length=result.answer_words_count,
+                     processing_time_ms=total_time_ms,
+                     qid=qid)
         
         return result
 
