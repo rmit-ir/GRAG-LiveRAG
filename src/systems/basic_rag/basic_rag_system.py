@@ -1,15 +1,5 @@
-"""
-Basic RAG system implementation.
-
-This module implements a basic RAG (Retrieval-Augmented Generation) system that:
-1. Takes a question
-2. Generates search queries
-3. Searches each query to get documents
-4. Performs fusion of results
-5. Generates an answer using the retrieved documents
-"""
 import time
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 
 from utils.logging_utils import get_logger
@@ -23,81 +13,27 @@ from systems.basic_rag.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE
 class BasicRAGSystem(RAGSystemInterface):
     """
     Basic RAG system implementation.
-    
-    This system takes a question, generates search queries, retrieves documents,
-    performs fusion, and generates an answer using the retrieved documents.
     """
     
     log = get_logger("basic_rag_system")
     
-    def __init__(
-        self,
-        embedding_model_name: str = "intfloat/e5-base-v2",
-        pinecone_index_name: str = "fineweb10bt-512-0w-e5-base-v2",
-        pinecone_namespace: str = "default",
-        opensearch_index_name: str = "fineweb10bt-512-0w-e5-base-v2",
-        max_documents: int = 10,
-        temperature: float = 0.7,
-        max_tokens: int = 1024
-    ):
-        """
-        Initialize the BasicRAGSystem.
-        
-        Args:
-            embedding_model_name: The embedding model name to use for query embedding
-            pinecone_index_name: The Pinecone index name to use
-            pinecone_namespace: The Pinecone namespace to use
-            opensearch_index_name: The OpenSearch index name to use
-            max_documents: Maximum number of documents to retrieve
-            temperature: The temperature parameter for generation
-            max_tokens: Maximum number of tokens to generate
-        """
-        self.query_service = QueryService(
-            pinecone_embedding_model_name=embedding_model_name,
-            pinecone_index_name=pinecone_index_name,
-            pinecone_namespace=pinecone_namespace,
-            opensearch_index_name=opensearch_index_name
-        )
+    def __init__(self):
+        self.query_service = QueryService()
         
         self.llm_client = AI71Client(
             model_id="tiiuae/falcon3-10b-instruct",
-            system_message=SYSTEM_PROMPT,
-            temperature=temperature,
-            max_tokens=max_tokens
+            system_message=SYSTEM_PROMPT
         )
         
-        self.max_documents = max_documents
+        self.max_documents = 10
         self.log.info("BasicRAGSystem initialized", 
-                     llm_model="tiiuae/falcon3-10b-instruct", 
-                     embedding_model=embedding_model_name,
-                     max_documents=max_documents)
+                     llm_model="tiiuae/falcon3-10b-instruct")
     
     def generate_queries(self, question: str) -> List[str]:
-        """
-        Generate search queries from the question.
-        
-        Args:
-            question: The user's question
-            
-        Returns:
-            A list of search queries
-        """
-        # For a basic implementation, we'll just use the original question
-        # In a more advanced system, we could use an LLM to generate multiple queries
-        self.log.debug("Generating queries", question=question)
         return [question]
+        
     
     def process_question(self, question: str, qid: str = None) -> RAGResult:
-        """
-        Process a question and generate an answer using RAG.
-        
-        Args:
-            question: The user's question
-            qid: Optional query ID, will be populated in RAGResult
-            
-        Returns:
-            A RAGResult containing the answer and metadata
-        """
         start_time = time.time()
         self.log.info("Processing question", question=question, qid=qid)
         
@@ -108,8 +44,7 @@ class BasicRAGSystem(RAGSystemInterface):
         # Search for documents using each query and collect all results
         all_hits = []
         for query in queries:
-            # Use fusion search to combine embedding and keyword search
-            hits = self.query_service.query_fusion(query, k=self.max_documents)
+            hits = self.query_service.query_keywords(query, k=self.max_documents)
             all_hits.extend(hits)
             self.log.debug("Retrieved documents for query", 
                           query=query, 
@@ -148,7 +83,6 @@ class BasicRAGSystem(RAGSystemInterface):
                      processing_time_ms=total_time_ms,
                      qid=qid)
         
-        # Create and return the result
         result = RAGResult(
             query=question,
             answer=answer,
@@ -183,11 +117,7 @@ if __name__ == "__main__":
     # Initialize the RAG system
     log = get_logger("basic_rag_main")
     log.info("Initializing RAG system")
-    rag_system = BasicRAGSystem(
-        max_documents=10,
-        temperature=0.7,
-        max_tokens=1024
-    )
+    rag_system = BasicRAGSystem()
     
     # Process the question
     qid = "test-1"
