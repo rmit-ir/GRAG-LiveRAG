@@ -74,6 +74,7 @@ class EditDistanceEvaluator(EvaluatorInterface):
     def evaluate(self, rag_results: List[RAGResult], references: List[QAPair]) -> EvaluationResult:
         """
         Evaluate a list of RAG results against a list of reference QA pairs using edit distance.
+        RAGResult and QAPair are matched using their qid fields.
         
         Args:
             rag_results: List of RAG results to evaluate
@@ -145,19 +146,25 @@ class EditDistanceEvaluator(EvaluatorInterface):
                      avg_normalized_distance=aggregated_metrics.get("avg_normalized_distance"),
                      processing_time_ms=total_time_ms)
         
+        # Get system_name from the first RAG result if available
+        system_name = None
+        if rag_results and hasattr(rag_results[0], 'system_name'):
+            system_name = rag_results[0].system_name
+        
         # Create and return the evaluation result
         return EvaluationResult(
             metrics=aggregated_metrics,
             evaluator_name=self.__class__.__name__,
             sample_count=len(rows),
-            rows=rows
+            rows=rows,
+            system_name=system_name
         )
 
 
 # Main entry point for testing the evaluator
+# Just for demonstration purposes, no need to have __main__ in other evaluators
 if __name__ == "__main__":
     from systems.rag_result import RAGResult
-    from datetime import datetime
     
     # Create sample RAG results
     rag_result1 = RAGResult(
@@ -166,7 +173,8 @@ if __name__ == "__main__":
         context=["Retrieval-augmented generation (RAG) is an AI framework that combines information retrieval with text generation."],
         doc_ids=["doc1"],
         total_time_ms=100.0,
-        qid="1"
+        qid="1",
+        system_name="TestRAGSystem"
     )
     
     rag_result2 = RAGResult(
@@ -175,7 +183,8 @@ if __name__ == "__main__":
         context=["RAG works by first retrieving relevant documents from a corpus and then using them to condition a language model."],
         doc_ids=["doc2"],
         total_time_ms=120.0,
-        qid="2"
+        qid="2",
+        system_name="TestRAGSystem"
     )
     
     # Create sample reference QA pairs

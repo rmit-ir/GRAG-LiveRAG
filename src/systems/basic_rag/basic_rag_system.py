@@ -63,7 +63,8 @@ class BasicRAGSystem(RAGSystemInterface):
             timestamp=datetime.now(),
             generated_queries=None,
             rewritten_docs=None,
-            qid=qid
+            qid=qid,
+            system_name="BasicRAGSystem"
         )
         
         self.log.info("Generated answer", 

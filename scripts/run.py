@@ -113,7 +113,7 @@ def save_results_to_tsv(results: List[RAGResult], output_file: str) -> None:
             fieldnames = [
                 'qid', 'question', 'answer', 'context', 'doc_ids',
                 'question_words_count', 'answer_words_count', 'total_time_ms',
-                'timestamp', 'generated_queries', 'rewritten_docs'
+                'timestamp', 'generated_queries', 'rewritten_docs', 'system_name'
             ]
             
             writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')

@@ -25,6 +25,7 @@ class RAGResult:
     rewritten_docs: Optional[List[str]] = None
     question_words_count: Optional[int] = None
     answer_words_count: Optional[int] = None
+    system_name: Optional[str] = None
     
     def __post_init__(self):
         """
@@ -72,7 +73,8 @@ class RAGResult:
             "timestamp": self.timestamp.isoformat(),
             "generated_queries": self.generated_queries,
             "rewritten_docs": self.rewritten_docs,
-            "qid": self.qid
+            "qid": self.qid,
+            "system_name": self.system_name
         }
     
     @classmethod
@@ -101,5 +103,6 @@ class RAGResult:
             timestamp=timestamp or datetime.now(),
             generated_queries=data.get("generated_queries", None),
             rewritten_docs=data.get("rewritten_docs", None),
-            qid=data.get("qid", None)
+            qid=data.get("qid", None),
+            system_name=data.get("system_name", None)
         )

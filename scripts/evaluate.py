@@ -538,6 +538,10 @@ def main():
                    results_file=args.results,
                    reference_file=args.reference,
                    aggregated_file=aggregated_file,
+                   metrics=evaluation_result.metrics,
+                   system_name=evaluation_result.system_name,
+                   evaluator_name=evaluation_result.evaluator_name,
+                   sample_count=evaluation_result.sample_count,
                    rows_file=rows_file if evaluation_result.rows else None,
                    evaluated_count=evaluation_result.sample_count)
         

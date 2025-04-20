@@ -66,7 +66,38 @@ cp .env.example .env
 
 And edit the `.env` file with your own values.
 
-Note, the access details can be found at https://linear.app/rmit-liverag-2025/document/access-to-platforms-eb73586791f5
+Note, the access details can be found at <https://linear.app/rmit-liverag-2025/document/access-to-platforms-eb73586791f5>
+
+## The LiveRAG Workflow
+
+The LiveRAG project follows a structured workflow for developing, running, and evaluating RAG systems:
+
+1. **Create Dataset**: Generate synthetic Q&A pairs using DataMorgana
+
+   ```bash
+   uv run scripts/create_datamorgana_dataset.py --n_questions=10
+   ```
+
+2. **Run RAG System**: Process questions through a RAG system to generate answers
+
+   ```bash
+   uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem \
+     --input data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv \
+     --parallel --num-threads 5
+   ```
+
+3. **Evaluate Results**: Compare RAG system outputs against reference answers
+
+   ```bash
+   uv run scripts/evaluate.py \
+     --evaluator evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator \
+     --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv \
+     --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv
+   ```
+
+4. **Analyze & Iterate**: Review evaluation metrics, identify areas for improvement, and refine your RAG system
+
+This workflow enables systematic development and benchmarking of RAG systems, allowing for continuous improvement through iterative refinement.
 
 ## Usage
 
@@ -97,7 +128,14 @@ This repository includes several scripts and notebooks for working with the Live
 
   ```bash
   # Run a RAG system with specific parameters
-  uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/your_dataset.tsv
+  uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/<dmds_id.tsv>
+  ```
+
+- [evaluate.py](scripts/evaluate.py): Evaluate RAG system results against reference answers (DataMorgana dataset) using specified evaluators
+
+  ```bash
+  # Evaluate RAG results using the basic EditDistanceEvaluator
+  uv run scripts/evaluate.py --results data/rag_results/<dmds_id_system.tsv> --reference data/generated_qa_pairs/<dmds_id.tsv>
   ```
 
 #### Notebooks

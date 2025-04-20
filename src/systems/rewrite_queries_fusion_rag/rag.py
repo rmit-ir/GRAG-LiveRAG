@@ -149,7 +149,8 @@ class FusionRAGSystem(RAGSystemInterface):
             timestamp=datetime.now(),
             generated_queries=queries if len(queries) > 1 else None,
             rewritten_docs=None,
-            qid=qid
+            qid=qid,
+            system_name="FusionRAGSystem"
         )
         
         self.log.info("Generated answer", 
