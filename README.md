@@ -137,7 +137,7 @@ This repository includes several scripts and notebooks for working with the Live
 
 ### Scripts
 
-- [**create_datamorgana_dataset.py**](scripts/create_datamorgana_dataset.py): Generate synthetic Q&A datasets using DataMorgana
+- [create_datamorgana_dataset.py](scripts/create_datamorgana_dataset.py): Generate synthetic Q&A datasets using DataMorgana
   ```bash
   # Generate 10 questions in TSV format
   uv run scripts/create_datamorgana_dataset.py --n_questions=10
@@ -145,6 +145,6 @@ This repository includes several scripts and notebooks for working with the Live
 
 ### Notebooks
 
-- [**test_data_morgana.ipynb**](notebooks/test_data_morgana.ipynb): Demonstrates how to use the DataMorgana API for synthetic conversation generation
-- [**test-indicies.ipynb**](notebooks/test-indicies.ipynb): Shows how to use vector index services (Pinecone and OpenSearch) for vector search
-- [**import_test.ipynb**](notebooks/import_test.ipynb): Simple test for package imports
+- [test_data_morgana.ipynb](notebooks/test_data_morgana.ipynb): Demonstrates how to use the DataMorgana API for synthetic conversation generation
+- [test-indicies.ipynb](notebooks/test-indicies.ipynb): Shows how to use vector index services (Pinecone and OpenSearch) for vector search
+- [import_test.ipynb](notebooks/import_test.ipynb): Simple test for package imports
