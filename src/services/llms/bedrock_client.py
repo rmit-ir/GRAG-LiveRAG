@@ -4,7 +4,7 @@ Client for interacting with Amazon Bedrock API using LangChain.
 import os
 import json
 import time
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, Optional
 from datetime import datetime
 from langchain_aws import ChatBedrock
 from botocore.exceptions import BotoCoreError, ClientError
@@ -13,6 +13,34 @@ from utils.path_utils import get_data_dir
 
 # Initialize logger
 logger = get_logger("bedrock_client")
+
+# Pricing per 1000 tokens for different models (in USD)
+# These prices should be updated as AWS changes their pricing
+MODEL_PRICING = {
+    # Claude 3.5 models
+    "anthropic.claude-3-5-sonnet-20241022-v2:0": {
+        "input_price": 3.00,  # $3.00 per 1M input tokens ($0.003 per 1K)
+        "output_price": 15.00  # $15.00 per 1M output tokens ($0.015 per 1K)
+    },
+    "anthropic.claude-3-5-haiku-20241022-v1:0": {
+        "input_price": 1.00,  # $1.00 per 1M input tokens ($0.001 per 1K)
+        "output_price": 5.00   # $5.00 per 1M output tokens ($0.005 per 1K)
+    },
+    # Claude 3 models
+    "anthropic.claude-3-sonnet-20240229-v1:0": {
+        "input_price": 3.00,  # $3.00 per 1M input tokens ($0.003 per 1K)
+        "output_price": 15.00  # $15.00 per 1M output tokens ($0.015 per 1K)
+    },
+    "anthropic.claude-3-haiku-20240307-v1:0": {
+        "input_price": 0.25,  # $0.25 per 1M input tokens ($0.00025 per 1K)
+        "output_price": 1.25   # $1.25 per 1M output tokens ($0.00125 per 1K)
+    },
+    # Default pricing if model not found
+    "default": {
+        "input_price": 3.00,  # Default to Claude 3.5 Sonnet pricing
+        "output_price": 15.00
+    }
+}
 
 
 class BedrockClient:
@@ -88,6 +116,7 @@ class BedrockClient:
 
             # Send the message and get the response
             response = self.chat_model.invoke(messages)
+            logger.debug(f"Raw response from Bedrock API", response=response)
             
             # Log response time
             response_time = time.time() - start_time
@@ -98,18 +127,39 @@ class BedrockClient:
 
             # Extract content from the response
             content = response.content
+            
+            # Extract token usage from response
+            token_usage = self._extract_token_usage(response)
+            
+            # Calculate cost based on token usage
+            cost = self._calculate_cost(token_usage)
+            
+            # Log token usage and cost
+            logger.info(
+                "Token usage and cost",
+                input_tokens=token_usage.get("input_tokens", 0),
+                output_tokens=token_usage.get("output_tokens", 0),
+                total_tokens=token_usage.get("total_tokens", 0),
+                cost_usd=cost
+            )
 
             # Create response metadata for saving
             response_metadata = {
                 "model": self.model_id,
                 "prompt": prompt,
                 "response": content,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "token_usage": token_usage,
+                "cost_usd": cost
             }
 
             # Save response for reproducibility
             self._save_raw_response(response_metadata, prompt)
 
+            # Add token usage and cost to response object for access by callers
+            response.token_usage = token_usage
+            response.cost_usd = cost
+            
             return response, content
 
         except (BotoCoreError, ClientError) as e:
@@ -122,6 +172,72 @@ class BedrockClient:
             logger.error(f"Unexpected error: {str(e)}")
             raise
 
+    def _extract_token_usage(self, response: Any) -> Dict[str, int]:
+        """
+        Extract token usage information from the API response.
+        
+        Args:
+            response: The API response object
+            
+        Returns:
+            Dictionary containing token usage information
+        """
+        token_usage = {}
+        
+        # Try to extract from response_metadata
+        if hasattr(response, "response_metadata") and response.response_metadata:
+            usage = response.response_metadata.get("usage", {})
+            token_usage = {
+                "input_tokens": usage.get("prompt_tokens", 0),
+                "output_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0)
+            }
+        
+        # If not found, try additional_kwargs
+        elif hasattr(response, "additional_kwargs") and response.additional_kwargs:
+            usage = response.additional_kwargs.get("usage", {})
+            token_usage = {
+                "input_tokens": usage.get("prompt_tokens", 0),
+                "output_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0)
+            }
+        
+        # If not found, try usage_metadata
+        elif hasattr(response, "usage_metadata") and response.usage_metadata:
+            token_usage = {
+                "input_tokens": response.usage_metadata.get("input_tokens", 0),
+                "output_tokens": response.usage_metadata.get("output_tokens", 0),
+                "total_tokens": response.usage_metadata.get("total_tokens", 0)
+            }
+        
+        return token_usage
+    
+    def _calculate_cost(self, token_usage: Dict[str, int]) -> float:
+        """
+        Calculate the cost of the API call based on token usage.
+        
+        Args:
+            token_usage: Dictionary containing token usage information
+            
+        Returns:
+            Cost in USD
+        """
+        # Get pricing for the model
+        pricing = MODEL_PRICING.get(self.model_id, MODEL_PRICING["default"])
+        
+        # Extract token counts
+        input_tokens = token_usage.get("input_tokens", 0)
+        output_tokens = token_usage.get("output_tokens", 0)
+        
+        # Calculate cost (price per 1M tokens, convert to price per token)
+        input_cost = (input_tokens / 1000) * (pricing["input_price"] / 1000)
+        output_cost = (output_tokens / 1000) * (pricing["output_price"] / 1000)
+        
+        # Total cost
+        total_cost = input_cost + output_cost
+        
+        return total_cost
+    
     def _save_raw_response(self, response: Dict[str, Any], prompt: str) -> None:
         """
         Saves the raw API response to a file for reproducibility and backup.

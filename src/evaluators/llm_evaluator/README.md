@@ -105,6 +105,21 @@ Evaluation Notes: The response provides a correct but somewhat incomplete defini
 
 Notice with gold references provided, the evaluator is able to spot the tiny incompleteness in the answer (only 1), while without gold references, it gives a perfect score (highest 2).
 
+It prints out the costs too:
+
+```bash
+Evaluation complete!
+Total time: 11381.10 ms (11.38 s)
+Results evaluated: 5
+Evaluation time: 10991.26 ms (10.99 s)
+Average query eval time: 2198.25 ms
+Total cost: $0.094815 USD
+Average cost per query: $0.018963 USD
+Output saved to:
+  - Aggregated results: /Users/kun/Projects/rmit/research/live-rag/LiveRAG/data/evaluation_results/dmds_4p3PUk5HORIw_BasicRAGSystem.LLMEvaluator.evaluation.aggregated.tsv
+  - Row-level results: /Users/kun/Projects/rmit/research/live-rag/LiveRAG/data/evaluation_results/dmds_4p3PUk5HORIw_BasicRAGSystem.LLMEvaluator.evaluation.rows.tsv
+```
+
 ## Environment Variables
 
 The evaluator requires the following environment variables to be set:

@@ -337,6 +337,9 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
             
             if result.total_time_ms is not None:
                 aggregated_dict["total_time_ms"] = result.total_time_ms
+                
+            if result.total_cost is not None:
+                aggregated_dict["total_cost"] = result.total_cost
             
             with open(aggregated_file, 'w', encoding='utf-8') as f:
                 f.write(json.dumps(aggregated_dict) + '\n')
@@ -359,6 +362,9 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
             
             if result.total_time_ms is not None:
                 agg_row["total_time_ms"] = result.total_time_ms
+                
+            if result.total_cost is not None:
+                agg_row["total_cost"] = result.total_cost
             
             # Flatten metrics into the row
             for metric_key, metric_value in result.metrics.items():
@@ -553,6 +559,7 @@ def main():
                    evaluator_name=evaluation_result.evaluator_name,
                    sample_count=evaluation_result.sample_count,
                    total_time_ms=evaluation_result.total_time_ms,
+                   total_cost=evaluation_result.total_cost,
                    rows_file=rows_file if evaluation_result.rows else None,
                    evaluated_count=evaluation_result.sample_count)
 
@@ -565,6 +572,9 @@ def main():
         if evaluation_result.total_time_ms is not None:
             print(f"Evaluation time: {evaluation_result.total_time_ms:.2f} ms ({evaluation_result.total_time_ms/1000:.2f} s)")
             print(f"Average query eval time: {evaluation_result.total_time_ms / evaluation_result.sample_count:.2f} ms")
+        if evaluation_result.total_cost is not None:
+            print(f"Total cost: ${evaluation_result.total_cost:.6f} USD")
+            print(f"Average cost per query: ${evaluation_result.total_cost / evaluation_result.sample_count:.6f} USD")
         print(f"Output saved to:")
         print(f"  - Aggregated results: {aggregated_file}")
         if evaluation_result.rows:

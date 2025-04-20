@@ -184,10 +184,17 @@ class LLMEvaluator(EvaluatorInterface):
             prompt = self._create_evaluation_prompt(rag_result, reference)
             
             # Send the prompt to the LLM
-            _, response = self.client.query(prompt)
+            raw_response, response = self.client.query(prompt)
             
             # Parse the LLM response
             evaluation = self._parse_llm_response(response)
+            
+            # Add token usage and cost information if available
+            if hasattr(raw_response, "token_usage"):
+                evaluation["token_usage"] = raw_response.token_usage
+            
+            if hasattr(raw_response, "cost_usd"):
+                evaluation["cost_usd"] = raw_response.cost_usd
             
             # Log the evaluation
             self.logger.info(
@@ -236,13 +243,22 @@ class LLMEvaluator(EvaluatorInterface):
             evaluation = self._evaluate_single(rag_result, reference)
             
             # Create row-level result
+            metrics = {
+                "relevance_score": evaluation.get("relevance_score", 0),
+                "faithfulness_score": evaluation.get("faithfulness_score", 0),
+                "evaluation_notes": evaluation.get("evaluation_notes", "")
+            }
+            
+            # Add token usage and cost to metrics if available
+            if "token_usage" in evaluation:
+                metrics["token_usage"] = evaluation["token_usage"]
+            
+            if "cost_usd" in evaluation:
+                metrics["cost_usd"] = evaluation["cost_usd"]
+            
             row = EvaluationResultRow(
                 qid=rag_result.qid,
-                metrics={
-                    "relevance_score": evaluation.get("relevance_score", 0),
-                    "faithfulness_score": evaluation.get("faithfulness_score", 0),
-                    "evaluation_notes": evaluation.get("evaluation_notes", "")
-                },
+                metrics=metrics,
                 evaluator_name=self.evaluator_name
             )
             
@@ -299,13 +315,22 @@ class LLMEvaluator(EvaluatorInterface):
                 evaluation = self._evaluate_single(rag_result, reference)
                 
                 # Create row-level result
+                metrics = {
+                    "relevance_score": evaluation.get("relevance_score", 0),
+                    "faithfulness_score": evaluation.get("faithfulness_score", 0),
+                    "evaluation_notes": evaluation.get("evaluation_notes", "")
+                }
+                
+                # Add token usage and cost to metrics if available
+                if "token_usage" in evaluation:
+                    metrics["token_usage"] = evaluation["token_usage"]
+                
+                if "cost_usd" in evaluation:
+                    metrics["cost_usd"] = evaluation["cost_usd"]
+                
                 row = EvaluationResultRow(
                     qid=rag_result.qid,
-                    metrics={
-                        "relevance_score": evaluation.get("relevance_score", 0),
-                        "faithfulness_score": evaluation.get("faithfulness_score", 0),
-                        "evaluation_notes": evaluation.get("evaluation_notes", "")
-                    },
+                    metrics=metrics,
                     evaluator_name=self.evaluator_name
                 )
                 rows.append(row)
@@ -321,6 +346,18 @@ class LLMEvaluator(EvaluatorInterface):
             "count": len(rows)
         }
         
+        # Calculate total cost if available
+        total_cost = 0.0
+        cost_available = False
+        for row in rows:
+            if "cost_usd" in row.metrics:
+                total_cost += row.metrics["cost_usd"]
+                cost_available = True
+        
+        # Add total cost to metrics if available
+        if cost_available:
+            metrics["total_cost"] = total_cost
+        
         # Calculate total processing time
         total_time_ms = (time.time() - start_time) * 1000
         
@@ -331,7 +368,8 @@ class LLMEvaluator(EvaluatorInterface):
             sample_count=len(rows),
             system_name=rag_results[0].system_name if rag_results else None,
             rows=rows,
-            total_time_ms=total_time_ms
+            total_time_ms=total_time_ms,
+            total_cost=total_cost if cost_available else None
         )
         
         self.logger.info(
@@ -339,7 +377,8 @@ class LLMEvaluator(EvaluatorInterface):
             avg_relevance_score=metrics["avg_relevance_score"],
             avg_faithfulness_score=metrics["avg_faithfulness_score"],
             count=metrics["count"],
-            total_time_ms=total_time_ms
+            total_time_ms=total_time_ms,
+            total_cost=total_cost if cost_available else None
         )
         
         return result

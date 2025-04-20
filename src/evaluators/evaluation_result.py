@@ -61,6 +61,7 @@ class EvaluationResult:
     timestamp: datetime = field(default_factory=datetime.now)
     rows: Optional[List[EvaluationResultRow]] = None
     total_time_ms: Optional[float] = None
+    total_cost: Optional[float] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -82,6 +83,9 @@ class EvaluationResult:
             
         if self.total_time_ms is not None:
             result["total_time_ms"] = self.total_time_ms
+            
+        if self.total_cost is not None:
+            result["total_cost"] = self.total_cost
             
         return result
     
@@ -112,5 +116,6 @@ class EvaluationResult:
             system_name=data.get("system_name"),
             timestamp=timestamp or datetime.now(),
             rows=rows,
-            total_time_ms=data.get("total_time_ms")
+            total_time_ms=data.get("total_time_ms"),
+            total_cost=data.get("total_cost")
         )
