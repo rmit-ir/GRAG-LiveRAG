@@ -108,6 +108,8 @@ Notice with gold references provided, the evaluator is able to spot the tiny inc
 It prints out the costs too:
 
 ```bash
+$ uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv --no-silent_errors --num_threads 5
+
 Evaluation complete!
 Total time: 11381.10 ms (11.38 s)
 Results evaluated: 5
