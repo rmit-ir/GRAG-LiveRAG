@@ -141,7 +141,7 @@ class FusionRAGSystem(RAGSystemInterface):
         total_time_ms = (time.time() - start_time) * 1000
         
         result = RAGResult(
-            query=question,
+            question=question,
             answer=answer,
             context=doc_contents,
             doc_ids=doc_ids,

@@ -111,8 +111,8 @@ def save_results_to_tsv(results: List[RAGResult], output_file: str) -> None:
         with open(output_file, 'w', encoding='utf-8', newline='') as f:
             # Define the fieldnames for the TSV
             fieldnames = [
-                'qid', 'query', 'answer', 'context', 'doc_ids',
-                'query_words_count', 'answer_words_count', 'total_time_ms',
+                'qid', 'question', 'answer', 'context', 'doc_ids',
+                'question_words_count', 'answer_words_count', 'total_time_ms',
                 'timestamp', 'generated_queries', 'rewritten_docs'
             ]
             
@@ -443,15 +443,13 @@ def main():
     
     os.makedirs(output_dir, exist_ok=True)
     
-    # Generate timestamp for filenames
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
     # Set output prefix
-    output_prefix = args.output_prefix or args.system
+    ds_name = args.input.split('/')[-1].split('.')[0]
+    output_prefix = args.output_prefix or args.system.split('.')[-1]
     
     # Define output filenames
-    tsv_filename = f"{output_prefix}_{timestamp}.tsv"
-    trec_filename = f"{output_prefix}_{timestamp}.trec"
+    tsv_filename = f"{ds_name}_{output_prefix}.tsv"
+    trec_filename = f"{ds_name}_{output_prefix}.trec"
     
     tsv_output_path = os.path.join(output_dir, tsv_filename)
     trec_output_path = os.path.join(output_dir, trec_filename)

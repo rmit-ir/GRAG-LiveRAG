@@ -30,6 +30,7 @@ class QAPair:
     question_categories: List[CategoryDict]
     user_categories: List[CategoryDict]
     document_ids: List[str]
+    qid: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'QAPair':
@@ -42,7 +43,8 @@ class QAPair:
             context=data.get('context', []),
             question_categories=data.get('question_categories', []),
             user_categories=data.get('user_categories', []),
-            document_ids=data.get('document_ids', [])
+            document_ids=data.get('document_ids', []),
+            qid=data.get('qid', None)
         )
 
 
@@ -360,7 +362,7 @@ class DataMorgana:
         for idx, qa in enumerate(qa_pairs, start=1):
             # Convert each QAPair to a dictionary
             row = {
-                'qid': idx,  # Add qid starting from 1
+                'qid': qa.qid if qa.qid is not None else str(idx),  # Use existing qid or generate one
                 'question': qa.question,
                 'answer': qa.answer,
                 'context': qa.context,

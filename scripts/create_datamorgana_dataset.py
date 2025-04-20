@@ -32,6 +32,7 @@ from dotenv import load_dotenv
 from services.ds_data_morgana import DataMorgana, QAPair
 from utils.path_utils import get_data_dir
 from utils.logging_utils import get_logger
+from utils.query_utils import generate_short_id
 
 # Initialize logger
 logger = get_logger("datamorgana_dataset")
@@ -106,7 +107,7 @@ def qa_pairs_to_enhanced_dataframe(qa_pairs: List[QAPair]) -> pd.DataFrame:
     for idx, qa in enumerate(qa_pairs, start=1):
         # Start with basic fields
         row = {
-            'qid': idx,  # Add qid starting from 1
+            'qid': qa.qid if qa.qid is not None else str(idx),  # Use existing qid or generate one
             'question': qa.question,
             'answer': qa.answer,
             'context': qa.context,
@@ -229,9 +230,9 @@ def main():
         output_path = args.output
     else:
         # Generate default output path with number of records
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        short_id = generate_short_id()
         record_count = len(df)
-        filename = f"datamorgana_dataset_{timestamp}.n{record_count}.{args.format}"
+        filename = f"dmds_{short_id}.n{record_count}.{args.format}"
         output_path = os.path.join(get_data_dir(), "generated_qa_pairs", filename)
         logger.debug("Generated output path", path=output_path)
     

@@ -10,11 +10,11 @@ from datetime import datetime
 class RAGResult:
     """
     Interface for RAG system results.
-    Contains the query, answer, context, document IDs, and performance metrics.
-    Also includes generated queries (rewritten queries from given query) and
+    Contains the question, answer, context, document IDs, and performance metrics.
+    Also includes generated queries (rewritten queries from given question) and
     rewritten documents (context, but each document is rewritten).
     """
-    query: str
+    question: str
     answer: str
     context: List[str]
     doc_ids: List[str]
@@ -23,27 +23,27 @@ class RAGResult:
     timestamp: datetime = field(default_factory=datetime.now)
     generated_queries: Optional[List[str]] = None
     rewritten_docs: Optional[List[str]] = None
-    query_words_count: Optional[int] = None
+    question_words_count: Optional[int] = None
     answer_words_count: Optional[int] = None
     
     def __post_init__(self):
         """
         Calculate word counts if not provided.
         """
-        if self.query_words_count is None:
-            self.query_words_count = self.calculate_query_words_count()
+        if self.question_words_count is None:
+            self.question_words_count = self.calculate_question_words_count()
         
         if self.answer_words_count is None:
             self.answer_words_count = self.calculate_answer_words_count()
     
-    def calculate_query_words_count(self) -> int:
+    def calculate_question_words_count(self) -> int:
         """
-        Calculate the number of words in the query.
+        Calculate the number of words in the question.
         
         Returns:
-            Number of words in the query
+            Number of words in the question
         """
-        return len(self.query.split())
+        return len(self.question.split())
     
     def calculate_answer_words_count(self) -> int:
         """
@@ -62,11 +62,11 @@ class RAGResult:
             Dictionary representation of the result
         """
         return {
-            "query": self.query,
+            "question": self.question,
             "answer": self.answer,
             "context": self.context,
             "doc_ids": self.doc_ids,
-            "query_words_count": self.query_words_count,
+            "question_words_count": self.question_words_count,
             "answer_words_count": self.answer_words_count,
             "total_time_ms": self.total_time_ms,
             "timestamp": self.timestamp.isoformat(),
@@ -91,11 +91,11 @@ class RAGResult:
             timestamp = datetime.fromisoformat(timestamp)
         
         return cls(
-            query=data.get("query", ""),
+            question=data.get("question", ""),
             answer=data.get("answer", ""),
             context=data.get("context", []),
             doc_ids=data.get("doc_ids", []),
-            query_words_count=data.get("query_words_count", 0),
+            question_words_count=data.get("question_words_count", 0),
             answer_words_count=data.get("answer_words_count", 0),
             total_time_ms=data.get("total_time_ms", 0.0),
             timestamp=timestamp or datetime.now(),

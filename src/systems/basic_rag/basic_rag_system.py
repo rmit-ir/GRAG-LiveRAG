@@ -55,7 +55,7 @@ class BasicRAGSystem(RAGSystemInterface):
         total_time_ms = (time.time() - start_time) * 1000
         
         result = RAGResult(
-            query=question,
+            question=question,
             answer=answer,
             context=doc_contents,
             doc_ids=doc_ids,
@@ -101,10 +101,10 @@ if __name__ == "__main__":
     # Print the result
     print("\n" + "="*80)
     print(f"Query ID: {result.qid}")
-    print(f"Question: {result.query}")
+    print(f"Question: {result.question}")
     print(f"Answer: {result.answer}")
     print("-"*80)
-    print(f"Query words: {result.query_words_count}")
+    print(f"Question words: {result.question_words_count}")
     print(f"Answer words: {result.answer_words_count}")
     print(f"Processing time: {result.total_time_ms:.2f} ms")
     print(f"Documents used: {len(result.doc_ids)}")

@@ -18,6 +18,7 @@ dependencies = [
     "langchain-aws>=0.2.13",
     "langchain-openai>=0.3.12",
     "sqids>=0.5.1",
+    "levenshtein>=0.27.1",
 ]
 
 [build-system]
