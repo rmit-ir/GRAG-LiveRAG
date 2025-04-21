@@ -12,10 +12,39 @@ Question: {question}
 Answer:
 """
 
-# Query generation prompt template
-QUERY_GENERATION_PROMPT = """Given the following question, generate alternative search queries that could help find relevant information. 
-Each query should be a different way of asking for the same information or focus on different aspects of the question.
-Return each query on a new line without numbering or additional text.
+# Query generation prompt templates
+SPARSE_QUERY_GENERATION_PROMPT = """You are a search query generator. For the user's question below, generate {max_queries} search queries optimized for keyword-based search engines (e.g., Elasticsearch BM25). Prioritize:  
 
-Original question: {question}
+- Exact technical terms, entities, and acronyms
+- Synonyms and related phrases (e.g., "CPT" → "Cognitive Processing Therapy")
+- Avoid ambiguity (e.g., "windows" → "Microsoft Windows OS")
+- Split compound questions into atomic queries
+- Reason about the question before generating queries
+
+Format as a numbered list enclosed in queries HTML tag, response format:
+
+Reason: <first, your reasoning about the question>
+<queries>
+1. query
+2. query
+...
+</queries>
+"""
+
+DENSE_QUERY_GENERATION_PROMPT = """You are a search query generator. For the user's question below, generate {max_queries} search queries optimized for semantic search engines (e.g., vector embeddings). Prioritize:  
+
+- Full-sentence paraphrases preserving original intent
+- Implicit context (e.g., "Oregon first USA state allow" → "Oregon Death with Dignity Act history")
+- Broader/narrower angles of the same topic
+- Remove redundant keywords for fluency
+- Reason about the question before generating queries
+
+Format as a numbered list enclosed in queries HTML tag, response format:
+
+Reason: <first, your reasoning about the question>
+<queries>
+1. query
+2. query
+...
+</queries>
 """

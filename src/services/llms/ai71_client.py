@@ -108,6 +108,7 @@ class AI71Client:
 
             # Save response for reproducibility
             self._save_raw_response(response_metadata, prompt)
+            logger.debug("Response content", content=content)
 
             return response, content
 
