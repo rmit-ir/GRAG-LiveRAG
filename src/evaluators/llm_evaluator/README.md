@@ -21,54 +21,18 @@ The LLM Evaluator uses a large language model to assess the quality of responses
 
 ### Basic Usage
 
-```python
-from evaluators.llm_evaluator.llm_evaluator import LLMEvaluator
-from systems.rag_result import RAGResult
-from services.ds_data_morgana import QAPair
+```bash
+# Check the help message
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --help
 
-# Initialize the evaluator
-evaluator = LLMEvaluator()
+# Evaluate dmds_4p3PUk5HORIw_BasicRAGSystem.tsv against the gold reference
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv
 
-# Create RAG results to evaluate
-rag_results = [
-    RAGResult(
-        question="What is retrieval-augmented generation?",
-        answer="Retrieval-augmented generation (RAG) is a technique that combines retrieval of relevant documents with text generation.",
-        context=["Retrieval-augmented generation (RAG) is an AI framework that combines information retrieval with text generation."],
-        doc_ids=["doc1"],
-        total_time_ms=100.0,
-        qid="1",
-        system_name="TestRAGSystem"
-    )
-]
+# Same, but with 5 threads parallel evaluation
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv --no-silent_errors --num_threads 5
 
-# Create reference QA pairs
-references = [
-    QAPair(
-        question="What is retrieval-augmented generation?",
-        answer="Retrieval-augmented generation (RAG) is an AI framework that enhances large language models by retrieving external knowledge.",
-        context=["Retrieval-augmented generation (RAG) is an AI framework that enhances large language models by retrieving external knowledge."],
-        question_categories=[],
-        user_categories=[],
-        document_ids=["doc1"],
-        qid="1"
-    )
-]
-
-# Evaluate the RAG results
-evaluation_result = evaluator.evaluate(rag_results, references)
-
-# Access the evaluation results
-print(f"Average Relevance Score: {evaluation_result.metrics['avg_relevance_score']}")
-print(f"Average Faithfulness Score: {evaluation_result.metrics['avg_faithfulness_score']}")
-print(f"Total Evaluated: {evaluation_result.metrics['count']}")
-
-# Access row-level results
-for row in evaluation_result.rows:
-    print(f"QID: {row.qid}")
-    print(f"Relevance Score: {row.metrics['relevance_score']}")
-    print(f"Faithfulness Score: {row.metrics['faithfulness_score']}")
-    print(f"Evaluation Notes: {row.metrics['evaluation_notes']}")
+# Same, but ignoring gold reference
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv --no-use_gold_references --no-silent_errors --num_threads 5
 ```
 
 ### Configuration Options
