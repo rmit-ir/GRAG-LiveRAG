@@ -4,7 +4,7 @@ Client for interacting with Amazon Bedrock API using LangChain.
 import os
 import json
 import time
-from typing import Dict, Tuple, Any, Optional
+from typing import Dict, Tuple, Any
 from datetime import datetime
 from langchain_aws import ChatBedrock
 from botocore.exceptions import BotoCoreError, ClientError
@@ -64,13 +64,10 @@ class BedrockClient:
             max_tokens (int): Maximum number of tokens to generate
             region_name (str, optional): AWS region name. If None, uses RACE_AWS_REGION from env
         """
-        # Set AWS credentials from environment variables with RACE_ prefix
-        os.environ["AWS_ACCESS_KEY_ID"] = os.environ.get(
-            "RACE_AWS_ACCESS_KEY_ID", "")
-        os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
-            "RACE_AWS_SECRET_ACCESS_KEY", "")
-        os.environ["AWS_SESSION_TOKEN"] = os.environ.get(
-            "RACE_AWS_SESSION_TOKEN", "")
+        # Get AWS credentials from environment variables with RACE_ prefix
+        aws_access_key_id = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
+        aws_secret_access_key = os.environ.get("RACE_AWS_SECRET_ACCESS_KEY", "")
+        aws_session_token = os.environ.get("RACE_AWS_SESSION_TOKEN", "")
 
         # Use provided region_name or get from environment variable
         if region_name is None:
@@ -82,10 +79,13 @@ class BedrockClient:
             "max_tokens": max_tokens
         }
 
-        # Initialize ChatBedrock with the specified model
+        # Initialize ChatBedrock with the specified model and credentials
         self.chat_model = ChatBedrock(
             model_id=model_id,
             region_name=region_name,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_session_token=aws_session_token,
             model_kwargs=model_kwargs
         )
         self.model_id = model_id
