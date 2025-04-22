@@ -7,6 +7,7 @@ from datetime import datetime
 from utils.logging_utils import get_logger
 from services.indicies import QueryService
 from services.llms.ai71_client import AI71Client
+from services.llms.general_openai_client import GeneralOpenAIClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
 from systems.basic_rag.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE
@@ -19,16 +20,33 @@ class BasicRAGSystem(RAGSystemInterface):
     
     log = get_logger("basic_rag_system")
     
-    def __init__(self):
+    def __init__(self, llm_client="ai71_client"):
+        """
+        Initialize the BasicRAGSystem.
+        
+        Args:
+            llm_client (str): LLM client to use: ai71_client, general_openai_client
+        """
         self.query_service = QueryService()
         
-        self.llm_client = AI71Client(
-            model_id="tiiuae/falcon3-10b-instruct",
-            system_message=SYSTEM_PROMPT
-        )
+        model_id = "tiiuae/falcon3-10b-instruct"
+        
+        if llm_client == "general_openai_client":
+            self.llm_client = GeneralOpenAIClient(
+                model_id=model_id,
+                system_message=SYSTEM_PROMPT
+            )
+            client_type = "general_openai_client"
+        else:
+            self.llm_client = AI71Client(
+                model_id=model_id,
+                system_message=SYSTEM_PROMPT
+            )
+            client_type = "ai71_client"
         
         self.log.info("BasicRAGSystem initialized", 
-                     llm_model="tiiuae/falcon3-10b-instruct")
+                     llm_model=model_id,
+                     llm_client=client_type)
     
     def process_question(self, question: str, qid: str = None) -> RAGResult:
         start_time = time.time()

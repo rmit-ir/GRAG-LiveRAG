@@ -1,40 +1,51 @@
 #!/usr/bin/env python3
 """
-Script to deploy an LLM on EC2 using CloudFormation with Application Load Balancer access.
+Script to deploy an LLM on EC2 using CloudFormation.
+Connects to the EC2 instance using Session Manager, installs and runs vLLM directly,
+and sets up port forwarding for local access.
+
+All resources created in this script must be deleted upon exiting!
 """
 import os
 import sys
 import time
-import json
 import signal
 import argparse
 import subprocess
 import requests
+import atexit
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 import boto3
 from botocore.exceptions import ClientError, WaiterError
 
+# Add scripts folder to the Python path to allow importing from scripts
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
 from utils.logging_utils import get_logger
+from session_manager import SessionManager
 
 # Initialize logger
 logger = get_logger("deploy_ec2_llm")
 
 class EC2LLMDeployer:
     """
-    Class to deploy an LLM on EC2 using CloudFormation with Application Load Balancer access.
+    Class to deploy an LLM on EC2 using CloudFormation.
+    Connects to the EC2 instance using Session Manager, installs and runs vLLM directly,
+    and sets up port forwarding for local access.
+    
+    Can be used as a context manager to ensure proper cleanup of resources.
     """
     def __init__(
         self,
-        model_id: str = "tiiuae/falcon-3-10b-instruct",
+        model_id: str = "tiiuae/Falcon3-10B-Instruct",
         region_name: str = None,
-        instance_type: str = "g5.xlarge",
+        instance_type: str = "g6e.4xlarge",
         stack_name: str = None,
-        api_key: str = None,
-        vllm_port: int = 8000,
+        local_port: int = 8987,
         ami_id: str = "ami-04f4302ff68e424cf",
-        stage_name: str = "prod",
     ):
         """
         Initialize the EC2 LLM deployer.
@@ -44,29 +55,18 @@ class EC2LLMDeployer:
             region_name (str, optional): AWS region name. If None, uses RACE_AWS_REGION from env
             instance_type (str): EC2 instance type for deployment
             stack_name (str, optional): CloudFormation stack name. If None, generates one
-            api_key (str, optional): API key for vLLM. If None, generates one
-            vllm_port (int): Port for vLLM API
+            local_port (int): Local port for port forwarding (default: 8987)
             ami_id (str): AMI ID to use for the EC2 instance (Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6)
-            stage_name (str): Stage name for deployment (used for resource naming)
         """
-        # Get AWS credentials from environment variables with RACE_ prefix
-        access_key = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
-        secret_key = os.environ.get("RACE_AWS_SECRET_ACCESS_KEY", "")
-        session_token = os.environ.get("RACE_AWS_SESSION_TOKEN", "")
-        
         # Use provided region_name or get from environment variable
         if region_name is None:
             region_name = os.environ.get("RACE_AWS_REGION", "us-west-2")
         
-        # Set up boto3 session with explicit credentials
-        self.boto_session = boto3.Session(
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            aws_session_token=session_token,
-            region_name=region_name
-        )
-        
         self.region_name = region_name
+        
+        # Initialize session manager to use its boto3 session
+        self.session_manager = SessionManager(region_name=region_name)
+        self.boto_session = self.session_manager.boto_session
         self.cf_client = self.boto_session.client('cloudformation')
         self.ec2_client = self.boto_session.client('ec2')
         
@@ -86,22 +86,15 @@ class EC2LLMDeployer:
             self.stack_name = stack_name
         
         # Store other parameters
-        self.vllm_port = vllm_port
-        self.stage_name = stage_name
+        self.remote_port = 8000  # Fixed remote port for vLLM
+        self.local_port = local_port  # Configurable local port for port forwarding
         self.ami_id = ami_id
         
-        # Generate API key if not provided
-        if api_key is None:
-            import uuid
-            self.api_key = str(uuid.uuid4())
-        else:
-            self.api_key = api_key
+        # Use EC2_LLM_API_KEY from environment
+        self.api_key = os.environ.get("EC2_LLM_API_KEY", "")
         
         # Track deployed resources
         self.instance_id = None
-        self.alb_endpoint = None
-        self.vllm_api_endpoint = None
-        self.vllm_log_endpoint = None
         
         logger.debug(f"Initialized EC2 LLM deployer with model: {model_id}")
 
@@ -267,20 +260,8 @@ class EC2LLMDeployer:
                     'ParameterValue': self.instance_type
                 },
                 {
-                    'ParameterKey': 'VLLMPort',
-                    'ParameterValue': str(self.vllm_port)
-                },
-                {
-                    'ParameterKey': 'ApiKey',
-                    'ParameterValue': self.api_key
-                },
-                {
                     'ParameterKey': 'AmiId',
                     'ParameterValue': self.ami_id
-                },
-                {
-                    'ParameterKey': 'StageName',
-                    'ParameterValue': self.stage_name
                 }
             ]
             
@@ -303,25 +284,16 @@ class EC2LLMDeployer:
             stack = self.cf_client.describe_stacks(StackName=self.stack_name)['Stacks'][0]
             outputs = {output['OutputKey']: output['OutputValue'] for output in stack.get('Outputs', [])}
             
-            # Store instance ID and endpoints
+            # Store instance ID
             self.instance_id = outputs.get('InstanceId')
-            self.alb_endpoint = outputs.get('ALBEndpoint')
-            self.vllm_api_endpoint = outputs.get('VLLMApiEndpoint')
-            self.vllm_log_endpoint = outputs.get('VLLMLogEndpoint')
             
             logger.info(f"Stack creation complete: {self.stack_name}")
             logger.info(f"Instance ID: {self.instance_id}")
-            logger.info(f"ALB Endpoint: {self.alb_endpoint}")
-            logger.info(f"vLLM API Endpoint: {self.vllm_api_endpoint}")
-            logger.info(f"vLLM Log Endpoint: {self.vllm_log_endpoint}")
             logger.info(f"API Key: {self.api_key}")
             
             return {
                 'stack_name': self.stack_name,
                 'instance_id': self.instance_id,
-                'alb_endpoint': self.alb_endpoint,
-                'vllm_api_endpoint': self.vllm_api_endpoint,
-                'vllm_log_endpoint': self.vllm_log_endpoint,
                 'api_key': self.api_key,
                 'model_id': self.model_id
             }
@@ -335,89 +307,387 @@ class EC2LLMDeployer:
             self.cleanup()
             raise
 
-    def tail_logs(self) -> None:
+    def wait_for_instance_ssm_ready(self, max_attempts=60, delay_seconds=5) -> bool:
         """
-        Tail the logs of the vLLM service through the Application Load Balancer endpoint.
-        """
-        if not self.vllm_log_endpoint:
-            logger.error("No log endpoint available. Deploy the stack first.")
-            return
-        
-        try:
-            # Monitor logs through ALB
-            logger.info(f"Tailing logs from {self.vllm_log_endpoint}...")
-            
-            # Initial log fetch
-            last_log_time = time.time()
-            last_log_length = 0
-            
-            while True:
-                try:
-                    # Fetch logs with increasing number of lines as time passes
-                    lines = 100 + int((time.time() - last_log_time) / 10) * 100
-                    response = requests.get(f"{self.vllm_log_endpoint}?lines={lines}", timeout=5)
-                    
-                    if response.status_code == 200:
-                        logs = response.text
-                        
-                        # Only print new log lines
-                        if len(logs) > last_log_length:
-                            new_logs = logs[last_log_length:]
-                            print(new_logs, end="")
-                            last_log_length = len(logs)
-                    else:
-                        logger.warning(f"Failed to fetch logs: HTTP {response.status_code}")
-                        
-                    time.sleep(2)
-                    
-                except requests.RequestException as e:
-                    logger.warning(f"Error fetching logs: {str(e)}")
-                    time.sleep(5)
-                    
-                except KeyboardInterrupt:
-                    logger.info("Log tailing interrupted.")
-                    return
-                    
-        except KeyboardInterrupt:
-            logger.info("Log tailing interrupted.")
-        except Exception as e:
-            logger.error(f"Error tailing logs: {str(e)}")
-
-    def wait_for_service(self, timeout: int = 300) -> bool:
-        """
-        Wait for the vLLM service to be available through the Application Load Balancer.
-        
-        Args:
-            timeout (int): Timeout in seconds
-            
         Returns:
-            bool: True if service is available, False otherwise
+            bool: True if the instance is ready, False otherwise
         """
-        if not self.vllm_api_endpoint:
-            logger.error("No API endpoint available. Deploy the stack first.")
+        if not self.instance_id:
+            logger.error("No instance ID available. Deploy the stack first.")
             return False
         
-        logger.info(f"Waiting for vLLM service to be available at {self.vllm_api_endpoint}...")
-        start_time = time.time()
         
-        while time.time() - start_time < timeout:
+        logger.info(f"Waiting for instance {self.instance_id} to be ready for SSM connections...")
+        
+        ssm_client = self.boto_session.client('ssm')
+        
+        for attempt in range(max_attempts):
             try:
-                # Try to connect to the ALB endpoint
-                headers = {"X-Api-Key": self.api_key}
-                response = requests.get(f"{self.vllm_api_endpoint}/health", headers=headers, timeout=5)
+                # Check if the instance is registered with SSM
+                response = ssm_client.describe_instance_information(
+                    Filters=[
+                        {
+                            'Key': 'InstanceIds',
+                            'Values': [self.instance_id]
+                        }
+                    ]
+                )
                 
-                if response.status_code == 200:
-                    logger.info("vLLM service is available.")
-                    return True
-            except requests.RequestException:
-                pass
-            
-            logger.info("Waiting for vLLM service to be available...")
-            time.sleep(10)
+                if response.get('InstanceInformationList'):
+                    instance_info = response['InstanceInformationList'][0]
+                    ping_status = instance_info.get('PingStatus')
+                    status = instance_info.get('Status')
+                    
+                    logger.info(f"Instance SSM status: PingStatus={ping_status}, Status={status}")
+                    
+                    if ping_status == 'Online':
+                        logger.info(f"Instance {self.instance_id} is ready for SSM connections")
+                        return True
+                
+                logger.info(f"Instance not ready yet. Attempt {attempt+1}/{max_attempts}. Waiting {delay_seconds} seconds...")
+                time.sleep(delay_seconds)
+                
+            except Exception as e:
+                logger.warning(f"Error checking instance SSM status: {str(e)}")
+                time.sleep(delay_seconds)
         
-        logger.error(f"vLLM service not available after {timeout} seconds.")
-        raise TimeoutError("vLLM service not available after timeout.")
-
+        logger.error(f"Instance {self.instance_id} did not become ready for SSM connections after {max_attempts} attempts")
+        return False
+    
+    def connect_to_instance(self) -> bool:
+        """
+        Connect to the EC2 instance using Session Manager.
+        
+        Returns:
+            bool: True if connection is successful, False otherwise
+        """
+        if not self.instance_id:
+            logger.error("No instance ID available. Deploy the stack first.")
+            return False
+        
+        try:
+            # Check if we can connect to the instance
+            logger.info("Checking connection to instance...")
+            result = self.session_manager.execute_command(
+                instance_id=self.instance_id,
+                commands=["echo 'Connection successful'"]
+            )
+            
+            if result.get('Status') == 'Success':
+                logger.info("Connection to instance successful.")
+                return True
+            else:
+                logger.error("Failed to connect to instance.")
+                return False
+        except Exception as e:
+            logger.error(f"Error connecting to instance: {str(e)}")
+            return False
+    
+    def run_vllm_service(self) -> bool:
+        """
+        Install and run vLLM directly on the EC2 instance as a systemd service.
+        
+        Returns:
+            bool: True if service is started successfully, False otherwise
+        """
+        if not self.instance_id:
+            logger.error("No instance ID available. Deploy the stack first.")
+            return False
+        
+        try:
+            # Upload the installation script
+            install_script_path = Path(__file__).parent / "config" / "install_vllm.sh"
+            remote_install_path = "/tmp/install_vllm.sh"
+            
+            logger.info(f"Uploading vLLM installation script to {remote_install_path}...")
+            self.session_manager.upload_file(
+                instance_id=self.instance_id,
+                local_path=str(install_script_path),
+                remote_path=remote_install_path
+            )
+            
+            # Make the script executable and run it
+            logger.info("Installing vLLM...")
+            self.session_manager.execute_command(
+                instance_id=self.instance_id,
+                commands=[
+                    f"chmod +x {remote_install_path}",
+                    f"sudo {remote_install_path}"
+                ]
+            )
+            
+            # Upload the service setup script
+            service_script_path = Path(__file__).parent / "config" / "setup_vllm_service.sh"
+            remote_service_path = "/tmp/setup_vllm_service.sh"
+            
+            logger.info(f"Uploading vLLM service setup script to {remote_service_path}...")
+            self.session_manager.upload_file(
+                instance_id=self.instance_id,
+                local_path=str(service_script_path),
+                remote_path=remote_service_path
+            )
+            
+            # Make the script executable and run it with parameters
+            logger.info("Setting up vLLM service...")
+            result = self.session_manager.execute_command(
+                instance_id=self.instance_id,
+                commands=[
+                    f"chmod +x {remote_service_path}",
+                    f"sudo {remote_service_path} {self.model_id} {self.remote_port} {self.api_key}"
+                ]
+            )
+            
+            # Check if the service was started successfully
+            if result.get('Status') == 'Success':
+                logger.info("vLLM service started successfully.")
+                return True
+            else:
+                time.sleep(3600)  # Wait for a moment before checking logs
+                logger.error("Failed to start vLLM service.")
+                return False
+        except Exception as e:
+            logger.error(f"Error setting up vLLM service: {str(e)}")
+            return False
+    
+    def setup_port_forwarding(self) -> Dict[str, Any]:
+        """
+        Set up port forwarding to the EC2 instance using SessionManager.
+        
+        Returns:
+            Dict containing the process and monitoring thread information
+        """
+        if not self.instance_id:
+            logger.error("No instance ID available. Deploy the stack first.")
+            return None
+        
+        try:
+            # Use the SessionManager's setup_port_forwarding method
+            return self.session_manager.setup_port_forwarding(
+                instance_id=self.instance_id,
+                remote_port=self.remote_port,
+                local_port=self.local_port
+            )
+        except Exception as e:
+            logger.error(f"Error setting up port forwarding: {str(e)}")
+            return None
+    
+    def tail_service_logs(self, in_thread=False) -> Optional[threading.Thread]:
+        """
+        Tail the logs of the vLLM systemd service using direct AWS SSM command.
+        Logs are redirected to a file in /tmp/ instead of being displayed in real-time.
+        
+        Args:
+            in_thread (bool): If True, run the log tailing in a separate thread
+            
+        Returns:
+            Optional[threading.Thread]: The thread object if in_thread is True, None otherwise
+        """
+        if not self.instance_id:
+            logger.error("No instance ID available. Deploy the stack first.")
+            return None
+        
+        def _tail_logs():
+            try:
+                logger.info("Tailing vLLM service logs...")
+                
+                # Create a log file with a unique name
+                log_file_path = f"/tmp/vllm_service_logs_{self.instance_id}_{int(time.time())}.log"
+                log_file = open(log_file_path, "w")
+                
+                # Construct the AWS SSM command to directly execute journalctl
+                ssm_command = [
+                    "aws", "ssm", "start-session",
+                    "--target", self.instance_id,
+                    "--region", self.region_name,
+                    "--document-name", "AWS-StartInteractiveCommand",
+                    "--parameters", "command=['sudo journalctl -u vllm.service -f']"
+                ]
+                
+                # Set up environment variables for the subprocess
+                env = os.environ.copy()
+                
+                # Copy RACE_ prefixed AWS credentials to standard AWS environment variables
+                if os.environ.get("RACE_AWS_ACCESS_KEY_ID"):
+                    env["AWS_ACCESS_KEY_ID"] = os.environ.get("RACE_AWS_ACCESS_KEY_ID")
+                if os.environ.get("RACE_AWS_SECRET_ACCESS_KEY"):
+                    env["AWS_SECRET_ACCESS_KEY"] = os.environ.get("RACE_AWS_SECRET_ACCESS_KEY")
+                if os.environ.get("RACE_AWS_SESSION_TOKEN"):
+                    env["AWS_SESSION_TOKEN"] = os.environ.get("RACE_AWS_SESSION_TOKEN")
+                if os.environ.get("RACE_AWS_REGION"):
+                    env["AWS_REGION"] = os.environ.get("RACE_AWS_REGION")
+                
+                # Execute the command and redirect output to the log file
+                logger.info(f"Running command: {' '.join(ssm_command)}")
+                process = subprocess.Popen(
+                    ssm_command,
+                    stdout=log_file,
+                    stderr=log_file,
+                    env=env
+                )
+                
+                logger.info(f"To view vLLM logs in real-time, run: tail -f {log_file_path}")
+                
+                # Wait for the process to complete
+                process.wait()
+                
+                # Close the log file
+                log_file.close()
+                
+                # Check return code
+                if process.returncode != 0:
+                    logger.error(f"Log tailing process exited with code {process.returncode}")
+                    logger.error(f"Check logs at {log_file_path} for details")
+                
+            except KeyboardInterrupt:
+                logger.info("Log tailing interrupted.")
+                logger.info(f"Logs are available at: {log_file_path}")
+            except Exception as e:
+                logger.error(f"Error tailing service logs: {str(e)}")
+        
+        if in_thread:
+            # Run in a separate thread
+            log_thread = threading.Thread(target=_tail_logs, daemon=True)
+            log_thread.start()
+            logger.info("Started vLLM log tailing in a separate thread")
+            return log_thread
+        else:
+            # Run in the main thread
+            try:
+                _tail_logs()
+            except KeyboardInterrupt:
+                logger.info("Log tailing interrupted.")
+            return None
+    
+    def wait_for_llm_ready(self, max_wait_time: int = 900, check_interval: int = 5) -> bool:
+        """
+        Poll the vLLM health endpoint until it returns a successful response or times out.
+        
+        Args:
+            max_wait_time (int): Maximum time to wait in seconds
+            check_interval (int): Time between health checks in seconds
+            
+        Returns:
+            bool: True if the LLM is ready, False otherwise
+        """
+        if not self.instance_id:
+            logger.error("No instance ID available. Deploy the stack first.")
+            return False
+        
+        health_url = f"http://localhost:{self.local_port}/health"
+        logger.info(f"Waiting for vLLM to be ready (polling {health_url})...")
+        
+        # Prepare headers with API key if provided
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        
+        start_time = time.time()
+        while (time.time() - start_time) < max_wait_time:
+            try:
+                response = requests.get(health_url, headers=headers, timeout=5)
+                if response.status_code == 200:
+                    logger.info("vLLM is ready!")
+                    return True
+                else:
+                    logger.debug(f"vLLM not ready yet. Status code: {response.status_code}")
+            except requests.exceptions.RequestException:
+                logger.debug("vLLM health check failed, retrying...")
+            
+            # Wait before checking again
+            time.sleep(check_interval)
+        
+        logger.error(f"Timed out waiting for vLLM to be ready after {max_wait_time} seconds")
+        raise TimeoutError(f"vLLM did not become ready in ({max_wait_time} seconds)")
+    
+    def test_llm(self, max_wait_time: int = 900) -> bool:
+        """
+        Send a test request to the LLM and print the response.
+        
+        Args:
+            max_wait_time (int): Maximum time to wait for the LLM to be ready in seconds
+            
+        Returns:
+            bool: True if the test was successful, False otherwise
+            
+        Raises:
+            TimeoutError: If the LLM does not become ready within the specified time
+        """
+        if not self.instance_id:
+            logger.error("No instance ID available. Deploy the stack first.")
+            return False
+        
+        # Poll the health endpoint until the LLM is ready
+        try:
+            self.wait_for_llm_ready(max_wait_time=max_wait_time)
+        except TimeoutError as e:
+            logger.error(f"LLM is not ready: {str(e)}")
+            raise
+        
+        try:
+            # Prepare the test request
+            url = f"http://localhost:{self.local_port}/v1/completions"
+            headers = {
+                "Content-Type": "application/json"
+            }
+            
+            # Add API key if provided
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            
+            # Prepare a friendly welcome message
+            data = {
+                "model": self.model_id,
+                "prompt": "Say hello and introduce yourself as a helpful AI assistant deployed on AWS EC2.",
+                "max_tokens": 100,
+                "temperature": 0.7
+            }
+            
+            logger.info("Sending test request to the LLM...")
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                generated_text = result.get("choices", [{}])[0].get("text", "").strip()
+                
+                logger.info("LLM Test Response:")
+                logger.info("-" * 50)
+                logger.info(generated_text)
+                logger.info("-" * 50)
+                logger.info("LLM is working correctly!")
+                return True
+            else:
+                logger.error(f"Error testing LLM: Status code {response.status_code}")
+                logger.error(f"Response: {response.text}")
+                return False
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error connecting to LLM: {str(e)}")
+            logger.info("The LLM might still be initializing. Try again in a few moments.")
+            return False
+        except Exception as e:
+            logger.error(f"Error testing LLM: {str(e)}")
+            return False
+    
+    def __enter__(self):
+        """
+        Enter the context manager.
+        
+        Returns:
+            EC2LLMDeployer: The deployer instance
+        """
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Exit the context manager and clean up resources.
+        
+        Args:
+            exc_type: Exception type
+            exc_val: Exception value
+            exc_tb: Exception traceback
+        """
+        logger.info("Exiting context manager, cleaning up resources...")
+        self.cleanup()
+    
     def cleanup(self) -> None:
         """
         Clean up all resources.
@@ -452,21 +722,41 @@ class EC2LLMDeployer:
                 # Reset instance variables regardless of whether stack existed
                 self.stack_name = None
                 self.instance_id = None
-                self.alb_endpoint = None
-                self.vllm_api_endpoint = None
-                self.vllm_log_endpoint = None
+            except ClientError as e:
+                if "ExpiredToken" in str(e) or "InvalidToken" in str(e) or "NotSignedUp" in str(e) or "CredentialsNotFound" in str(e) or "InvalidClientTokenId" in str(e):
+                    stack_name = self.stack_name
+                    region = self.region_name
+                    logger.error(f"Session token issue detected during cleanup: {str(e)}")
+                    logger.error(f"IMPORTANT: Please manually delete the CloudFormation stack '{stack_name}' in region '{region}'")
+                    logger.error(f"Visit: https://{region}.console.aws.amazon.com/cloudformation/home?region={region}#/stacks")
+                    logger.error("Find your stack in the list, select it, and click 'Delete' from the Actions menu")
+                else:
+                    logger.error(f"Error deleting stack: {str(e)}")
             except Exception as e:
                 logger.error(f"Error deleting stack: {str(e)}")
+                logger.error(f"If cleanup failed due to session issues, please manually delete the stack '{self.stack_name}'")
+                logger.error(f"Visit: https://{self.region_name}.console.aws.amazon.com/cloudformation/home?region={self.region_name}#/stacks")
+
 
 
 def signal_handler(sig, frame):
     """
-    Handle Ctrl+C to terminate the stack and clean up resources.
+    Handle signals to terminate the stack and clean up resources.
     """
-    logger.info("Received Ctrl+C. Cleaning up resources...")
+    signal_name = signal.Signals(sig).name
+    logger.info(f"Received signal {signal_name}. Cleaning up resources...")
     if deployer:
         deployer.cleanup()
     sys.exit(0)
+
+
+def cleanup_on_exit():
+    """
+    Ensure cleanup happens when the script exits for any reason.
+    """
+    logger.info("Script is exiting. Ensuring all resources are cleaned up...")
+    if deployer:
+        deployer.cleanup()
 
 
 if __name__ == "__main__":
@@ -482,52 +772,101 @@ if __name__ == "__main__":
         exit(1)
 
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Deploy an LLM on EC2 using CloudFormation with Application Load Balancer")
-    parser.add_argument("--model-id", type=str, default="tiiuae/falcon-3-10b-instruct",
+    parser = argparse.ArgumentParser(description="Deploy an LLM on EC2 using CloudFormation")
+    parser.add_argument("--model-id", type=str, default="tiiuae/Falcon3-10B-Instruct",
                         help="Hugging Face model ID to deploy")
     parser.add_argument("--region", type=str, default=None,
                         help="AWS region name")
-    parser.add_argument("--instance-type", type=str, default="g5.xlarge",
+    parser.add_argument("--instance-type", type=str, default="g6e.4xlarge",
                         help="EC2 instance type")
     parser.add_argument("--stack-name", type=str, default=None,
                         help="CloudFormation stack name")
-    parser.add_argument("--api-key", type=str, default=None,
-                        help="API key for vLLM")
-    parser.add_argument("--vllm-port", type=int, default=8000,
-                        help="Port for vLLM API")
+    parser.add_argument("--local-port", type=int, default=8987,
+                        help="Local port for port forwarding (default: 8987)")
     parser.add_argument("--ami-id", type=str, default="ami-04f4302ff68e424cf",
                         help="AMI ID to use for the EC2 instance (Deep Learning OSS Nvidia Driver AMI)")
     parser.add_argument("--stage-name", type=str, default="prod",
                         help="Stage name for deployment (used for resource naming)")
+    parser.add_argument("--port-forward", action="store_true", default=True,
+                        help="Set up port forwarding to the EC2 instance")
+    parser.add_argument("--test", action="store_true", default=True,
+                        help="Send a test request to the LLM after deployment")
+    parser.add_argument("--wait-time", type=int, default=1800,
+                        help="Time to wait in seconds before sending the test request")
     
     args = parser.parse_args()
     
-    # Register signal handler for Ctrl+C
-    signal.signal(signal.SIGINT, signal_handler)
+    # Register signal handlers for various termination signals
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # Termination request
+    signal.signal(signal.SIGHUP, signal_handler)   # Terminal closed
     
-    # Create deployer
-    deployer = EC2LLMDeployer(
+    # Register atexit handler to ensure cleanup on exit
+    atexit.register(cleanup_on_exit)
+    
+    # Create deployer using context manager pattern
+    with EC2LLMDeployer(
         model_id=args.model_id,
         region_name=args.region,
         instance_type=args.instance_type,
         stack_name=args.stack_name,
-        api_key=args.api_key,
-        vllm_port=args.vllm_port,
-        ami_id=args.ami_id,
-        stage_name=args.stage_name
-    )
-    
-    try:
-        # Deploy the stack
-        deployment = deployer.deploy()
-        
-        # Wait for the service to be available
-        if deployer.wait_for_service():
-            # Tail the logs
-            deployer.tail_logs()
-    except KeyboardInterrupt:
-        logger.info("Deployment interrupted.")
-        deployer.cleanup()
-    except Exception as e:
-        logger.error(f"Deployment failed: {str(e)}")
-        deployer.cleanup()
+        local_port=args.local_port,
+        ami_id=args.ami_id
+    ) as deployer:
+        try:
+            # Deploy the stack
+            deployment = deployer.deploy()
+            
+            # Wait for the instance to be ready for SSM connections
+            if not deployer.wait_for_instance_ssm_ready():
+                logger.error("Instance not ready for SSM connections. Exiting.")
+                raise
+                
+            # Connect to the instance
+            if not deployer.connect_to_instance():
+                logger.error("Failed to connect to instance. Exiting.")
+                raise
+                
+            # Install and run vLLM service
+            if not deployer.run_vllm_service():
+                logger.error("Failed to run vLLM service. Exiting.")
+                raise
+                
+            # Start log tailing in a separate thread
+            log_thread = deployer.tail_service_logs(in_thread=True)
+
+            # Set up port forwarding if requested
+            port_forwarding = None
+            if args.port_forward:
+                port_forwarding = deployer.setup_port_forwarding()
+                
+                # Send a test request to the LLM if requested
+                if args.test:
+                    deployer.test_llm(max_wait_time=args.wait_time)
+                                    
+            # Keep the main thread running until interrupted
+            try:
+                logger.info("Press Ctrl+C to stop...")
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("Interrupted by user.")
+            finally:
+                # Clean up port forwarding
+                if port_forwarding:
+                    logger.info("Stopping port forwarding...")
+                    # Terminate the process
+                    if 'process' in port_forwarding:
+                        port_forwarding['process'].terminate()
+                    # Close the log file if it exists
+                    if 'log_file' in port_forwarding and port_forwarding['log_file']:
+                        try:
+                            port_forwarding['log_file'].close()
+                            logger.info(f"Port forwarding logs are available at: {port_forwarding.get('log_file_path', 'unknown')}")
+                        except Exception as e:
+                            logger.warning(f"Error closing log file: {str(e)}")
+        except KeyboardInterrupt:
+            logger.info("Deployment interrupted.")
+        except Exception as e:
+            logger.error(f"Deployment failed: {str(e)}")
+            # Context manager will handle cleanup
