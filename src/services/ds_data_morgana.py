@@ -298,7 +298,7 @@ class DataMorgana:
         df = pd.read_json(file_url, lines=True)
         
         # Save raw generated qa_pairs to local file
-        df.to_json(save_path, orient='records', lines=True)
+        df.to_json(save_path, orient='records', lines=True, force_ascii=False, encoding='utf-8')
         self.log.info(f"Saved results to {save_path}")
         
         return save_path
@@ -350,7 +350,7 @@ class DataMorgana:
                 else:
                     self.log.error(f"Generation failed: {result}")
 
-            self.log.debug(
+            self.log.info(
                 f"Status: {status}, waiting {sleep_sec} seconds before retrying...")
             time.sleep(sleep_sec)
             

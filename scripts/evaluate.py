@@ -372,7 +372,7 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
             
             # Create DataFrame and save aggregated results to TSV
             agg_df = pd.DataFrame([agg_row])
-            agg_df.to_csv(aggregated_file, sep='\t', index=False)
+            agg_df.to_csv(aggregated_file, sep='\t', index=False, encoding='utf-8')
             
             # Save rows as TSV if available
             if result.rows:
@@ -392,7 +392,7 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
                 
                 # Create DataFrame and save rows to TSV
                 rows_df = pd.DataFrame(rows_data)
-                rows_df.to_csv(rows_file, sep='\t', index=False)
+                rows_df.to_csv(rows_file, sep='\t', index=False, encoding='utf-8')
         
         else:
             raise ValueError(f"Unsupported output format: {output_format}. Supported formats are 'jsonl' and 'tsv'.")
