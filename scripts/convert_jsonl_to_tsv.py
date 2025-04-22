@@ -17,7 +17,7 @@ import sys
 import glob
 import pandas as pd
 
-# Add the project root directory to the Python path to allow importing from scripts
+# Add scripts folder to the Python path to allow importing from scripts
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 # Import project modules
