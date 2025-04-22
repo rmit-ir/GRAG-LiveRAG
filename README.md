@@ -88,7 +88,7 @@ The LiveRAG project follows a structured workflow for developing, running, and e
 
    ```bash
    uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem \
-     --input data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv \
+     --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv \
      --num-threads 5
    ```
 
@@ -101,8 +101,8 @@ The LiveRAG project follows a structured workflow for developing, running, and e
    ```bash
    uv run scripts/evaluate.py \
      --evaluator evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator \
-     --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv \
-     --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv
+     --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv \
+     --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
    ```
 
    This generates evaluation results in [data/evaluation_results/](data/evaluation_results/) (git ignored).

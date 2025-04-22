@@ -26,25 +26,25 @@ For a complete overview of the end-to-end workflow, see [The LiveRAG Workflow](.
 
 ```bash
 uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem \
-  --input data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv \
+  --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv \
   --num-threads 5
 ```
 
-This generates results in `data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv`
+This generates results in `data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv`
 
 ### Step 2: Evaluate the results
 
 ```bash
 uv run scripts/evaluate.py \
   --evaluator evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator \
-  --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv \
-  --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv
+  --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv \
+  --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
 ```
 
 This generates:
 
-- `data/evaluation_results/dmds_4p3PUk5HORIw_BasicRAGSystem.EditDistanceEvaluator.evaluation.aggregated.tsv`
-- `data/evaluation_results/dmds_4p3PUk5HORIw_BasicRAGSystem.EditDistanceEvaluator.evaluation.rows.tsv`
+- `data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.EditDistanceEvaluator.evaluation.aggregated.tsv`
+- `data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.EditDistanceEvaluator.evaluation.rows.tsv`
 
 For evaluator-specific parameters:
 

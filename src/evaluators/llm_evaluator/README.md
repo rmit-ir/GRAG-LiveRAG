@@ -25,14 +25,14 @@ The LLM Evaluator uses a large language model to assess the quality of responses
 # Check the help message
 uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --help
 
-# Evaluate dmds_4p3PUk5HORIw_BasicRAGSystem.tsv against the gold reference
-uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv
+# Evaluate dmds_JK09SKjyanxs1_BasicRAGSystem.tsv against the gold reference
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
 
 # Same, but with 5 threads parallel evaluation
-uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv --no-silent_errors --num_threads 5
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv --no-silent_errors --num_threads 5
 
 # Same, but ignoring gold reference
-uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv --no-use_gold_references --no-silent_errors --num_threads 5
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv --no-use_gold_references --no-silent_errors --num_threads 5
 ```
 
 ### Configuration Options
@@ -72,7 +72,7 @@ Notice with gold references provided, the evaluator is able to spot the tiny inc
 It prints out the costs too:
 
 ```bash
-$ uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_4p3PUk5HORIw_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_4p3PUk5HORIw.n5.tsv --no-silent_errors --num_threads 5
+$ uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv --no-silent_errors --num_threads 5
 
 Evaluation complete!
 Total time: 11381.10 ms (11.38 s)
@@ -82,8 +82,8 @@ Average query eval time: 2198.25 ms
 Total cost: $0.094815 USD
 Average cost per query: $0.018963 USD
 Output saved to:
-  - Aggregated results: /Users/kun/Projects/rmit/research/live-rag/LiveRAG/data/evaluation_results/dmds_4p3PUk5HORIw_BasicRAGSystem.LLMEvaluator.evaluation.aggregated.tsv
-  - Row-level results: /Users/kun/Projects/rmit/research/live-rag/LiveRAG/data/evaluation_results/dmds_4p3PUk5HORIw_BasicRAGSystem.LLMEvaluator.evaluation.rows.tsv
+  - Aggregated results: /Users/kun/Projects/rmit/research/live-rag/LiveRAG/data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.LLMEvaluator.evaluation.aggregated.tsv
+  - Row-level results: /Users/kun/Projects/rmit/research/live-rag/LiveRAG/data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.LLMEvaluator.evaluation.rows.tsv
 ```
 
 ## Environment Variables
