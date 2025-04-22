@@ -587,6 +587,16 @@ class EC2LLMDeployer:
                 response = requests.get(health_url, headers=headers, timeout=5)
                 if response.status_code == 200:
                     logger.info("vLLM is ready!")
+                    
+                    # Print common vLLM API endpoints
+                    base_url = f"http://localhost:{self.local_port}"
+                    logger.info("Common vLLM API endpoints:")
+                    logger.info(f"  Health check:     {base_url}/health")
+                    logger.info(f"  List models:      {base_url}/v1/models")
+                    logger.info(f"  Text completion:  {base_url}/v1/completions")
+                    logger.info(f"  Chat completion:  {base_url}/v1/chat/completions")
+                    logger.info(f"  Embeddings:       {base_url}/v1/embeddings")
+                    
                     return True
                 else:
                     logger.debug(f"vLLM not ready yet. Status code: {response.status_code}")

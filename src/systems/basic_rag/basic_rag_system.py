@@ -25,7 +25,7 @@ class BasicRAGSystem(RAGSystemInterface):
         Initialize the BasicRAGSystem.
         
         Args:
-            llm_client (str): LLM client to use: ai71_client, general_openai_client
+            llm_client: LLM client to use: ai71_client, general_openai_client
         """
         self.query_service = QueryService()
         
@@ -33,7 +33,7 @@ class BasicRAGSystem(RAGSystemInterface):
         
         if llm_client == "general_openai_client":
             self.llm_client = GeneralOpenAIClient(
-                model_id=model_id,
+                model_id='tiiuae/Falcon3-10B-Instruct',
                 system_message=SYSTEM_PROMPT
             )
             client_type = "general_openai_client"

@@ -48,7 +48,32 @@ class GeneralOpenAIClient:
         if api_base is None:
             api_base = "http://localhost:8987/v1/"
         
-        # Check if the model is available by querying the health endpoint
+        # Check model health
+        self._check_model_health(api_base, api_key)
+
+        # Initialize ChatOpenAI with the API URL
+        self.chat_model = ChatOpenAI(
+            model_name=model_id,
+            openai_api_key=api_key,
+            openai_api_base=api_base,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        self.model_id = model_id
+        self.system_message = system_message
+        logger.debug(f"Initialized OpenAI-compatible client with model: {model_id}")
+
+    def _check_model_health(self, api_base: str, api_key: str) -> None:
+        """
+        Check if the model is available by querying the health endpoint.
+        
+        Args:
+            api_base (str): API base URL
+            api_key (str): API key for authentication
+            
+        Raises:
+            ValueError: If the model health check fails
+        """
         health_url = api_base.replace("/v1/", "/health")
         headers = {}
         if api_key:
@@ -64,18 +89,6 @@ class GeneralOpenAIClient:
             logger.error(f"Failed to connect to model: {str(e)}")
             raise ValueError("Failed to connect to the model. "
                             "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py'") from e
-
-        # Initialize ChatOpenAI with the API URL
-        self.chat_model = ChatOpenAI(
-            model_name=model_id,
-            openai_api_key=api_key,
-            openai_api_base=api_base,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        self.model_id = model_id
-        self.system_message = system_message
-        logger.debug(f"Initialized OpenAI-compatible client with model: {model_id}")
 
     def query(self, prompt: str) -> Tuple[Any, str]:
         """

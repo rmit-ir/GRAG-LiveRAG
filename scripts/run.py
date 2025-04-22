@@ -407,29 +407,36 @@ def main():
     """Main entry point for the script."""
     start_time = time.time()
     # First, create a parser with just the system argument
-    parser = create_parser_with_system_params()
+    basic_parser = create_parser_with_system_params()
     
-    # Check if --help is in the arguments
-    if '--help' in sys.argv:
-        if '--system' in sys.argv:
-            # Get the system class path
-            system_idx = sys.argv.index('--system')
-            if system_idx + 1 < len(sys.argv):
-                system_class_path = sys.argv[system_idx + 1]
-                try:
-                    # Load the system class
-                    system_class = load_system_class(system_class_path)
-                    
-                    # Create a new parser with system-specific parameters
-                    parser = create_parser_with_system_params(system_class)
-                except Exception as e:
-                    # If there's an error loading the system class, continue with the basic parser
-                    print(f"Warning: Could not load system class '{system_class_path}': {e}")
-        else:
-            # Remind user to pass --system to see system-specific parameters
-            print("\nNOTE: To view system-specific parameters, please pass the --system argument.")
-            print("Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help\n")
+    # We need to parse just enough to get the system class path
+    # Use parse_known_args to avoid errors from missing required arguments
+    known_args, _ = basic_parser.parse_known_args()
     
+    # Initialize the parser that will be used for final argument parsing
+    parser = basic_parser
+    
+    # If system is provided, load system-specific parameters
+    if hasattr(known_args, 'system') and known_args.system:
+        try:
+            # Load the system class
+            system_class = load_system_class(known_args.system)
+            
+            # Create a new parser with system-specific parameters
+            parser = create_parser_with_system_params(system_class)
+            
+            # Check if --help is in the arguments but no --system
+        except Exception as e:
+            # If there's an error loading the system class, continue with the basic parser
+            print(f"Warning: Could not load system class '{known_args.system}': {e}")
+    
+    # Check if --help is in the arguments but no system was specified
+    if '--help' in sys.argv and not (hasattr(known_args, 'system') and known_args.system):
+        # Remind user to pass --system to see system-specific parameters
+        print("\nNOTE: To view system-specific parameters, please pass the --system argument.")
+        print("Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help\n")
+    
+    # Parse arguments with the appropriate parser
     args = parser.parse_args()
     
     # Set up output directory and filenames
