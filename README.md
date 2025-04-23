@@ -163,6 +163,33 @@ This repository includes several scripts and notebooks for working with the Live
   response, content = client.query("What is retrieval-augmented generation?")
   ```
 
+- **EC2 LLMs**: Deploy and use LLMs on AWS EC2 instances
+
+  ```bash
+  # By default, it will deploy tiiuae/Falcon3-10B-Instruct on a g6e.4xlarge instance
+  # More options are available at `--help`
+  # Ctrl-C to stop and destroy all resources created
+  uv run scripts/aws/deploy_ec2_llm.py
+
+  # Or, put this at the end of your command or run it separately to destroy all resources created
+  uv run scripts/aws/deploy_ec2_llm.py --stop
+  ```
+
+  The script will:
+  1. Create a CloudFormation stack with an EC2 instance
+  2. Install vLLM on the instance
+  3. Download and run the specified model
+  4. Set up port forwarding to access the model locally
+  5. Provide OpenAI-compatible API endpoints
+
+  ```python
+  # Import the client
+  from services.llms.general_openai_client import GeneralOpenAIClient
+  
+  client = GeneralOpenAIClient()
+  response, content = client.query("What is retrieval-augmented generation?")
+  ```
+
 #### Data Generation
 
 - **DataMorgana**: Client for generating synthetic Q&A pairs

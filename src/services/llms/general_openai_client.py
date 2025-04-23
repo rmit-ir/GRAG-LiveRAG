@@ -193,7 +193,7 @@ if __name__ == "__main__":
 
     # Create a GeneralOpenAIClient instance
     client = GeneralOpenAIClient(
-        model_id="tiiuae/falcon3-10b-instruct",
+        model_id="tiiuae/Falcon3-10B-Instruct",
         system_message="You are an AI assistant that provides clear, concise explanations."
     )
 
