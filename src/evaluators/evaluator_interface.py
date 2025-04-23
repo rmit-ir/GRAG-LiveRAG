@@ -38,3 +38,19 @@ class EvaluatorInterface(ABC):
             An EvaluationResult containing evaluation metrics and optionally row-level results
         """
         pass
+
+def test_evaluator(evaluator: EvaluatorInterface, rag_results: List[RAGResult], references: List[QAPair]):
+    """
+    Test the evaluator with sample RAG results and reference QA pairs.
+    
+    Args:
+        evaluator: An instance of an evaluator implementing EvaluatorInterface
+        rag_results: List of RAG results to evaluate
+        references: List of reference QA pairs to compare against
+    """
+    result = evaluator.evaluate(rag_results, references)
+    
+    print(f"Evaluation Result: {result.metrics}")
+    if hasattr(result, 'row_results'):
+        for row in result.row_results:
+            print(f"Row Result: {row.to_dict()}")

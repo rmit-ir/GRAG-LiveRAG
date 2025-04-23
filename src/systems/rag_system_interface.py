@@ -32,3 +32,17 @@ class RAGSystemInterface(ABC):
             A RAGResult containing the answer and metadata
         """
         pass
+
+def test_rag_system(rag_system: RAGSystemInterface, question: str):
+    """
+    Test the RAG system with a sample question.
+    
+    Args:
+        rag_system: An instance of a RAG system implementing RAGSystemInterface
+    """
+    result = rag_system.process_question(question)
+    
+    print(f"Question: {question}")
+    print(f"Answer: {result.answer}")
+    print(f"Metadata: {result.metadata}")
+    return result

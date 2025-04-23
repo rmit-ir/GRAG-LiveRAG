@@ -14,6 +14,8 @@ def apply_fusion_to_hits(hits_list: List[List[SearchHit]], max_documents: int, q
     """
     Applies reciprocal rank fusion to multiple lists of SearchHit objects using trectools.
     
+    TODO: support weights...
+    
     Args:
         hits_list: List of lists of SearchHit objects to fuse
         max_documents: Maximum number of documents to return

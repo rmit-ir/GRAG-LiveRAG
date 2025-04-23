@@ -13,6 +13,7 @@ class RAGResult:
     Contains the question, answer, context, document IDs, and performance metrics.
     Also includes generated queries (rewritten queries from given question) and
     rewritten documents (context, but each document is rewritten).
+    The metadata field can store additional system-specific information.
     """
     question: str
     answer: str
@@ -26,6 +27,7 @@ class RAGResult:
     question_words_count: Optional[int] = None
     answer_words_count: Optional[int] = None
     system_name: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
         """
@@ -62,7 +64,7 @@ class RAGResult:
         Returns:
             Dictionary representation of the result
         """
-        return {
+        result_dict = {
             "question": self.question,
             "answer": self.answer,
             "context": self.context,
@@ -76,6 +78,11 @@ class RAGResult:
             "qid": self.qid,
             "system_name": self.system_name
         }
+        
+        if self.metadata:
+            result_dict["metadata"] = self.metadata
+            
+        return result_dict
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'RAGResult':
@@ -104,5 +111,6 @@ class RAGResult:
             generated_queries=data.get("generated_queries", None),
             rewritten_docs=data.get("rewritten_docs", None),
             qid=data.get("qid", None),
-            system_name=data.get("system_name", None)
+            system_name=data.get("system_name", None),
+            metadata=data.get("metadata", {})
         )
