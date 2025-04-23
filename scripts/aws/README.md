@@ -1,5 +1,23 @@
 # AWS
 
+## Deploy EC2 LLM
+
+The `deploy_ec2_llm.py` script allows you to deploy a HuggingFace compatible model on an EC2 instance using CloudFormation. It:
+
+- Deploys an EC2 instance with the specified model using vLLM
+- Sets up port forwarding to access the model locally at http://localhost:8987/v1/
+- Provides OpenAI API compatible endpoints for easy integration
+
+### Basic Usage
+
+```bash
+# Deploy a model (Ctrl+C to stop and destroy all resources)
+uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/Falcon3-10B-Instruct
+
+# Stop and destroy all resources
+uv run scripts/aws/deploy_ec2_llm.py --stop
+```
+
 ## Manage The EC2 Instance
 
 ### Session Manager
