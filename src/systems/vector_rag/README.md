@@ -1,15 +1,15 @@
-# Basic RAG System
+# Vector RAG System
 
-A simple implementation of Retrieval-Augmented Generation (RAG) that uses keyword search to retrieve relevant documents and an LLM to generate answers. The system retrieves up to 10 documents for input question and uses the AI71 client with Falcon 3 10B Instruct model.
+A RAG system implementation that uses vector-based (embedding) search to retrieve relevant documents for a given question. The system leverages semantic similarity rather than keyword matching to find the most relevant context for answering questions.
 
 ## How to Run
 
 ```bash
-uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/datamorgana_dataset_20250414_181830.n2.tsv
+uv run scripts/run.py --system systems.vector_rag.vector_rag.VectorRAG --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
 ```
 
 For help with command-line options:
 
 ```bash
-uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
+uv run scripts/run.py --system systems.vector_rag.vector_rag.VectorRAG --help
 ```

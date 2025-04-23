@@ -1,15 +1,15 @@
-# Basic RAG System
+# Vector QPP System
 
-A simple implementation of Retrieval-Augmented Generation (RAG) that uses keyword search to retrieve relevant documents and an LLM to generate answers. The system retrieves up to 10 documents for input question and uses the AI71 client with Falcon 3 10B Instruct model.
+A RAG system implementation that uses vector search with Query Performance Prediction (QPP) to assess the quality of search results. The system retrieves documents using embedding-based search and calculates QPP metrics (entropy, standard deviation, mean) to evaluate the confidence in the retrieved results.
 
 ## How to Run
 
 ```bash
-uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/datamorgana_dataset_20250414_181830.n2.tsv
+uv run scripts/run.py --system systems.vector_qpp.vector_qpp.VectorQPP --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
 ```
 
 For help with command-line options:
 
 ```bash
-uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
+uv run scripts/run.py --system systems.vector_qpp.vector_qpp.VectorQPP --help
 ```
