@@ -64,10 +64,16 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 2. **Track performance metrics** in the `RAGResult` (e.g., `total_time_ms`)
 3. **Be creative!**
 
-## Available Systems
+## Interesting Systems
 
 - **[BasicRAGSystem](./basic_rag/basic_rag_system.py)**: Simple implementation using keyword search and LLM generation
   - Path: `systems.basic_rag.basic_rag_system.BasicRAGSystem`
 
 - **[FusionRAGSystem](./rewrite_queries_fusion_rag/rag.py)**: Slightly complicated (not necessarily better) implementation with query rewriting and fusion search
   - Path: `systems.rewrite_queries_fusion_rag.rag.FusionRAGSystem`
+
+- **[QPPFusionSystem](./rewrite_queries_fusion_qpp/qpp_fusion_rag.py)**: Advanced implementation that uses Query Performance Prediction (QPP) to select the most effective queries from multiple generated queries and applies fusion search
+  - Path: `systems.rewrite_queries_fusion_qpp.qpp_fusion_rag.QPPFusionSystem`
+
+- **[VectorQPP](./vector_qpp/vector_qpp.py)**: Vector search implementation with Query Performance Prediction to assess the quality of search results
+  - Path: `systems.vector_qpp.vector_qpp.VectorQPP`
