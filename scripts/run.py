@@ -407,37 +407,24 @@ def create_parser_with_system_params(system_class=None):
 def main():
     """Main entry point for the script."""
     start_time = time.time()
-    # First, create a parser with just the system argument
-    basic_parser = create_parser_with_system_params()
     
-    # We need to parse just enough to get the system class path
-    # Use parse_known_args to avoid errors from missing required arguments
-    known_args, _ = basic_parser.parse_known_args()
+    # First, create a basic parser to get the evaluator argument
+    basic_parser = argparse.ArgumentParser(add_help=False)
+    basic_parser.add_argument('--system', type=str, default='systems.basic_rag.basic_rag_system.BasicRAGSystem')
     
-    # Initialize the parser that will be used for final argument parsing
-    parser = basic_parser
-    
-    # If system is provided, load system-specific parameters
-    if hasattr(known_args, 'system') and known_args.system:
-        try:
-            # Load the system class
-            system_class = load_system_class(known_args.system)
-            
-            # Create a new parser with system-specific parameters
-            parser = create_parser_with_system_params(system_class)
-            
-            # Check if --help is in the arguments but no --system
-        except Exception as e:
-            # If there's an error loading the system class, continue with the basic parser
-            print(f"Warning: Could not load system class '{known_args.system}': {e}")
-    
-    # Check if --help is in the arguments but no system was specified
-    if '--help' in sys.argv and not (hasattr(known_args, 'system') and known_args.system):
-        # Remind user to pass --system to see system-specific parameters
-        print("\nNOTE: To view system-specific parameters, please pass the --system argument.")
-        print("Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help\n")
-    
-    # Parse arguments with the appropriate parser
+    # Parse just the evaluator argument to get the evaluator class
+    basic_args, _ = basic_parser.parse_known_args()
+
+    try:
+        # Load the system class
+        system_class = load_system_class(basic_args.system)
+        parser = create_parser_with_system_params(system_class)
+    except Exception as e:
+        # If there's an error loading the system class, continue with the basic parser
+        print(f"Warning: Could not load system class '{basic_args.system}': {e}")
+        parser = create_parser_with_system_params()
+
+    # Parse all arguments
     args = parser.parse_args()
     
     # Set up output directory and filenames

@@ -31,7 +31,7 @@ class QPPFusionSystem(RAGSystemInterface):
     queries_tag_pattern = re.compile(r'<queries>(.*?)</queries>', re.DOTALL)
 
     def __init__(self,
-                 max_documents: int = 5,
+                 max_documents: int = 10,
                  max_query_documents: int = 200,
                  max_queries: int = 5,
                  qpp_k: int = 10,
@@ -255,14 +255,7 @@ class QPPFusionSystem(RAGSystemInterface):
 
     def process_question(self, question: str, qid: str = None) -> RAGResult:
         """
-        Process a question using the fusion RAG approach:
-
-        1. Generate multiple search queries from the original question using different generators
-           - Sparse queries for keyword-based search
-           - Dense queries for embedding-based search
-        2. Use appropriate search method for each query type
-        3. Combine and deduplicate the results
-        4. Generate an answer using the retrieved documents as context
+        Process a question using the QPP and fusion RAG approach:
 
         Args:
             question: The user's question
