@@ -85,6 +85,6 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 | 2025-04-22 | rewrite_queries_fusion_rag | 1.57 | 0.57 |
 | 2025-04-22 | rewrite_queries_fusion_rag | 1.50 | 0.66 |
 | 2025-04-24 | basic_rag | 1.51 | 0.43 |
-| 2025-04-24 | qpp_fusion max_documents=10, max_query_documents=10 | 1.57 | 0.64 |
-| 2025-04-24 | qpp_fusion max_documents=5, max_query_documents=200 | 1.34 | 0.63 |
-| 2025-04-24 | qpp_fusion max_documents=10, max_query_documents=200 | 1.36 | 0.56 |
+| 2025-04-24 | qpp_fusion max_doc=10, max_q_doc=10 | 1.57 | 0.64 |
+| 2025-04-24 | qpp_fusion max_doc=5, max_q_doc=200 | 1.34 | 0.63 |
+| 2025-04-24 | qpp_fusion max_doc=10, max_q_doc=200 | 1.36 | 0.56 |
