@@ -92,3 +92,4 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 | 2025-04-25 | qpp_fusion qpp eff_queries=2 | 1.34 | 0.5 |
 | 2025-04-25 | qpp_fusion qpp eff_queries=3 | 1.33 | 0.64 |
 | 2025-04-25 | qpp_fusion qpp eff_queries=4 | 1.42 | 0.58 |
+| 2025-04-25 | vector_rerank setwise | 0.6 | 0 |
