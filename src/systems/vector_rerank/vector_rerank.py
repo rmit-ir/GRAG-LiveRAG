@@ -9,7 +9,7 @@ from evaluators.llm_evaluator.llm_evaluator import LLMEvaluator
 from services.ds_data_morgana import QAPair
 from utils.logging_utils import get_logger
 from services.indicies import QueryService
-from rerankers.llm_reranker.llm_reranker import LLMReranker
+from rerankers.setwise_reranker import SetwiseReranker
 from services.llms.ai71_client import AI71Client
 from services.llms.general_openai_client import GeneralOpenAIClient
 from systems.rag_result import RAGResult
@@ -65,9 +65,10 @@ class VectorRerank(RAGSystemInterface):
             )
 
         # Initialize reranker
-        self.reranker = LLMReranker(
+        self.reranker = SetwiseReranker(
             llm_client=self.rag_llm_client,
-            strategy=self.reranker_strategy,
+            algorithm="heapsort" if self.reranker_strategy == "setwise" else "bubblesort",
+            compare_size=3,  # Default compare size from the paper
             role_playing=self.role_playing,
             tone_words=self.tone_words,
             evidence_first=self.evidence_first
@@ -86,7 +87,7 @@ class VectorRerank(RAGSystemInterface):
         self.log.info("Processing question", question=question, qid=qid)
 
         # Search for documents using vector embedding search
-        hits = self.query_service.query_embedding(question, k=100)
+        hits = self.query_service.query_embedding(question, k=50)
         self.log.debug("Retrieved documents", hits_count=len(hits))
 
         # Apply reranking
@@ -118,7 +119,8 @@ class VectorRerank(RAGSystemInterface):
         # Prepare metadata
         metadata = {
             "reranker": {
-                "strategy": self.reranker.strategy,
+                "algorithm": self.reranker.algorithm,
+                "compare_size": self.reranker.compare_size,
                 "role_playing": self.reranker.role_playing,
                 "evidence_first": self.reranker.evidence_first,
                 "tone_words": self.reranker.tone_words,
