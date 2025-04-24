@@ -38,3 +38,10 @@ graph TD
     style F fill:#d5e5f9
     style D fill:#f9e6d5
 ```
+
+Thoughts 2025-04-24
+
+- QPP selects the most effective 5 queries out of the 7 generated queries.
+- Fusion merges 7 queries ranked lists into 1 ranked list.
+  - Maybe I should just use QPP to select the most effective 1 or 2 queries.
+    - Setting max_effective_queries to 1 or 2 and test again.
