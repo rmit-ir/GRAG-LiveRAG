@@ -539,7 +539,7 @@ def main():
     # Define output filename based on results file name and evaluator
     results_base_name = os.path.basename(args.results)
     results_name_without_ext = os.path.splitext(results_base_name)[0]
-    base_name = os.path.join(output_dir, f"{results_name_without_ext}.{output_prefix}.evaluation")
+    base_name = os.path.join(output_dir, f"{results_name_without_ext}.{output_prefix}.eval")
     
     try:
         # Load the evaluator class

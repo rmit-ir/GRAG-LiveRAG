@@ -18,7 +18,7 @@ from services.llms.general_openai_client import GeneralOpenAIClient
 from services.qpp import QPPService
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface, test_rag_system
-from systems.rewrite_queries_fusion_rag.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE, SPARSE_QUERY_GENERATION_PROMPT, DENSE_QUERY_GENERATION_PROMPT
+from systems.qpp_fusion.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE, SPARSE_QUERY_GENERATION_PROMPT, DENSE_QUERY_GENERATION_PROMPT
 
 
 class QPPFusionSystem(RAGSystemInterface):

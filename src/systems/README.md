@@ -77,3 +77,12 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 
 - **[VectorQPP](./vector_qpp/vector_qpp.py)**: Vector search implementation with Query Performance Prediction to assess the quality of search results
   - Path: `systems.vector_qpp.vector_qpp.VectorQPP`
+
+## Development Logs
+
+| Date | Name | Avg Relevance Score | Avg Faithfulness Score |
+|------|------|--------------------:|----------------------:|
+| 2025-04-22 | rewrite_queries_fusion_rag | 1.57 | 0.57 |
+| 2025-04-22 | rewrite_queries_fusion_rag | 1.50 | 0.66 |
+| 2025-04-24 | basic_rag | 1.51 | 0.43 |
+| 2025-04-24 | qpp_fusion | 1.57 | 0.64 |
