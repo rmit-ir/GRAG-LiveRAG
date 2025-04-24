@@ -38,9 +38,7 @@ Be thorough, specific, and analytical in your assessment.
 """
 
 # Prompt template for the RAG system summary analysis
-SUMMARY_PROMPT_TEMPLATE = """I need you to analyze the following sample of low-performing responses from our RAG system.
-
-These samples represent the lowest-scoring responses based on relevance and faithfulness metrics.
+SUMMARY_PROMPT_TEMPLATE = """Lowest-scoring response samples:
 
 {samples}
 
