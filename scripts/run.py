@@ -111,7 +111,8 @@ def save_results_to_tsv(results: List[RAGResult], output_file: str) -> None:
             fieldnames = [
                 'qid', 'question', 'answer', 'context', 'doc_ids',
                 'question_words_count', 'answer_words_count', 'total_time_ms',
-                'timestamp', 'generated_queries', 'rewritten_docs', 'system_name'
+                'timestamp', 'generated_queries', 'rewritten_docs', 'system_name',
+                'metadata'
             ]
             
             writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
@@ -125,9 +126,9 @@ def save_results_to_tsv(results: List[RAGResult], output_file: str) -> None:
                 if result_dict['qid'] is None:
                     result_dict['qid'] = str(i + 1)
                 
-                # Convert lists to string representation
-                for field in ['context', 'doc_ids', 'generated_queries', 'rewritten_docs']:
-                    if result_dict[field] is not None:
+                # Convert lists and dictionaries to string representation
+                for field in ['context', 'doc_ids', 'generated_queries', 'rewritten_docs', 'metadata']:
+                    if result_dict.get(field) is not None:
                         result_dict[field] = json.dumps(result_dict[field])
                 
                 writer.writerow(result_dict)

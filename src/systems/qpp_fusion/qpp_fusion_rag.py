@@ -14,6 +14,7 @@ from utils.fusion_utils import apply_fusion_to_hits
 from utils.query_utils import generate_query_id
 from services.indicies import QueryService
 from services.llms.ai71_client import AI71Client
+from services.llms.general_openai_client import GeneralOpenAIClient
 from services.qpp import QPPService
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface, test_rag_system
@@ -29,7 +30,7 @@ class QPPFusionSystem(RAGSystemInterface):
     query_tag_pattern = re.compile(r'<query>(.*?)</query>', re.DOTALL)
     queries_tag_pattern = re.compile(r'<queries>(.*?)</queries>', re.DOTALL)
 
-    def __init__(self, max_documents: int = 10, max_queries: int = 3, qpp_k: int = 10, max_effective_queries: int = 5):
+    def __init__(self, max_documents: int = 10, max_queries: int = 3, qpp_k: int = 10, max_effective_queries: int = 5, llm_client: str = "ai71_client"):
         """
         Initialize the FusionQPPSystem.
 
@@ -38,39 +39,66 @@ class QPPFusionSystem(RAGSystemInterface):
             max_queries: Maximum number of search queries to generate (including the original)
             qpp_k: Number of top documents to use for QPP calculation
             max_effective_queries: Maximum number of most effective queries to use
+            llm_client: LLM client to use: ai71_client, general_openai_client
         """
         self.query_service = QueryService()
         self.qpp_service = QPPService(default_k=qpp_k)
-
-        # LLM client for answer generation
-        self.llm_client = AI71Client(
-            model_id="tiiuae/falcon3-10b-instruct",
-            system_message=SYSTEM_PROMPT
-        )
-
-        # LLM client for sparse query generation (keyword-based search)
-        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(
-            max_queries=max_queries)
-        self.sparse_query_generator = AI71Client(
-            model_id="tiiuae/falcon3-10b-instruct",
-            system_message=sparse_prompt,
-            temperature=0.5  # Set temperature for diversity in retry scenarios
-        )
-
-        # LLM client for dense query generation (semantic search)
-        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(
-            max_queries=max_queries)
-        self.dense_query_generator = AI71Client(
-            model_id="tiiuae/falcon3-10b-instruct",
-            system_message=dense_prompt,
-            temperature=0.5  # Set temperature for diversity in retry scenarios
-        )
+        
+        model_id = "tiiuae/falcon3-10b-instruct"
+        client_type = llm_client
+        
+        # Prepare prompts
+        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
+        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
+        
+        # Initialize the appropriate LLM client type
+        if llm_client == "general_openai_client":
+            # LLM client for answer generation
+            self.llm_client = GeneralOpenAIClient(
+                model_id=model_id,
+                system_message=SYSTEM_PROMPT
+            )
+            
+            # LLM client for sparse query generation (keyword-based search)
+            self.sparse_query_generator = GeneralOpenAIClient(
+                model_id=model_id,
+                system_message=sparse_prompt,
+                temperature=0.5  # Set temperature for diversity in retry scenarios
+            )
+            
+            # LLM client for dense query generation (semantic search)
+            self.dense_query_generator = GeneralOpenAIClient(
+                model_id=model_id,
+                system_message=dense_prompt,
+                temperature=0.5  # Set temperature for diversity in retry scenarios
+            )
+        else:
+            # LLM client for answer generation
+            self.llm_client = AI71Client(
+                model_id=model_id,
+                system_message=SYSTEM_PROMPT
+            )
+            
+            # LLM client for sparse query generation (keyword-based search)
+            self.sparse_query_generator = AI71Client(
+                model_id=model_id,
+                system_message=sparse_prompt,
+                temperature=0.5  # Set temperature for diversity in retry scenarios
+            )
+            
+            # LLM client for dense query generation (semantic search)
+            self.dense_query_generator = AI71Client(
+                model_id=model_id,
+                system_message=dense_prompt,
+                temperature=0.5  # Set temperature for diversity in retry scenarios
+            )
 
         self.max_documents = max_documents
         self.max_queries = max_queries
         self.max_effective_queries = max_effective_queries
         self.log.info("QPPFusionSystem initialized",
-                      llm_model="tiiuae/falcon3-10b-instruct",
+                      llm_model=model_id,
+                      llm_client=client_type,
                       max_documents=max_documents,
                       max_queries=max_queries,
                       qpp_k=qpp_k,
@@ -395,6 +423,7 @@ if __name__ == "__main__":
 
     # RAG
     result = test_rag_system(QPPFusionSystem(
+        llm_client="ai71_client"
     ), "effect of others apathy vs conformity pressure academic performance motivation")
 
     # Evaluate

@@ -5,7 +5,7 @@
 set -e  # Exit immediately if a command exits with a non-zero status
 
 # Default values
-MODEL_ID=${1:-"tiiuae/Falcon3-10B-Instruct"}
+MODEL_ID=${1:-"tiiuae/falcon3-10b-instruct"}
 PORT=${2:-8000}
 API_KEY=${3:-""}
 

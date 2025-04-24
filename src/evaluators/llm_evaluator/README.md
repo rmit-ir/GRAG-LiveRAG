@@ -90,83 +90,82 @@ uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LL
 Note by default it will take the first 40 lowest scores results and analyze them.
 
 ```markdown
-Based on the 33 samples provided, here's a comprehensive analysis:
+Based on the 28 samples provided, here is my analysis:
 
 1. PATTERN ANALYSIS
 
-Key Patterns in Low-Performing Responses:
+Major Patterns Identified:
 
-A. Faithfulness Issues (Most Common):
+A. Faithfulness Issues (Most Critical):
 
-- Hallucination of plausible but unsupported details (especially prevalent in expert-domain questions)
-- Reliance on general knowledge rather than retrieved documents
-- Tendency to provide comprehensive answers even when document support is lacking
+- High frequency of "knowledge hallucination" where responses include accurate information not supported by retrieved documents
+- Particularly common in technical/scientific domains (e.g., atomic mass units, plane engines, brain imaging)
+- System often provides correct answers but draws from external knowledge rather than retrieved passages
 
 B. Relevance Issues:
 
-- "I don't know" responses when relevant information is actually present (Samples 3, 9, 10)
-- Missing key information while providing tangentially related details
-- Over-generalization of specific questions
+- System frequently misses key details present in retrieved documents (under-extraction)
+- Tendency to provide overly broad or generic responses instead of specific answers
+- Pattern of being overly cautious ("cannot find information") even when relevant information exists
 
-C. Response Behaviors:
+C. Information Processing Problems:
 
-- Conservative responses (saying no information is available) when partial information exists
-- Mixing supported and unsupported claims within single responses
-- Tendency to provide technically accurate but ungrounded information
+- Misinterpretation of temporal information (e.g., proposed vs. completed research)
+- Incorrect numerical calculations or interpretations (e.g., sunshine percentage calculation)
+- Difficulty distinguishing between factual statements and proposals/plans in documents
 
 2. CATEGORY CORRELATION
 
 A. Question Categories Impact:
 
-- "distant-from-document" linguistic variation shows highest failure rate (22 samples)
-- "open-ended" questions have higher hallucination rates than factoid questions
-- "long-search-query" questions often receive partially relevant responses
-- "with-premise" questions show higher rates of unfaithful responses
+- "distant-from-document" linguistic variation shows significantly higher failure rates
+- "factoid" questions show better faithfulness scores but more relevance issues
+- "long-search-query" questions tend to receive more comprehensive but less focused answers
+- "verbose-and-natural" phrasing correlates with more hallucination
 
-B. User Category Patterns:
+B. User Expertise Impact:
 
-Expert Users:
-
-- Higher rate of hallucination in technical responses
-- More detailed but often ungrounded answers
-- Higher frequency of partial matches rather than complete misses
-
-Novice Users:
-
-- More generic, cautious responses
-- Higher rate of "no information available" responses
-- Better faithfulness scores but lower relevance
+- Expert-level questions show higher rates of knowledge hallucination
+- Novice questions receive more generic/cautious responses
+- Expert questions more likely to get partial/incomplete answers when technical details are involved
 
 3. ROOT CAUSES
 
-A. Retrieval Issues:
+Primary System Weaknesses:
 
-- Insufficient semantic matching between questions and documents
-- Poor handling of questions requiring synthesis across multiple documents
-- Weak performance on questions requiring specific technical details
+1. Context Utilization:
 
-B. Generation Issues:
+- Poor ability to identify and extract specific relevant information from retrieved documents
+- Tendency to fall back on base model knowledge instead of using retrieved information
+- Weak connection between question intent and document content matching
 
-- Over-reliance on model's general knowledge vs retrieved content
-- Lack of proper grounding mechanisms
-- Poor balance between completeness and faithfulness
+2. Information Synthesis:
 
-C. Systemic Issues:
+- Difficulty integrating multiple document sources coherently
+- Over-generalization when specific details are available
+- Poor handling of numerical data and calculations
 
-- Difficulty maintaining faithfulness while providing comprehensive answers
-- Weak handling of technical/domain-specific content
-- Inconsistent treatment of partial information vs no information
-- Poor integration of multiple document sources
+3. Confidence Assessment:
 
-Priority Areas for Improvement:
+- Inconsistent threshold for stating "no information found"
+- Poor calibration between confidence and actual document support
+- Tendency to either be overly cautious or overconfident
 
-1. Strengthen grounding mechanisms to prevent hallucination
-2. Improve retrieval for technical and domain-specific content
-3. Better handling of partial information in documents
-4. Enhanced cross-document synthesis capabilities
-5. Better calibration between expert/novice user expectations
+4. Technical Limitations:
 
-The analysis reveals a system that prioritizes providing comprehensive answers over maintaining strict faithfulness to sources, particularly struggling with technical content and questions requiring synthesis across multiple documents. The most critical issue appears to be the balance between providing useful information while maintaining faithfulness to retrieved documents.
+- Struggle with temporal reasoning
+- Difficulty with mathematical/numerical processing
+- Weak handling of implicit information
+
+These patterns suggest the system needs:
+
+1. Improved retrieval relevance scoring
+2. Better faithfulness enforcement mechanisms
+3. Enhanced numerical reasoning capabilities
+4. Stronger connection between question intent and document content matching
+5. Better calibration of confidence thresholds
+
+The analysis reveals this is primarily a context utilization problem rather than a retrieval problem, as many responses show the relevant information was retrieved but not properly used.
 ```
 
 ## Environment Variables

@@ -33,7 +33,7 @@ class VectorRAG(RAGSystemInterface):
 
         if llm_client == "general_openai_client":
             self.llm_client = GeneralOpenAIClient(
-                model_id='tiiuae/Falcon3-10B-Instruct',
+                model_id='tiiuae/falcon3-10b-instruct',
                 system_message=SYSTEM_PROMPT
             )
         else:

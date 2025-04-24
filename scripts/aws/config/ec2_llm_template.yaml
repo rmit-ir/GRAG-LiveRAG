@@ -5,7 +5,7 @@ Parameters:
   ModelId:
     Description: Hugging Face model ID to deploy
     Type: String
-    Default: tiiuae/Falcon3-10B-Instruct
+    Default: tiiuae/falcon3-10b-instruct
   
   InstanceType:
     Description: EC2 instance type

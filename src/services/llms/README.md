@@ -86,7 +86,7 @@ The LLM clients use the following environment variables:
 To deploy a local LLM using vLLM on EC2, use the `uv run scripts/aws/deploy_ec2_llm.py` script:
 
 ```bash
-uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/Falcon3-10B-Instruct
+uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/falcon3-10b-instruct
 ```
 
 This will:

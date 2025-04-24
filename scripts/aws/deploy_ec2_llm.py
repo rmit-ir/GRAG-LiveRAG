@@ -47,7 +47,7 @@ class EC2LLMDeployer:
 
     def __init__(
         self,
-        model_id: str = "tiiuae/Falcon3-10B-Instruct",
+        model_id: str = "tiiuae/falcon3-10b-instruct",
         region_name: str = None,
         instance_type: str = "g6e.4xlarge",
         stack_name: str = None,
@@ -824,7 +824,10 @@ class EC2LLMDeployer:
                     conn.close()
 
                     # Clean up in the main thread to avoid threading issues
-                    threading.Thread(target=self.cleanup, daemon=True).start()
+                    cleanup_thread = threading.Thread(target=self.cleanup, daemon=True)
+                    cleanup_thread.start()
+                    cleanup_thread.join()  # Wait for cleanup to finish
+                    sys.exit(0)  # Exit after cleanup completes
                 else:
                     # Send a response for unknown commands
                     conn.sendall(f"Unknown command: {data}\n".encode('utf-8'))
@@ -1177,7 +1180,7 @@ if __name__ == "__main__":
     command_desc = """Deploy an LLM on EC2 using CloudFormation.
 Before deploying EC2 LLM stack, make sure that your environment variables (or .env) include RACE_AWS_ aws access keys."""
     parser = argparse.ArgumentParser(description=command_desc)
-    parser.add_argument("--model-id", type=str, default="tiiuae/Falcon3-10B-Instruct",
+    parser.add_argument("--model-id", type=str, default="tiiuae/falcon3-10b-instruct",
                         help="Hugging Face model ID to deploy")
     parser.add_argument("--region", type=str, default=None,
                         help="AWS region name")

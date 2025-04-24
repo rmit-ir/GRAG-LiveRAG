@@ -12,7 +12,7 @@ The `deploy_ec2_llm.py` script allows you to deploy a HuggingFace compatible mod
 
 ```bash
 # Deploy a model (Ctrl+C to stop and destroy all resources)
-uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/Falcon3-10B-Instruct
+uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/falcon3-10b-instruct
 
 # Stop and destroy all resources
 uv run scripts/aws/deploy_ec2_llm.py --stop

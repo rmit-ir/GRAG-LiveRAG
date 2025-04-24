@@ -166,7 +166,7 @@ This repository includes several scripts and notebooks for working with the Live
 - **EC2 LLMs**: Deploy and use LLMs on AWS EC2 instances
 
   ```bash
-  # By default, it will deploy tiiuae/Falcon3-10B-Instruct on a g6e.4xlarge instance
+  # By default, it will deploy tiiuae/falcon3-10b-instruct on a g6e.4xlarge instance
   # More options are available at `--help`
   # Ctrl-C to stop and destroy all resources created
   uv run scripts/aws/deploy_ec2_llm.py

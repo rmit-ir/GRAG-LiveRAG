@@ -21,7 +21,7 @@ class AI71Client:
         self,
         model_id: str = "tiiuae/falcon3-10b-instruct",
         system_message: str = "You are a helpful assistant.",
-        temperature: float = 0.7,
+        temperature: float = 0.0,
         max_tokens: int = 1024,
         api_key: str = None
     ):
