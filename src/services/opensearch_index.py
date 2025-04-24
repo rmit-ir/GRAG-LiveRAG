@@ -11,7 +11,7 @@ from opensearchpy import OpenSearch, AWSV4SignerAuth, RequestsHttpConnection
 
 # Import local utilities
 from utils.logging_utils import get_logger
-from services.aws_utils import AWSUtils
+from services.live_rag_aws_utils import LiveRAGAWSUtils
 from services.live_rag_metadata import LiveRAGMetadata
 
 # Dataclasses for structured OpenSearch results
@@ -140,7 +140,7 @@ class OpenSearchService:
         Args:
             index_name: Name of the OpenSearch index
         """
-        self.aws_utils = AWSUtils()
+        self.live_rag_aws_utils = LiveRAGAWSUtils()
         self.index_name = index_name
         self._opensearch_client = None
         self.log.info("OpenSearchService initialized",
@@ -152,11 +152,11 @@ class OpenSearchService:
             self.log.debug("Connecting to OpenSearch",
                            index_name=self.index_name)
             # Create credentials manually
-            session = self.aws_utils.get_session()
+            session = self.live_rag_aws_utils.get_session()
             credentials = session.get_credentials()
             auth = AWSV4SignerAuth(
-                credentials, region=self.aws_utils.aws_region_name)
-            host_name = self.aws_utils.get_ssm_value("/opensearch/endpoint")
+                credentials, region=self.live_rag_aws_utils.aws_region_name)
+            host_name = self.live_rag_aws_utils.get_ssm_value("/opensearch/endpoint")
 
             self._opensearch_client = OpenSearch(
                 hosts=[{"host": host_name, "port": 443}],

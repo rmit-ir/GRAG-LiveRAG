@@ -6,7 +6,7 @@ handling authentication, and processing results.
 """
 from utils.logging_utils import get_logger
 from services.embedding_utils import EmbeddingUtils
-from services.aws_utils import AWSUtils
+from services.live_rag_aws_utils import LiveRAGAWSUtils
 from services.live_rag_metadata import LiveRAGMetadata
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -101,7 +101,7 @@ class PineconeService:
             index_name: Name of the Pinecone index
             namespace: Namespace in the Pinecone index
         """
-        self.aws_utils = AWSUtils()
+        self.live_rag_aws_utils = LiveRAGAWSUtils()
         self.embedding_utils = EmbeddingUtils(embedding_model_name)
         self.index_name = index_name
         self.namespace = namespace
@@ -115,7 +115,7 @@ class PineconeService:
         if self._pinecone_index is None:
             self.log.debug("Connecting to Pinecone index",
                            index_name=self.index_name)
-            pc = Pinecone(api_key=self.aws_utils.get_ssm_secret(
+            pc = Pinecone(api_key=self.live_rag_aws_utils.get_ssm_secret(
                 "/pinecone/ro_token"))
             self._pinecone_index = pc.Index(name=self.index_name)
             self.log.debug("Connected to Pinecone index",

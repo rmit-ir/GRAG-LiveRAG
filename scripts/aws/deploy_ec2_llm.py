@@ -21,7 +21,6 @@ import threading
 import socket
 import glob
 import datetime
-import awspricing
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -29,6 +28,8 @@ from botocore.exceptions import ClientError, WaiterError
 
 # Add scripts folder to the Python path to allow importing from scripts
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+from services import aws_costs
 
 
 # Initialize logger
@@ -53,6 +54,7 @@ class EC2LLMDeployer:
         local_port: int = 8987,
         ami_id: str = "ami-04f4302ff68e424cf",
         deployer_id: str = None,
+        print_info: bool = True,
     ):
         """
         Initialize the EC2 LLM deployer.
@@ -118,7 +120,8 @@ class EC2LLMDeployer:
 
         logger.debug(
             f"Initialized EC2 LLM deployer with model: {model_id}, ID: {self.deployer_id}")
-        self.print_stack_info()
+        if print_info:
+            self.print_stack_info()
 
     def print_stack_info(self):
         """
@@ -296,37 +299,6 @@ class EC2LLMDeployer:
             )
             logger.info(f"Stack {operation_type} completed successfully.")
 
-    def calculate_cost(self) -> float:
-        """
-        Calculate the cost of the EC2 instance based on the instance type, region, and usage time.
-
-        Returns:
-            float: The total cost
-        """
-        try:
-            # Set AWS credentials from environment variables
-            os.environ['AWS_ACCESS_KEY_ID'] = os.environ.get('RACE_AWS_ACCESS_KEY_ID', '')
-            os.environ['AWS_SECRET_ACCESS_KEY'] = os.environ.get('RACE_AWS_SECRET_ACCESS_KEY', '')
-            os.environ['AWS_SESSION_TOKEN'] = os.environ.get('RACE_AWS_SESSION_TOKEN', '')
-            os.environ['AWS_DEFAULT_REGION'] = os.environ.get('RACE_AWS_REGION', 'us-west-2')
-
-            # Get EC2 offer
-            ec2_offer = awspricing.offer('AmazonEC2')
-            
-            # Get on-demand hourly rate for the instance type
-            hourly_price = ec2_offer.ondemand_hourly(self.instance_type, 'Linux', region=self.region_name)
-            
-            # Calculate duration in hours
-            duration_seconds = (self.stop_time - self.start_time).total_seconds()
-            duration_hours = duration_seconds / 3600
-            
-            # Calculate total cost
-            total_cost = hourly_price * duration_hours
-            
-            return total_cost
-        except Exception as e:
-            logger.error(f"Error calculating cost: {str(e)}")
-            return 0.0
 
     def deploy(self) -> Dict[str, Any]:
         """
@@ -930,8 +902,17 @@ class EC2LLMDeployer:
             
             # Calculate and report cost
             try:
-                total_cost = self.calculate_cost()
-                logger.info(f"Estimated cost: ${total_cost:.2f}")
+                duration_seconds = (self.stop_time - self.start_time).total_seconds()
+                cost_result = aws_costs.calculate_cost(
+                    instance_type=self.instance_type,
+                    region_code=self.region_name,
+                    duration_seconds=duration_seconds
+                )
+                if cost_result:
+                    logger.info(f"Estimated cost: ${cost_result.total_cost:.2f}")
+                    logger.info(f"Hourly rate: ${cost_result.hourly_price:.4f}/hour")
+                else:
+                    logger.warning("Could not calculate cost - price information not available")
             except Exception as e:
                 logger.error(f"Error calculating cost: {str(e)}")
             
@@ -1101,6 +1082,7 @@ def wait_for_llm_instances(instance_id: Optional[str] = None, check_interval: in
         bool: True if an instance is ready, False otherwise
     """
     logger.info(f"Waiting for {'any' if instance_id is None else instance_id} LLM instance to be ready...")
+    stack_info_printed = False
     
     while True:
         # List all socket files or specific instance sockets
@@ -1110,7 +1092,7 @@ def wait_for_llm_instances(instance_id: Optional[str] = None, check_interval: in
             socket_files = find_socket_by_id(instance_id)
             
         if not socket_files:
-            logger.info(f"No {'any' if instance_id is None else instance_id} LLM instances found. Waiting...")
+            logger.info(f"No {'any' if instance_id is None else instance_id} LLM instances found. Retrying in {check_interval} seconds...")
             time.sleep(check_interval)
             continue
             
@@ -1124,7 +1106,8 @@ def wait_for_llm_instances(instance_id: Optional[str] = None, check_interval: in
                     continue
                     
                 # Create a temporary deployer to test the LLM
-                temp_deployer = EC2LLMDeployer(local_port=port)
+                temp_deployer = EC2LLMDeployer(local_port=port, print_info=(not stack_info_printed))
+                stack_info_printed = True
                 
                 # Test if the LLM is ready
                 if temp_deployer.test_llm():

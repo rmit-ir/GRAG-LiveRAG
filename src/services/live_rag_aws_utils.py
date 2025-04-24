@@ -3,20 +3,19 @@ AWS utility functions for authentication and parameter retrieval.
 """
 import boto3
 import os
-from typing import Optional
 from utils.logging_utils import get_logger
 
 
-class AWSUtils:
+class LiveRAGAWSUtils:
     """
     Utility class for AWS operations, including SSM parameter retrieval
     and session management.
     """
-    log = get_logger("aws_utils")
+    log = get_logger("live_rag_aws_utils")
 
     def __init__(self):
         """
-        Initialize the AWSUtils with AWS region configuration.
+        Initialize the LiveRAGAWSUtils with AWS region configuration.
         """
         self.aws_region_name = os.environ.get('AWS_LIVE_RAG_REGION')
         if not self.aws_region_name:

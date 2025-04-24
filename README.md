@@ -285,6 +285,6 @@ After installation, you can import services directly:
 
 ```python
 # Import services in any script or notebook
-from services.aws_utils import AWSUtils
+from services.live_rag_aws_utils import LiveRAGAWSUtils
 from services.pinecone_index import PineconeService
 ```

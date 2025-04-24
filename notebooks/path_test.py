@@ -5,9 +5,9 @@ print("Testing notebooks path setup...")
 
 # Try importing from services package
 try:
-    from services import aws_utils
+    from services import live_rag_aws_utils
     print("✅ Successfully imported from services package")
-    print(f"Available modules in services: {dir(aws_utils)}")
+    print(f"Available modules in services: {dir(live_rag_aws_utils)}")
 except ImportError as e:
     print(f"❌ Import failed: {e}")
     
