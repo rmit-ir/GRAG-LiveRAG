@@ -51,7 +51,6 @@ class QPPFusionSystem(RAGSystemInterface):
         self.qpp_service = QPPService(default_k=qpp_k)
 
         model_id = "tiiuae/falcon3-10b-instruct"
-        client_type = llm_client
 
         # Prepare prompts
         sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(
@@ -66,6 +65,7 @@ class QPPFusionSystem(RAGSystemInterface):
                 model_id=model_id,
                 system_message=SYSTEM_PROMPT,
                 max_tokens=200,
+                temperature=0.0,
             )
 
             # LLM client for sparse query generation (keyword-based search)
@@ -87,6 +87,7 @@ class QPPFusionSystem(RAGSystemInterface):
                 model_id=model_id,
                 system_message=SYSTEM_PROMPT,
                 max_tokens=200,
+                temperature=0.0,
             )
 
             # LLM client for sparse query generation (keyword-based search)
@@ -109,7 +110,7 @@ class QPPFusionSystem(RAGSystemInterface):
         self.max_effective_queries = max_effective_queries
         self.log.info("QPPFusionSystem initialized",
                       llm_model=model_id,
-                      llm_client=client_type,
+                      llm_client=llm_client,
                       max_documents=max_documents,
                       max_queries=max_queries,
                       qpp_k=qpp_k,

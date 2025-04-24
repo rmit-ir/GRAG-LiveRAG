@@ -6,6 +6,7 @@ and sets up port forwarding for local access.
 
 All resources created in this script must be deleted upon exiting!
 """
+from services import aws_costs
 from session_manager import SessionManager
 from utils.query_utils import generate_short_id
 from utils.logging_utils import get_logger
@@ -28,8 +29,6 @@ from botocore.exceptions import ClientError, WaiterError
 
 # Add scripts folder to the Python path to allow importing from scripts
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-
-from services import aws_costs
 
 
 # Initialize logger
@@ -144,7 +143,8 @@ class EC2LLMDeployer:
         logger.info(f"Instance Type", instance_type=self.instance_type)
         logger.info(f"AMI ID", ami_id=self.ami_id)
         logger.info(f"Model ID", model_id=self.model_id)
-        logger.info(f"Local Endpoint", local_endpoint=f"http://localhost:{self.local_port}/v1")
+        logger.info(f"Local Endpoint",
+                    local_endpoint=f"http://localhost:{self.local_port}/v1")
 
         # # AWS Calculator link
         # calculator_url = "https://calculator.aws/#/createCalculator/ec2-enhancement"
@@ -299,7 +299,6 @@ class EC2LLMDeployer:
             )
             logger.info(f"Stack {operation_type} completed successfully.")
 
-
     def deploy(self) -> Dict[str, Any]:
         """
         Deploy the LLM on EC2 using CloudFormation.
@@ -309,8 +308,9 @@ class EC2LLMDeployer:
         """
         # Record the start time
         self.start_time = datetime.datetime.now()
-        logger.info(f"Stack deployment started at {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        
+        logger.info(
+            f"Stack deployment started at {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
         try:
             # Get the CloudFormation template
             template_path = Path(__file__).parent / \
@@ -545,11 +545,12 @@ class EC2LLMDeployer:
 
         try:
             # Use the SessionManager's setup_port_forwarding method
-            return self.session_manager.setup_port_forwarding(
+            self.port_forwarding = self.session_manager.setup_port_forwarding(
                 instance_id=self.instance_id,
                 remote_port=self.remote_port,
                 local_port=self.local_port
             )
+            return self.port_forwarding
         except Exception as e:
             logger.error(f"Error setting up port forwarding: {str(e)}")
             return None
@@ -722,7 +723,8 @@ class EC2LLMDeployer:
             data = {
                 "model": self.model_id,
                 "messages": [
-                    {"role": "system", "content": "You are a helpful AI assistant deployed on AWS EC2."},
+                    {"role": "system",
+                        "content": "You are a helpful AI assistant deployed on AWS EC2."},
                     {"role": "user", "content": "Say hello and introduce yourself."}
                 ],
                 "max_tokens": 100,
@@ -824,7 +826,8 @@ class EC2LLMDeployer:
                     conn.close()
 
                     # Clean up in the main thread to avoid threading issues
-                    cleanup_thread = threading.Thread(target=self.cleanup, daemon=True)
+                    cleanup_thread = threading.Thread(
+                        target=self.cleanup, daemon=True)
                     cleanup_thread.start()
                     cleanup_thread.join()  # Wait for cleanup to finish
                     sys.exit(0)  # Exit after cleanup completes
@@ -889,39 +892,61 @@ class EC2LLMDeployer:
         """
         # Record the stop time
         self.stop_time = datetime.datetime.now()
-        
+
         # Calculate and report the runtime and cost
         if self.start_time:
             runtime = self.stop_time - self.start_time
             hours, remainder = divmod(runtime.total_seconds(), 3600)
             minutes, seconds = divmod(remainder, 60)
-            
+
             logger.info("=" * 60)
             logger.info("STACK TIMING AND COST REPORT")
             logger.info("=" * 60)
-            logger.info(f"Start time: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Stop time: {self.stop_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            logger.info(f"Total runtime: {int(hours)}h {int(minutes)}m {int(seconds)}s")
-            
+            logger.info(
+                f"Start time: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(
+                f"Stop time: {self.stop_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(
+                f"Total runtime: {int(hours)}h {int(minutes)}m {int(seconds)}s")
+
             # Calculate and report cost
             try:
-                duration_seconds = (self.stop_time - self.start_time).total_seconds()
+                duration_seconds = (
+                    self.stop_time - self.start_time).total_seconds()
                 cost_result = aws_costs.calculate_cost(
                     instance_type=self.instance_type,
                     region_code=self.region_name,
                     duration_seconds=duration_seconds
                 )
                 if cost_result:
-                    logger.info(f"Estimated cost: ${cost_result.total_cost:.2f}")
-                    logger.info(f"Hourly rate: ${cost_result.hourly_price:.4f}/hour")
+                    logger.info(
+                        f"Estimated cost: ${cost_result.total_cost:.2f}")
+                    logger.info(
+                        f"Hourly rate: ${cost_result.hourly_price:.4f}/hour")
                 else:
-                    logger.warning("Could not calculate cost - price information not available")
+                    logger.warning(
+                        "Could not calculate cost - price information not available")
             except Exception as e:
                 logger.error(f"Error calculating cost: {str(e)}")
-            
+
             logger.info("=" * 60)
-        
+
         self._cleanup_socket()
+
+        # Clean up port forwarding
+        if self.port_forwarding:
+            logger.info("Stopping port forwarding...")
+            # Terminate the process
+            if 'process' in port_forwarding:
+                port_forwarding['process'].terminate()
+            # Close the log file if it exists
+            if 'log_file' in port_forwarding and port_forwarding['log_file']:
+                try:
+                    port_forwarding['log_file'].close()
+                    logger.info(
+                        f"Port forwarding logs are available at: {port_forwarding.get('log_file_path', 'unknown')}")
+                except Exception as e:
+                    logger.warning(f"Error closing log file: {str(e)}")
 
         if self.stack_name:
             try:
@@ -975,6 +1000,7 @@ class EC2LLMDeployer:
                     f"If cleanup failed due to session issues, please manually delete the stack '{self.stack_name}'")
                 logger.error(
                     f"Visit: https://{self.region_name}.console.aws.amazon.com/cloudformation/home?region={self.region_name}#/stacks")
+        sys.exit(0)
 
 
 def signal_handler(sig, frame):
@@ -995,6 +1021,7 @@ def cleanup_on_exit():
     logger.info("Script is exiting. Ensuring all resources are cleaned up...")
     if deployer:
         deployer.cleanup()
+    sys.exit(0)
 
 
 def list_ec2_llm_sockets() -> List[str]:
@@ -1056,71 +1083,80 @@ def stop_instances(instance_id: Optional[str] = None) -> None:
         # Find sockets for the specified instance ID
         socket_files = find_socket_by_id(instance_id)
         if socket_files:
-            logger.info(f"Found {len(socket_files)} sockets for instance ID {instance_id}:")
+            logger.info(
+                f"Found {len(socket_files)} sockets for instance ID {instance_id}:")
             for socket_file in socket_files:
                 port = extract_port_from_socket_path(socket_file)
                 port_info = f" (port: {port})" if port else ""
                 logger.info(f"  {socket_file}{port_info}")
-                
+
             # Send kill command to all found sockets
-            logger.info(f"Sending kill command to instance with ID {instance_id}...")
+            logger.info(
+                f"Sending kill command to instance with ID {instance_id}...")
             for socket_file in socket_files:
                 send_kill_command_to_socket(socket_file)
-                
-            logger.info(f"Instance with ID {instance_id} has been instructed to shut down.")
+
+            logger.info(
+                f"Instance with ID {instance_id} has been instructed to shut down.")
         else:
-            logger.error(f"No running EC2 LLM instance found with ID {instance_id}.")
+            logger.error(
+                f"No running EC2 LLM instance found with ID {instance_id}.")
 
 
 def wait_for_llm_instances(instance_id: Optional[str] = None, check_interval: int = 5) -> bool:
     """
     Wait for LLM instances to be ready by polling test_llm until it returns true.
-    
+
     Args:
         instance_id (Optional[str]): ID of the instance to wait for. If None, waits for any instance.
         check_interval (int): Time between checks in seconds
         max_wait_time (int): Maximum time to wait in seconds
-        
+
     Returns:
         bool: True if an instance is ready, False otherwise
     """
-    logger.info(f"Waiting for {'any' if instance_id is None else instance_id} LLM instance to be ready...")
+    logger.info(
+        f"Waiting for {'any' if instance_id is None else instance_id} LLM instance to be ready...")
     stack_info_printed = False
-    
+
     while True:
         # List all socket files or specific instance sockets
         if instance_id is None:
             socket_files = list_ec2_llm_sockets()
         else:
             socket_files = find_socket_by_id(instance_id)
-            
+
         if not socket_files:
-            logger.info(f"No {'any' if instance_id is None else instance_id} LLM instances found. Retrying in {check_interval} seconds...")
+            logger.info(
+                f"No {'any' if instance_id is None else instance_id} LLM instances found. Retrying in {check_interval} seconds...")
             time.sleep(check_interval)
             continue
-            
+
         # Try to test each instance
         for socket_file in socket_files:
             try:
                 # Extract port from socket path
                 port = extract_port_from_socket_path(socket_file)
                 if port is None:
-                    logger.warning(f"Could not extract port from socket path: {socket_file}")
+                    logger.warning(
+                        f"Could not extract port from socket path: {socket_file}")
                     continue
-                    
+
                 # Create a temporary deployer to test the LLM
-                temp_deployer = EC2LLMDeployer(local_port=port, print_info=(not stack_info_printed))
+                temp_deployer = EC2LLMDeployer(
+                    local_port=port, print_info=(not stack_info_printed))
                 stack_info_printed = True
-                
+
                 # Test if the LLM is ready
                 if temp_deployer.test_llm():
                     logger.info(f"LLM instance at port {port} is ready!")
                     return True
             except Exception as e:
                 logger.debug(f"Error testing LLM at {socket_file}: {str(e)}")
-                
+
         # Wait before checking again
-        logger.info(f"No ready LLM instances found. Retrying in {check_interval} seconds...")
+        logger.info(
+            f"No ready LLM instances found. Retrying in {check_interval} seconds...")
         time.sleep(check_interval)
 
 
@@ -1214,7 +1250,7 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
         instance_id = None if args.stop == 'all' else args.stop
         stop_instances(instance_id)
         sys.exit(0)
-        
+
     # Handle the --wait argument if provided (if provided but without id, it will be all, if not provided, it will be None)
     if args.wait is not None:
         instance_id = None if args.wait == 'all' else args.wait
