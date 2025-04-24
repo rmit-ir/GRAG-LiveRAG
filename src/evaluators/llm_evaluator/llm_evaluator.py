@@ -56,7 +56,8 @@ class LLMEvaluator(EvaluatorInterface):
         use_gold_references: bool = True,
         silent_errors: bool = True,
         num_threads: int = 1,
-        perform_system_analysis: bool = True
+        perform_system_analysis: bool = True,
+        num_samples_for_analysis: int = 40
     ):
         """
         Initialize the LLM evaluator.
@@ -69,6 +70,7 @@ class LLMEvaluator(EvaluatorInterface):
             silent_errors: Whether to silently handle errors by returning default scores (True) or raise exceptions (False)
             num_threads: Number of threads to use for parallel evaluation (>1 for parallel, 1 for sequential), note this only speed up API calls
             perform_system_analysis: Whether to automatically perform system analysis during evaluation
+            num_samples_for_analysis: Total number of samples to analyze in system analysis (divided equally between lowest relevance and lowest faithfulness)
         """
         self.logger = get_logger("llm_evaluator")
         self.logger.info(f"Initializing LLM evaluator with model: {model_id}")
@@ -86,6 +88,10 @@ class LLMEvaluator(EvaluatorInterface):
         self.silent_errors = silent_errors
         self.num_threads = max(1, num_threads)
         self.perform_system_analysis = perform_system_analysis
+        
+        # Set the number of samples for each analysis type (divide total by 2)
+        self.num_lowest_relevance = num_samples_for_analysis // 2
+        self.num_lowest_faithfulness = num_samples_for_analysis // 2
     
     def _get_system_prompt(self) -> str:
         """
@@ -383,7 +389,12 @@ class LLMEvaluator(EvaluatorInterface):
         # Perform system analysis if requested and there are enough samples
         if self.perform_system_analysis and len(rows) >= 2:
             self.logger.info("Performing system analysis")
-            system_analysis = self.summarize_evaluation(result, references)
+            system_analysis = self.summarize_evaluation(
+                result, 
+                references,
+                num_lowest_relevance=self.num_lowest_relevance,
+                num_lowest_faithfulness=self.num_lowest_faithfulness
+            )
             
             # Add system analysis to the evaluation result
             result.system_analysis = system_analysis

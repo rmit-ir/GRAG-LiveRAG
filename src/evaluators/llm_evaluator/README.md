@@ -35,16 +35,9 @@ uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LL
 uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv --no-use_gold_references --no-silent_errors --num_threads 5
 ```
 
-### Configuration Options
-
-The LLM Evaluator can be configured with the following parameters:
-
-- `model_id`: The model ID to use for evaluation (default: "anthropic.claude-3-5-sonnet-20241022-v2:0")
-- `temperature`: The temperature parameter for generation (default: 0.0)
-- `max_tokens`: Maximum number of tokens to generate (default: 2048)
-- `num_threads`: Important for parallel evaluation, LLMs are slow! (default: 1)
-
 ## Example Output
+
+### Gold References
 
 ```bash
 ================================================================================
@@ -84,6 +77,96 @@ Average cost per query: $0.018963 USD
 Output saved to:
   - Aggregated results: /Users/kun/Projects/rmit/research/live-rag/LiveRAG/data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.LLMEvaluator.evaluation.aggregated.tsv
   - Row-level results: /Users/kun/Projects/rmit/research/live-rag/LiveRAG/data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.LLMEvaluator.evaluation.rows.tsv
+```
+
+### System Analysis
+
+Command
+
+```bash
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem_ec2_llm_4gpu.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num_threads 20
+```
+
+Note by default it will take the first 40 lowest scores results and analyze them.
+
+```markdown
+Based on the 33 samples provided, here's a comprehensive analysis:
+
+1. PATTERN ANALYSIS
+
+Key Patterns in Low-Performing Responses:
+
+A. Faithfulness Issues (Most Common):
+
+- Hallucination of plausible but unsupported details (especially prevalent in expert-domain questions)
+- Reliance on general knowledge rather than retrieved documents
+- Tendency to provide comprehensive answers even when document support is lacking
+
+B. Relevance Issues:
+
+- "I don't know" responses when relevant information is actually present (Samples 3, 9, 10)
+- Missing key information while providing tangentially related details
+- Over-generalization of specific questions
+
+C. Response Behaviors:
+
+- Conservative responses (saying no information is available) when partial information exists
+- Mixing supported and unsupported claims within single responses
+- Tendency to provide technically accurate but ungrounded information
+
+2. CATEGORY CORRELATION
+
+A. Question Categories Impact:
+
+- "distant-from-document" linguistic variation shows highest failure rate (22 samples)
+- "open-ended" questions have higher hallucination rates than factoid questions
+- "long-search-query" questions often receive partially relevant responses
+- "with-premise" questions show higher rates of unfaithful responses
+
+B. User Category Patterns:
+
+Expert Users:
+
+- Higher rate of hallucination in technical responses
+- More detailed but often ungrounded answers
+- Higher frequency of partial matches rather than complete misses
+
+Novice Users:
+
+- More generic, cautious responses
+- Higher rate of "no information available" responses
+- Better faithfulness scores but lower relevance
+
+3. ROOT CAUSES
+
+A. Retrieval Issues:
+
+- Insufficient semantic matching between questions and documents
+- Poor handling of questions requiring synthesis across multiple documents
+- Weak performance on questions requiring specific technical details
+
+B. Generation Issues:
+
+- Over-reliance on model's general knowledge vs retrieved content
+- Lack of proper grounding mechanisms
+- Poor balance between completeness and faithfulness
+
+C. Systemic Issues:
+
+- Difficulty maintaining faithfulness while providing comprehensive answers
+- Weak handling of technical/domain-specific content
+- Inconsistent treatment of partial information vs no information
+- Poor integration of multiple document sources
+
+Priority Areas for Improvement:
+
+1. Strengthen grounding mechanisms to prevent hallucination
+2. Improve retrieval for technical and domain-specific content
+3. Better handling of partial information in documents
+4. Enhanced cross-document synthesis capabilities
+5. Better calibration between expert/novice user expectations
+
+The analysis reveals a system that prioritizes providing comprehensive answers over maintaining strict faithfulness to sources, particularly struggling with technical content and questions requiring synthesis across multiple documents. The most critical issue appears to be the balance between providing useful information while maintaining faithfulness to retrieved documents.
 ```
 
 ## Environment Variables
