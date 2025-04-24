@@ -13,12 +13,17 @@ import concurrent.futures
 from threading import Lock
 
 from evaluators.evaluator_interface import EvaluatorInterface
-from evaluators.evaluation_result import EvaluationResult, EvaluationResultRow
+from evaluators.evaluation_result import EvaluationResult, EvaluationResultRow, SystemAnalysis
 from systems.rag_result import RAGResult
 from services.ds_data_morgana import QAPair
 from services.llms.bedrock_client import BedrockClient
 from utils.logging_utils import get_logger
-from evaluators.llm_evaluator.prompts import SYSTEM_PROMPT, EVALUATION_PROMPT_TEMPLATE
+from evaluators.llm_evaluator.prompts import (
+    SYSTEM_PROMPT, 
+    EVALUATION_PROMPT_TEMPLATE,
+    SUMMARY_SYSTEM_PROMPT,
+    SUMMARY_PROMPT_TEMPLATE
+)
 
 
 class LLMEvaluator(EvaluatorInterface):
@@ -50,7 +55,8 @@ class LLMEvaluator(EvaluatorInterface):
         max_tokens: int = 2048,
         use_gold_references: bool = True,
         silent_errors: bool = True,
-        num_threads: int = 1
+        num_threads: int = 1,
+        perform_system_analysis: bool = True
     ):
         """
         Initialize the LLM evaluator.
@@ -62,6 +68,7 @@ class LLMEvaluator(EvaluatorInterface):
             use_gold_references: Whether to include gold reference answers in the evaluation prompt
             silent_errors: Whether to silently handle errors by returning default scores (True) or raise exceptions (False)
             num_threads: Number of threads to use for parallel evaluation (>1 for parallel, 1 for sequential), note this only speed up API calls
+            perform_system_analysis: Whether to automatically perform system analysis during evaluation
         """
         self.logger = get_logger("llm_evaluator")
         self.logger.info(f"Initializing LLM evaluator with model: {model_id}")
@@ -78,6 +85,7 @@ class LLMEvaluator(EvaluatorInterface):
         self.use_gold_references = use_gold_references
         self.silent_errors = silent_errors
         self.num_threads = max(1, num_threads)
+        self.perform_system_analysis = perform_system_analysis
     
     def _get_system_prompt(self) -> str:
         """
@@ -372,6 +380,19 @@ class LLMEvaluator(EvaluatorInterface):
             total_cost=total_cost if cost_available else None
         )
         
+        # Perform system analysis if requested and there are enough samples
+        if self.perform_system_analysis and len(rows) >= 2:
+            self.logger.info("Performing system analysis")
+            system_analysis = self.summarize_evaluation(result, references)
+            
+            # Add system analysis to the evaluation result
+            result.system_analysis = system_analysis
+            
+            # Add system analysis cost to total cost if available
+            if cost_available and system_analysis.cost_usd is not None:
+                result.total_cost += system_analysis.cost_usd
+                result.metrics["total_cost"] = result.total_cost
+        
         self.logger.info(
             f"Evaluation complete",
             avg_relevance_score=metrics["avg_relevance_score"],
@@ -382,6 +403,160 @@ class LLMEvaluator(EvaluatorInterface):
         )
         
         return result
+        
+    def summarize_evaluation(
+        self, 
+        evaluation_result: EvaluationResult, 
+        references: List[QAPair],
+        num_lowest_relevance: int = 20,
+        num_lowest_faithfulness: int = 20,
+        model_id: str = "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        temperature: float = 0.0,
+        max_tokens: int = 4096
+    ) -> SystemAnalysis:
+        """
+        Analyze the evaluation results to identify patterns and issues in the RAG system.
+        
+        This method samples the lowest-scoring responses based on relevance and faithfulness,
+        then uses an LLM to analyze the patterns and provide recommendations for improvement.
+        
+        Args:
+            evaluation_result: The evaluation result to analyze
+            references: List of reference QA pairs for additional context
+            num_lowest_relevance: Number of lowest relevance score samples to include
+            num_lowest_faithfulness: Number of lowest faithfulness score samples to include
+            model_id: The model ID to use for the analysis
+            temperature: The temperature parameter for generation
+            max_tokens: Maximum number of tokens to generate
+            
+        Returns:
+            SystemAnalysis object containing the analysis results
+        """
+        self.logger.info(
+            f"Summarizing evaluation results",
+            num_lowest_relevance=num_lowest_relevance,
+            num_lowest_faithfulness=num_lowest_faithfulness
+        )
+        
+        # Create a mapping of QA pairs by qid for easier lookup
+        references_by_qid = {qa.qid: qa for qa in references if qa.qid is not None}
+        
+        # Check if there are enough rows to analyze
+        if not evaluation_result.rows or len(evaluation_result.rows) < 2:
+            self.logger.warning("Not enough evaluation rows to analyze")
+            return SystemAnalysis(
+                analysis="Unable to perform analysis due to insufficient data",
+                samples_analyzed=0
+            )
+        
+        # Get the lowest relevance score samples
+        relevance_samples = []
+        for row in evaluation_result.rows:
+            relevance_score = row.metrics.get("relevance_score", 0)
+            relevance_samples.append((relevance_score, row))
+        
+        # Sort by relevance score (ascending) and take the lowest N
+        relevance_samples.sort(key=lambda x: x[0])
+        lowest_relevance = relevance_samples[:num_lowest_relevance]
+        
+        # Get the lowest faithfulness score samples
+        faithfulness_samples = []
+        for row in evaluation_result.rows:
+            faithfulness_score = row.metrics.get("faithfulness_score", 0)
+            faithfulness_samples.append((faithfulness_score, row))
+        
+        # Sort by faithfulness score (ascending) and take the lowest N
+        faithfulness_samples.sort(key=lambda x: x[0])
+        lowest_faithfulness = faithfulness_samples[:num_lowest_faithfulness]
+        
+        # Combine the samples (may have duplicates if a response scored poorly on both metrics)
+        combined_samples = lowest_relevance + lowest_faithfulness
+        
+        # Remove duplicates by qid
+        unique_samples = {}
+        for score, row in combined_samples:
+            if row.qid not in unique_samples:
+                unique_samples[row.qid] = (score, row)
+        
+        # Format the samples for the prompt
+        formatted_samples = []
+        for qid, (score, row) in unique_samples.items():
+            # Get the reference QA pair if available
+            reference = references_by_qid.get(qid)
+            
+            # Format user categories and question categories
+            user_categories = []
+            question_categories = []
+            
+            if reference:
+                # Format user categories
+                for category in reference.user_categories:
+                    cat_str = f"{category.get('categorization_name', '')}: {category.get('category_name', '')}"
+                    user_categories.append(cat_str)
+                
+                # Format question categories
+                for category in reference.question_categories:
+                    cat_str = f"{category.get('categorization_name', '')}: {category.get('category_name', '')}"
+                    question_categories.append(cat_str)
+            
+            # Format the sample
+            sample = f"""
+SAMPLE {len(formatted_samples) + 1}:
+QID: {qid}
+Relevance Score: {row.metrics.get('relevance_score', 'N/A')}
+Faithfulness Score: {row.metrics.get('faithfulness_score', 'N/A')}
+Evaluation Notes: {row.metrics.get('evaluation_notes', 'N/A')}
+User Categories: {', '.join(user_categories) if user_categories else 'N/A'}
+Question Categories: {', '.join(question_categories) if question_categories else 'N/A'}
+"""
+            formatted_samples.append(sample)
+        
+        # Create the prompt
+        prompt = SUMMARY_PROMPT_TEMPLATE.format(
+            samples="\n".join(formatted_samples)
+        )
+        
+        self.logger.debug("Generated prompt for LLM analysis", prompt=prompt)
+        
+        # Initialize a separate LLM client for the summary analysis
+        summary_client = BedrockClient(
+            model_id=model_id,
+            system_message=SUMMARY_SYSTEM_PROMPT,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        
+        try:
+            # Send the prompt to the LLM
+            raw_response, response = summary_client.query(prompt)
+            
+            # Log the analysis
+            self.logger.info(
+                f"Generated RAG system analysis",
+                samples_analyzed=len(formatted_samples)
+            )
+            
+            # Create the SystemAnalysis object
+            token_usage = None
+            if hasattr(raw_response, "token_usage"):
+                token_usage = raw_response.token_usage
+                
+            cost_usd = None
+            if hasattr(raw_response, "cost_usd"):
+                cost_usd = raw_response.cost_usd
+            
+            return SystemAnalysis(
+                analysis=response,
+                samples_analyzed=len(formatted_samples),
+                token_usage=token_usage,
+                cost_usd=cost_usd
+            )
+        except Exception as e:
+            self.logger.error(f"Error during summary analysis: {e}")
+            return SystemAnalysis(
+                analysis=f"Failed to generate analysis due to an error: {str(e)}",
+                samples_analyzed=0
+            )
 
 
 # Main entry point for testing the evaluator
@@ -463,3 +638,13 @@ if __name__ == "__main__":
             print(f"Evaluation Notes: {row.metrics['evaluation_notes']}")
     
     print("="*80 + "\n")
+    
+    # print summary of evaluation
+    summary_result = evaluator_with_refs.summarize_evaluation(
+        result_with_refs,
+        [reference1],
+        num_lowest_relevance=1,
+        num_lowest_faithfulness=1
+    )
+    print("\nSummary of Evaluation:")
+    print(summary_result)

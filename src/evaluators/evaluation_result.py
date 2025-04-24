@@ -7,6 +7,41 @@ from datetime import datetime
 
 
 @dataclass
+class SystemAnalysis:
+    """
+    Analysis of RAG system performance based on evaluation results.
+    Contains insights, patterns, and recommendations for improving the system.
+    """
+    analysis: str
+    samples_analyzed: int
+    token_usage: Optional[Dict[str, int]] = None
+    cost_usd: Optional[float] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        result = {
+            "analysis": self.analysis,
+            "samples_analyzed": self.samples_analyzed
+        }
+        
+        if self.token_usage is not None:
+            result["token_usage"] = self.token_usage
+            
+        if self.cost_usd is not None:
+            result["cost_usd"] = self.cost_usd
+            
+        return result
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SystemAnalysis':
+        return cls(
+            analysis=data.get("analysis", ""),
+            samples_analyzed=data.get("samples_analyzed", 0),
+            token_usage=data.get("token_usage"),
+            cost_usd=data.get("cost_usd")
+        )
+
+
+@dataclass
 class EvaluationResultRow:
     """
     Interface for individual row-level evaluator results.
@@ -62,6 +97,7 @@ class EvaluationResult:
     rows: Optional[List[EvaluationResultRow]] = None
     total_time_ms: Optional[float] = None
     total_cost: Optional[float] = None
+    system_analysis: Optional[SystemAnalysis] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -87,6 +123,9 @@ class EvaluationResult:
         if self.total_cost is not None:
             result["total_cost"] = self.total_cost
             
+        if self.system_analysis is not None:
+            result["system_analysis"] = self.system_analysis.to_dict()
+            
         return result
     
     @classmethod
@@ -109,6 +148,11 @@ class EvaluationResult:
         if rows_data:
             rows = [EvaluationResultRow.from_dict(row) for row in rows_data]
         
+        system_analysis_data = data.get("system_analysis")
+        system_analysis = None
+        if system_analysis_data:
+            system_analysis = SystemAnalysis.from_dict(system_analysis_data)
+        
         return cls(
             metrics=data.get("metrics", {}),
             evaluator_name=data.get("evaluator_name", ""),
@@ -117,5 +161,6 @@ class EvaluationResult:
             timestamp=timestamp or datetime.now(),
             rows=rows,
             total_time_ms=data.get("total_time_ms"),
-            total_cost=data.get("total_cost")
+            total_cost=data.get("total_cost"),
+            system_analysis=system_analysis
         )

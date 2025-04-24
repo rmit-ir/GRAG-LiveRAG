@@ -21,7 +21,7 @@ from typing import List, Dict, Any, Type
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
 from systems.rag_result import RAGResult
-from services.ds_data_morgana import QAPair
+from services.ds_data_morgana import QAPair, CategoryDict
 from evaluators.evaluator_interface import EvaluatorInterface
 from evaluators.evaluation_result import EvaluationResult
 
@@ -259,13 +259,31 @@ def load_reference_qa_pairs(reference_file: str) -> List[QAPair]:
                     except json.JSONDecodeError:
                         doc_ids = [doc_ids]
                 
+                # Extract question categories from column names
+                question_categories = []
+                user_categories = []
+                
+                for col_name, value in row.items():
+                    if col_name.startswith('question_') and col_name != 'question_length' and not pd.isna(value):
+                        categorization_name = col_name[len('question_'):]
+                        question_categories.append(CategoryDict(
+                            categorization_name=categorization_name,
+                            category_name=value
+                        ))
+                    elif col_name.startswith('user_') and not pd.isna(value):
+                        categorization_name = col_name[len('user_'):]
+                        user_categories.append(CategoryDict(
+                            categorization_name=categorization_name,
+                            category_name=value
+                        ))
+                
                 # Create QAPair object
                 qa_pairs.append(QAPair(
                     question=question,
                     answer=answer,
                     context=context,
-                    question_categories=[],
-                    user_categories=[],
+                    question_categories=question_categories,
+                    user_categories=user_categories,
                     document_ids=doc_ids,
                     qid=qid
                 ))
@@ -340,6 +358,9 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
                 
             if result.total_cost is not None:
                 aggregated_dict["total_cost"] = result.total_cost
+                
+            if result.system_analysis is not None:
+                aggregated_dict["system_analysis"] = result.system_analysis.to_dict()
             
             with open(aggregated_file, 'w', encoding='utf-8') as f:
                 f.write(json.dumps(aggregated_dict) + '\n')
@@ -365,6 +386,9 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
                 
             if result.total_cost is not None:
                 agg_row["total_cost"] = result.total_cost
+                
+            if result.system_analysis is not None:
+                agg_row["system_analysis"] = result.system_analysis.analysis
             
             # Flatten metrics into the row
             for metric_key, metric_value in result.metrics.items():
