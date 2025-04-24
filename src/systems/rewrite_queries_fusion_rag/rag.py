@@ -3,11 +3,11 @@ uv run scripts/run.py --system systems.rewrite_queries_fusion_rag.rag.FusionRAGS
 """
 import re
 import time
-from typing import List, Tuple
+from typing import List
 from datetime import datetime
 
 from utils.logging_utils import get_logger
-from utils.fusion_utils import apply_fusion_to_hits
+from utils.fusion_utils import rrf_fusion
 from utils.query_utils import generate_query_id
 from services.indicies import QueryService
 from services.llms.ai71_client import AI71Client
@@ -244,12 +244,12 @@ class FusionRAGSystem(RAGSystemInterface):
 
         # Apply fusion to get the top documents
         qid = qid or generate_query_id(question)
-        fused_docs = apply_fusion_to_hits(
+        fused_docs = rrf_fusion(
             hits_per_query, self.max_documents, query_id=qid)
 
         # Extract document contents and IDs
-        doc_contents = [hit.metadata.text for hit in fused_docs.values()]
-        doc_ids = [hit.id for hit in fused_docs.values()]
+        doc_contents = [hit.metadata.text for hit in fused_docs]
+        doc_ids = [hit.id for hit in fused_docs]
 
         self.log.debug("Selected documents for context",
                        doc_count=len(doc_contents),

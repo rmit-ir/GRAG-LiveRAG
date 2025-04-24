@@ -10,7 +10,7 @@ from evaluators.evaluator_interface import test_evaluator
 from evaluators.llm_evaluator.llm_evaluator import LLMEvaluator
 from services.ds_data_morgana import QAPair
 from utils.logging_utils import get_logger
-from utils.fusion_utils import apply_fusion_to_hits
+from utils.fusion_utils import rrf_fusion
 from utils.query_utils import generate_query_id
 from services.indicies import QueryService
 from services.llms.ai71_client import AI71Client
@@ -30,12 +30,18 @@ class QPPFusionSystem(RAGSystemInterface):
     query_tag_pattern = re.compile(r'<query>(.*?)</query>', re.DOTALL)
     queries_tag_pattern = re.compile(r'<queries>(.*?)</queries>', re.DOTALL)
 
-    def __init__(self, max_documents: int = 10, max_queries: int = 3, qpp_k: int = 10, max_effective_queries: int = 5, llm_client: str = "ai71_client"):
+    def __init__(self,
+                 max_documents: int = 5,
+                 max_query_documents: int = 200,
+                 max_queries: int = 5,
+                 qpp_k: int = 10,
+                 max_effective_queries: int = 5,
+                 llm_client: str = "ai71_client"):
         """
         Initialize the FusionQPPSystem.
 
         Args:
-            max_documents: Maximum number of documents to retrieve per query
+            max_documents: Maximum number of documents to stuff to RAG generation
             max_queries: Maximum number of search queries to generate (including the original)
             qpp_k: Number of top documents to use for QPP calculation
             max_effective_queries: Maximum number of most effective queries to use
@@ -43,29 +49,32 @@ class QPPFusionSystem(RAGSystemInterface):
         """
         self.query_service = QueryService()
         self.qpp_service = QPPService(default_k=qpp_k)
-        
+
         model_id = "tiiuae/falcon3-10b-instruct"
         client_type = llm_client
-        
+
         # Prepare prompts
-        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
-        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
-        
+        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(
+            max_queries=max_queries)
+        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(
+            max_queries=max_queries)
+
         # Initialize the appropriate LLM client type
         if llm_client == "general_openai_client":
             # LLM client for answer generation
             self.llm_client = GeneralOpenAIClient(
                 model_id=model_id,
-                system_message=SYSTEM_PROMPT
+                system_message=SYSTEM_PROMPT,
+                max_tokens=200,
             )
-            
+
             # LLM client for sparse query generation (keyword-based search)
             self.sparse_query_generator = GeneralOpenAIClient(
                 model_id=model_id,
                 system_message=sparse_prompt,
                 temperature=0.5  # Set temperature for diversity in retry scenarios
             )
-            
+
             # LLM client for dense query generation (semantic search)
             self.dense_query_generator = GeneralOpenAIClient(
                 model_id=model_id,
@@ -76,16 +85,17 @@ class QPPFusionSystem(RAGSystemInterface):
             # LLM client for answer generation
             self.llm_client = AI71Client(
                 model_id=model_id,
-                system_message=SYSTEM_PROMPT
+                system_message=SYSTEM_PROMPT,
+                max_tokens=200,
             )
-            
+
             # LLM client for sparse query generation (keyword-based search)
             self.sparse_query_generator = AI71Client(
                 model_id=model_id,
                 system_message=sparse_prompt,
                 temperature=0.5  # Set temperature for diversity in retry scenarios
             )
-            
+
             # LLM client for dense query generation (semantic search)
             self.dense_query_generator = AI71Client(
                 model_id=model_id,
@@ -94,6 +104,7 @@ class QPPFusionSystem(RAGSystemInterface):
             )
 
         self.max_documents = max_documents
+        self.max_query_documents = max_query_documents
         self.max_queries = max_queries
         self.max_effective_queries = max_effective_queries
         self.log.info("QPPFusionSystem initialized",
@@ -288,15 +299,15 @@ class QPPFusionSystem(RAGSystemInterface):
             # Determine search method based on query type
             if i == 0:  # Original query
                 hits = self.query_service.query_fusion(
-                    query, k=self.max_documents)
+                    query, k=self.max_query_documents)
                 query_type = "original"
             elif i <= len(sparse_queries):  # Sparse queries
                 hits = self.query_service.query_keywords(
-                    query, k=self.max_documents)
+                    query, k=self.max_query_documents)
                 query_type = "sparse"
             else:  # Dense queries
                 hits = self.query_service.query_embedding(
-                    query, k=self.max_documents)
+                    query, k=self.max_query_documents)
                 query_type = "dense"
 
             # Calculate QPP scores for this query's results
@@ -350,12 +361,12 @@ class QPPFusionSystem(RAGSystemInterface):
 
         # Apply fusion to get the top documents using only the most effective queries
         qid = qid or generate_query_id(question)
-        fused_docs = apply_fusion_to_hits(
+        fused_docs = rrf_fusion(
             effective_hits, self.max_documents, query_id=qid)
 
         # Extract document contents and IDs
-        doc_contents = [hit.metadata.text for hit in fused_docs.values()]
-        doc_ids = [hit.id for hit in fused_docs.values()]
+        doc_contents = [hit.metadata.text for hit in fused_docs]
+        doc_ids = [hit.id for hit in fused_docs]
 
         self.log.debug("Selected documents for context",
                        doc_count=len(doc_contents),

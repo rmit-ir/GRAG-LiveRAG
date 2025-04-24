@@ -10,7 +10,7 @@ from services.indicies import SearchHit
 
 logger = get_logger("fusion_utils")
 
-def apply_fusion_to_hits(hits_list: List[List[SearchHit]], max_documents: int, query_id: str = "query", rrf_k: int = 60) -> Dict[str, SearchHit]:
+def rrf_fusion(hits_list: List[List[SearchHit]], max_documents: int, query_id: str = "query", rrf_k: int = 60) -> List[SearchHit]:
     """
     Applies reciprocal rank fusion to multiple lists of SearchHit objects using trectools.
     
@@ -23,8 +23,7 @@ def apply_fusion_to_hits(hits_list: List[List[SearchHit]], max_documents: int, q
         rrf_k: Parameter for reciprocal rank fusion (default: 60)
         
     Returns:
-        Dictionary of document IDs to SearchHit objects, containing the top max_documents
-        documents after fusion
+        List of SearchHit objects containing the top max_documents documents after fusion
     """
     logger.debug("Preparing for fusion", 
                 hits_list_count=len(hits_list), 
@@ -32,7 +31,7 @@ def apply_fusion_to_hits(hits_list: List[List[SearchHit]], max_documents: int, q
     
     if not hits_list or all(not hits for hits in hits_list):
         logger.warning("No hits to fuse")
-        return {}
+        return []
     
     # Convert each list of hits to a TrecRun object
     trec_runs = []
@@ -46,7 +45,7 @@ def apply_fusion_to_hits(hits_list: List[List[SearchHit]], max_documents: int, q
     
     if not trec_runs:
         logger.warning("No valid TrecRun objects created")
-        return {}
+        return []
     
     # Apply reciprocal rank fusion
     fused_run = fusion.reciprocal_rank_fusion(trec_runs, k=rrf_k, max_docs=max_documents)
@@ -57,23 +56,23 @@ def apply_fusion_to_hits(hits_list: List[List[SearchHit]], max_documents: int, q
     # Create a dictionary to map document IDs to their original SearchHit objects
     hit_map = {hit.id: hit for hit in all_hits}
     
-    # Create a dictionary of SearchHit objects from the fused results
-    fused_hits = {}
+    # Directly create a list of SearchHit objects from the fused results
+    result = []
     for _, row in fused_df.iterrows():
         doc_id = row['docid']
         if doc_id in hit_map:
             # Use the original SearchHit object but update the score
             hit = hit_map[doc_id]
             # Create a new SearchHit with the fused score
-            fused_hits[doc_id] = SearchHit(
+            result.append(SearchHit(
                 id=hit.id,
                 score=row['score'],
                 metadata=hit.metadata,
                 retrieval_model=hit.retrieval_model
-            )
+            ))
     
-    logger.debug("Fusion completed", result_count=len(fused_hits))
-    return fused_hits
+    logger.debug("Fusion completed", result_count=len(result))
+    return result
 
 def _hits_to_trecrun(query_id: str, hits: List[SearchHit], tag: str) -> TrecRun:
     """

@@ -34,6 +34,7 @@ where = ["src"]
 
 [dependency-groups]
 dev = [
+    "autopep8>=2.3.2",
     "ipykernel>=6.29.5",
     "ipywidgets>=8.1.5",
 ]
