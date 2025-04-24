@@ -5,11 +5,11 @@ An advanced RAG implementation that uses Query Performance Prediction (QPP) to s
 ## How to Run
 
 ```bash
-uv run scripts/run.py --system systems.rewrite_queries_fusion_qpp.qpp_fusion_rag.QPPFusionSystem --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
+uv run scripts/run.py --system systems.qpp_fusion.qpp_fusion_rag.QPPFusionSystem --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
 ```
 
 For help with command-line options:
 
 ```bash
-uv run scripts/run.py --system systems.rewrite_queries_fusion_qpp.qpp_fusion_rag.QPPFusionSystem --help
+uv run scripts/run.py --system systems.qpp_fusion.qpp_fusion_rag.QPPFusionSystem --help
 ```

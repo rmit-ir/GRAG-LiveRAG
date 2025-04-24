@@ -1,5 +1,5 @@
 """
-uv run scripts/run.py --system systems.rewrite_queries_fusion_qpp.qpp_rag.FusionQPPSystem --help
+uv run scripts/run.py --system systems.qpp_fusion.qpp_rag.FusionQPPSystem --help
 """
 import re
 import time
@@ -49,7 +49,8 @@ class QPPFusionSystem(RAGSystemInterface):
         )
 
         # LLM client for sparse query generation (keyword-based search)
-        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
+        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(
+            max_queries=max_queries)
         self.sparse_query_generator = AI71Client(
             model_id="tiiuae/falcon3-10b-instruct",
             system_message=sparse_prompt,
@@ -57,7 +58,8 @@ class QPPFusionSystem(RAGSystemInterface):
         )
 
         # LLM client for dense query generation (semantic search)
-        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
+        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(
+            max_queries=max_queries)
         self.dense_query_generator = AI71Client(
             model_id="tiiuae/falcon3-10b-instruct",
             system_message=dense_prompt,
@@ -78,12 +80,12 @@ class QPPFusionSystem(RAGSystemInterface):
         """
         Sanitize a query by removing surrounding double quotes and <query> tags.
         Example input queries:
-        
+
         > 1. "<queries>How does the artwork 'For Proctor Silex' manipulate perspective to engage viewers as they move closer?"</queries>
-        
+
         Args:
             query: The query string to sanitize
-            
+
         Returns:
             Sanitized query string
         """
@@ -92,7 +94,7 @@ class QPPFusionSystem(RAGSystemInterface):
         if (query.startswith('"') and query.endswith('"')) or \
            (query.startswith("'") and query.endswith("'")):
             query = query[1:-1].strip()
-            
+
         # Remove <query></query> tags if present
         match = self.query_tag_pattern.match(query)
         if match:
@@ -100,9 +102,9 @@ class QPPFusionSystem(RAGSystemInterface):
         match = self.queries_tag_pattern.match(query)
         if match:
             query = match.group(1).strip()
-            
+
         return query
-        
+
     def _extract_queries(self, response: str) -> List[str]:
         """
         Extract queries from LLM response that contains HTML tags.
@@ -163,7 +165,7 @@ class QPPFusionSystem(RAGSystemInterface):
         qpp_scores['mean'] = self.qpp_service.calculate_mean_qpp(scores)
 
         return qpp_scores
-        
+
     def _generate_queries(self, question: str, engine_type: str, max_retries: int = 2) -> List[str]:
         """
         Generate queries optimized for a specific search engine type.
@@ -248,30 +250,35 @@ class QPPFusionSystem(RAGSystemInterface):
 
         # Collect all generated queries
         all_queries = [original_query] + sparse_queries + dense_queries
-        
+
         # Store query effectiveness data
         query_effectiveness = []
         hits_per_query = []
-        
+
         # Process each query to get hits and calculate QPP scores
         for i, query in enumerate(all_queries):
             # Determine search method based on query type
             if i == 0:  # Original query
-                hits = self.query_service.query_fusion(query, k=self.max_documents)
+                hits = self.query_service.query_fusion(
+                    query, k=self.max_documents)
                 query_type = "original"
             elif i <= len(sparse_queries):  # Sparse queries
-                hits = self.query_service.query_keywords(query, k=self.max_documents)
+                hits = self.query_service.query_keywords(
+                    query, k=self.max_documents)
                 query_type = "sparse"
             else:  # Dense queries
-                hits = self.query_service.query_embedding(query, k=self.max_documents)
+                hits = self.query_service.query_embedding(
+                    query, k=self.max_documents)
                 query_type = "dense"
-            
+
             # Calculate QPP scores for this query's results
             if hits:
                 scores = [hit.score for hit in hits]
                 qpp_scores = self._calculate_qpp_scores(scores)
-                confidence_score = self.qpp_service.calculate_confidence_score(qpp_scores)
-                
+                confidence_score = self.qpp_service.calculate_confidence_score(
+                    # qpp_scores, weights={'entropy': 1.0})
+                    qpp_scores, weights={'entropy': 1.0})
+
                 # Store query effectiveness data
                 query_effectiveness.append({
                     'query': query,
@@ -280,35 +287,38 @@ class QPPFusionSystem(RAGSystemInterface):
                     'confidence_score': confidence_score,
                     'index': i  # Keep original index for stable sorting
                 })
-                
+
                 # Store hits for this query
                 hits_per_query.append(hits)
-                
+
                 self.log.debug(f"Retrieved documents for {query_type} query",
-                              query=query,
-                              hits_count=len(hits),
-                              confidence_score=confidence_score,
-                              entropy=qpp_scores.get('entropy'),
-                              sd=qpp_scores.get('sd'),
-                              mean=qpp_scores.get('mean'))
+                               query=query,
+                               hits_count=len(hits),
+                               confidence_score=confidence_score,
+                               entropy=qpp_scores.get('entropy'),
+                               sd=qpp_scores.get('sd'),
+                               mean=qpp_scores.get('mean'))
             else:
-                self.log.warning(f"No hits for {query_type} query", query=query)
-        
+                self.log.warning(
+                    f"No hits for {query_type} query", query=query)
+
         # Sort queries by effectiveness (confidence score)
-        query_effectiveness.sort(key=lambda x: x['confidence_score'], reverse=True)
-        
+        query_effectiveness.sort(
+            key=lambda x: x['confidence_score'], reverse=True)
+
         # Take only the top effective queries
         total_queries = len(query_effectiveness)
         effective_queries = query_effectiveness[:self.max_effective_queries]
         removed_queries = total_queries - len(effective_queries)
-        
+
         self.log.info("Selected most effective queries",
-                     total_queries=total_queries,
-                     selected_queries=len(effective_queries),
-                     removed_queries=removed_queries)
-        
+                      total_queries=total_queries,
+                      selected_queries=len(effective_queries),
+                      removed_queries=removed_queries)
+
         # Get hits only for the most effective queries
-        effective_hits = [hits_per_query[q['index']] for q in effective_queries]
+        effective_hits = [hits_per_query[q['index']]
+                          for q in effective_queries]
 
         # Apply fusion to get the top documents using only the most effective queries
         qid = qid or generate_query_id(question)
@@ -337,7 +347,7 @@ class QPPFusionSystem(RAGSystemInterface):
 
         # Extract the effective queries for the result
         effective_query_list = [q['query'] for q in effective_queries]
-        
+
         # Create QPP metadata for the result
         qpp_metadata = {
             'total_queries': total_queries,

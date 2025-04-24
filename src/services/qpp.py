@@ -21,7 +21,7 @@ class QPPService:
         self.default_k = default_k
         self.log.info("QPP Service initialized", default_k=default_k)
     
-    def calculate_entropy_qpp(self, scores: List[float], k: Optional[int] = None) -> float:
+    def calculate_entropy_qpp(self, scores: List[float]) -> float:
         """
         Calculate entropy-based QPP score.
         
@@ -30,12 +30,11 @@ class QPPService:
         
         Args:
             scores: List of retrieval scores
-            k: Number of top documents to use (defaults to self.default_k)
             
         Returns:
             Negative entropy score (higher is better)
         """
-        k = k or self.default_k
+        k = self.default_k
         # Use only top k scores
         top_scores = scores[:k] if len(scores) > k else scores
         
@@ -55,7 +54,7 @@ class QPPService:
         # Return negative entropy (higher is better)
         return -entropy
     
-    def calculate_sd_qpp(self, scores: List[float], k: Optional[int] = None) -> float:
+    def calculate_sd_qpp(self, scores: List[float]) -> float:
         """
         Calculate standard deviation based QPP score.
         
@@ -63,12 +62,11 @@ class QPPService:
         
         Args:
             scores: List of retrieval scores
-            k: Number of top documents to use (defaults to self.default_k)
             
         Returns:
             Standard deviation score
         """
-        k = k or self.default_k
+        k = self.default_k
         # Use only top k scores
         top_scores = scores[:k] if len(scores) > k else scores
         
@@ -79,7 +77,7 @@ class QPPService:
         # Calculate standard deviation
         return np.std(top_scores)
     
-    def calculate_mean_qpp(self, scores: List[float], k: Optional[int] = None) -> float:
+    def calculate_mean_qpp(self, scores: List[float]) -> float:
         """
         Calculate mean-based QPP score.
         
@@ -87,12 +85,11 @@ class QPPService:
         
         Args:
             scores: List of retrieval scores
-            k: Number of top documents to use (defaults to self.default_k)
             
         Returns:
             Mean score
         """
-        k = k or self.default_k
+        k = self.default_k
         # Use only top k scores
         top_scores = scores[:k] if len(scores) > k else scores
         
@@ -103,12 +100,15 @@ class QPPService:
         # Calculate mean
         return np.mean(top_scores)
     
-    def calculate_confidence_score(self, qpp_scores: Dict[str, float]) -> float:
+    def calculate_confidence_score(self, qpp_scores: Dict[str, float], weights: Optional[Dict[str, float]] = None) -> float:
         """
         Calculate an overall confidence score based on multiple QPP scores.
         
         Args:
             qpp_scores: Dictionary of QPP method names and their scores
+            weights: Optional dictionary of weights for each QPP method. 
+                     If not provided, default weights will be used:
+                     {'entropy': 0.5, 'sd': 0.3, 'mean': 0.2}
             
         Returns:
             Confidence score between 0 and 1
@@ -125,35 +125,41 @@ class QPPService:
             # Entropy is already negative, so higher values are better
             # Normalize assuming typical range is [-5, 0]
             entropy = qpp_scores['entropy']
-            normalized_scores['entropy'] = min(1.0, max(0.0, (entropy + 5) / 5))
+            entropy_shift = np.log(self.default_k)  # e.g., -log(10) ≈ -2.3
+            # shift to [0, 5] and scale to [0, 1]
+            normalized_scores['entropy'] = min(1.0, max(0.0, (entropy + entropy_shift) / entropy_shift))
         
         # SD typically ranges from 0 to some positive value, normalize to [0, 1]
         if 'sd' in qpp_scores:
-            # Normalize assuming typical range is [0, 2]
             sd = qpp_scores['sd']
-            normalized_scores['sd'] = min(1.0, max(0.0, sd / 2))
+            # Theoretical max SD increases with k
+            theoretical_max_sd = np.sqrt((self.default_k - 1) / (12 * self.default_k))
+            # Use 2x theoretical max for normalization to handle real-world distributions
+            normalized_scores['sd'] = min(1.0, max(0.0, sd / (2 * theoretical_max_sd)))
         
         # Mean typically ranges from some negative to positive value, normalize to [0, 1]
         if 'mean' in qpp_scores:
-            # Normalize assuming typical range is [-2, 2]
+            # Normalize assuming typical range is [-2, 2], usually cos-sim score is 0-1, 2 for safety
             mean = qpp_scores['mean']
             normalized_scores['mean'] = min(1.0, max(0.0, (mean + 2) / 4))
         
-        # Calculate weighted average of normalized scores
-        # Weights based on empirical performance from the paper
-        weights = {
+        # Use provided weights or default weights
+        default_weights = {
             'entropy': 0.5,
             'sd': 0.3,
             'mean': 0.2
         }
         
+        # Use provided weights if available, otherwise use defaults
+        actual_weights = weights if weights is not None else default_weights
+        
         total_weight = 0.0
         weighted_sum = 0.0
         
         for method, score in normalized_scores.items():
-            if method in weights:
-                weighted_sum += score * weights[method]
-                total_weight += weights[method]
+            if method in actual_weights:
+                weighted_sum += score * actual_weights[method]
+                total_weight += actual_weights[method]
         
         if total_weight == 0:
             return 0.0
