@@ -1020,7 +1020,6 @@ def cleanup_on_exit():
     logger.info("Script is exiting. Ensuring all resources are cleaned up...")
     if deployer:
         deployer.cleanup()
-    sys.exit(0)
 
 
 def list_ec2_llm_sockets() -> List[str]:
