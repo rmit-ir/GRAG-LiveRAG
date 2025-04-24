@@ -9,6 +9,7 @@ from datetime import datetime
 from evaluators.evaluator_interface import test_evaluator
 from evaluators.llm_evaluator.llm_evaluator import LLMEvaluator
 from services.ds_data_morgana import QAPair
+from services.llms.bedrock_client import BedrockClient
 from utils.logging_utils import get_logger
 from utils.fusion_utils import rrf_fusion
 from utils.query_utils import generate_query_id
@@ -36,7 +37,10 @@ class QPPFusionSystem(RAGSystemInterface):
                  max_queries: int = 5,
                  qpp_k: int = 10,
                  max_effective_queries: int = 5,
-                 llm_client: str = "ai71_client"):
+                 q_gen_model_id: str = "tiiuae/falcon3-10b-instruct",
+                 rag_model_id: str = "tiiuae/falcon3-10b-instruct",
+                 q_gen_llm_client: str = "ai71_client",
+                 rag_llm_client: str = "ai71_client"):
         """
         Initialize the FusionQPPSystem.
 
@@ -45,76 +49,122 @@ class QPPFusionSystem(RAGSystemInterface):
             max_queries: Maximum number of search queries to generate (including the original)
             qpp_k: Number of top documents to use for QPP calculation
             max_effective_queries: Maximum number of most effective queries to use
-            llm_client: LLM client to use: ai71_client, general_openai_client
+            q_gen_model_id: Model ID for query generation LLM
+            rag_model_id: Model ID for RAG generation LLM 
+            q_gen_llm_client: Client type for query generation LLM, ai71_client, general_openai_client, bedrock_client
+            rag_llm_client: Client type for RAG generation LLM, ai71_client, general_openai_client, bedrock_client
         """
         self.query_service = QueryService()
         self.qpp_service = QPPService(default_k=qpp_k)
-
-        model_id = "tiiuae/falcon3-10b-instruct"
-
-        # Prepare prompts
-        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(
-            max_queries=max_queries)
-        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(
-            max_queries=max_queries)
-
-        # Initialize the appropriate LLM client type
-        if llm_client == "general_openai_client":
-            # LLM client for answer generation
-            self.llm_client = GeneralOpenAIClient(
-                model_id=model_id,
-                system_message=SYSTEM_PROMPT,
-                max_tokens=200,
-                temperature=0.0,
-            )
-
-            # LLM client for sparse query generation (keyword-based search)
-            self.sparse_query_generator = GeneralOpenAIClient(
-                model_id=model_id,
-                system_message=sparse_prompt,
-                temperature=0.5  # Set temperature for diversity in retry scenarios
-            )
-
-            # LLM client for dense query generation (semantic search)
-            self.dense_query_generator = GeneralOpenAIClient(
-                model_id=model_id,
-                system_message=dense_prompt,
-                temperature=0.5  # Set temperature for diversity in retry scenarios
-            )
-        else:
-            # LLM client for answer generation
-            self.llm_client = AI71Client(
-                model_id=model_id,
-                system_message=SYSTEM_PROMPT,
-                max_tokens=200,
-                temperature=0.0,
-            )
-
-            # LLM client for sparse query generation (keyword-based search)
-            self.sparse_query_generator = AI71Client(
-                model_id=model_id,
-                system_message=sparse_prompt,
-                temperature=0.5  # Set temperature for diversity in retry scenarios
-            )
-
-            # LLM client for dense query generation (semantic search)
-            self.dense_query_generator = AI71Client(
-                model_id=model_id,
-                system_message=dense_prompt,
-                temperature=0.5  # Set temperature for diversity in retry scenarios
-            )
-
         self.max_documents = max_documents
         self.max_query_documents = max_query_documents
         self.max_queries = max_queries
         self.max_effective_queries = max_effective_queries
+
+        self.load_llm_clients(q_gen_llm_client, rag_llm_client,
+                              q_gen_model_id, rag_model_id)
+
         self.log.info("QPPFusionSystem initialized",
-                      llm_model=model_id,
-                      llm_client=llm_client,
+                      q_gen_model_id=q_gen_model_id,
+                      rag_model_id=rag_model_id,
+                      q_gen_llm_client=q_gen_llm_client,
+                      rag_llm_client=rag_llm_client,
                       max_documents=max_documents,
                       max_queries=max_queries,
                       qpp_k=qpp_k,
                       max_effective_queries=max_effective_queries)
+
+    def load_llm_clients(self, q_gen_llm_client: str, rag_llm_client: str, q_gen_model_id: str, rag_model_id: str):
+        """
+        Load LLM clients for query generation and RAG answer generation.
+        
+        Args:
+            q_gen_llm_client: Client type for query generation ("bedrock_client", "general_openai_client", or "ai71_client")
+            rag_llm_client: Client type for RAG answer generation ("bedrock_client", "general_openai_client", or "ai71_client")
+            q_gen_model_id: Model ID for query generation
+            rag_model_id: Model ID for RAG answer generation
+        """
+        # Prepare query generation prompts
+        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(max_queries=self.max_queries)
+        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(max_queries=self.max_queries)
+        
+        # Initialize query generation clients
+        # If model contains "sonnet" or "claude", use BedrockClient regardless of q_gen_llm_client setting
+        if 'sonnet' in q_gen_model_id.lower() or 'claude' in q_gen_model_id.lower():
+            self.sparse_query_generator = BedrockClient(
+                model_id=q_gen_model_id,
+                system_message=sparse_prompt,
+                temperature=0.5
+            )
+            self.dense_query_generator = BedrockClient(
+                model_id=q_gen_model_id,
+                system_message=dense_prompt,
+                temperature=0.5
+            )
+        elif q_gen_llm_client == "general_openai_client":
+            self.sparse_query_generator = GeneralOpenAIClient(
+                model_id=q_gen_model_id,
+                system_message=sparse_prompt,
+                temperature=0.5
+            )
+            self.dense_query_generator = GeneralOpenAIClient(
+                model_id=q_gen_model_id,
+                system_message=dense_prompt,
+                temperature=0.5
+            )
+        elif q_gen_llm_client == "bedrock_client":
+            self.sparse_query_generator = BedrockClient(
+                model_id=q_gen_model_id,
+                system_message=sparse_prompt,
+                temperature=0.5
+            )
+            self.dense_query_generator = BedrockClient(
+                model_id=q_gen_model_id,
+                system_message=dense_prompt,
+                temperature=0.5
+            )
+        else:  # Default to AI71Client
+            self.sparse_query_generator = AI71Client(
+                model_id=q_gen_model_id,
+                system_message=sparse_prompt,
+                temperature=0.5
+            )
+            self.dense_query_generator = AI71Client(
+                model_id=q_gen_model_id,
+                system_message=dense_prompt,
+                temperature=0.5
+            )
+
+        # Initialize RAG answer generation client
+        # If model contains "sonnet" or "claude", use BedrockClient regardless of rag_llm_client setting
+        if 'sonnet' in rag_model_id.lower() or 'claude' in rag_model_id.lower():
+            self.llm_client = BedrockClient(
+                model_id=rag_model_id,
+                system_message=SYSTEM_PROMPT,
+                max_tokens=200,
+                temperature=0.0
+            )
+        elif rag_llm_client == "general_openai_client":
+            self.llm_client = GeneralOpenAIClient(
+                model_id=rag_model_id,  # Fixed: Use rag_model_id instead of q_gen_model_id
+                system_message=SYSTEM_PROMPT,
+                max_tokens=200,
+                temperature=0.0
+            )
+        elif rag_llm_client == "bedrock_client":
+            self.llm_client = BedrockClient(
+                model_id=rag_model_id,
+                system_message=SYSTEM_PROMPT,
+                max_tokens=200,
+                temperature=0.0
+            )
+        else:  # Default to AI71Client
+            self.llm_client = AI71Client(
+                model_id=rag_model_id,  # Fixed: Use rag_model_id instead of q_gen_model_id
+                system_message=SYSTEM_PROMPT,
+                max_tokens=200,
+                temperature=0.0
+            )
 
     def _sanitize_query(self, query: str) -> str:
         """
@@ -428,7 +478,7 @@ if __name__ == "__main__":
 
     # RAG
     result = test_rag_system(QPPFusionSystem(
-        llm_client="ai71_client"
+        rag_llm_client="ai71_client"
     ), "effect of others apathy vs conformity pressure academic performance motivation")
 
     # Evaluate

@@ -1000,7 +1000,6 @@ class EC2LLMDeployer:
                     f"If cleanup failed due to session issues, please manually delete the stack '{self.stack_name}'")
                 logger.error(
                     f"Visit: https://{self.region_name}.console.aws.amazon.com/cloudformation/home?region={self.region_name}#/stacks")
-        sys.exit(0)
 
 
 def signal_handler(sig, frame):
