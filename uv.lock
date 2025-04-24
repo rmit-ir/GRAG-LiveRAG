@@ -59,6 +59,17 @@ wheels = [
 ]
 
 [[package]]
+name = "awspricing"
+version = "2.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "boto3" },
+    { name = "requests" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3c/0d/3d164fe9a279db2dc5f9ddde5b5e5eae210a566d810e437cbd1170bb5452/awspricing-2.0.3.tar.gz", hash = "sha256:5ec59efba68bae753384e500b5dde8783d2ecae132c0a4078f84babc651c1275", size = 9175 }
+
+[[package]]
 name = "beautifulsoup4"
 version = "4.13.3"
 source = { registry = "https://pypi.org/simple" }
@@ -969,6 +980,7 @@ name = "liverag"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "awspricing" },
     { name = "boto3" },
     { name = "langchain-aws" },
     { name = "langchain-openai" },
@@ -994,6 +1006,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "awspricing", specifier = ">=2.0.3" },
     { name = "boto3", specifier = "==1.35.88" },
     { name = "langchain-aws", specifier = ">=0.2.13" },
     { name = "langchain-openai", specifier = ">=0.3.12" },

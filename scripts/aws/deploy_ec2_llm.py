@@ -20,8 +20,10 @@ import atexit
 import threading
 import socket
 import glob
+import datetime
+import awspricing
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 from botocore.exceptions import ClientError, WaiterError
 
@@ -64,6 +66,9 @@ class EC2LLMDeployer:
             ami_id (str): AMI ID to use for the EC2 instance (Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6)
             deployer_id (str, optional): Custom ID for this deployer. If None, generates one
         """
+        # Initialize timing tracking
+        self.start_time = None
+        self.stop_time = None
         # Generate a short ID for this deployer or use the provided one
         self.deployer_id = deployer_id if deployer_id else generate_short_id()
 
@@ -106,7 +111,7 @@ class EC2LLMDeployer:
         self.instance_id = None
 
         # Socket related attributes
-        self.socket_path = f"/tmp/ec2_llm_{self.deployer_id}"
+        self.socket_path = f"/tmp/ec2_llm_{self.deployer_id}_port{self.local_port}"
         self.socket_thread = None
         self.socket_server = None
         self._should_stop = False
@@ -138,12 +143,12 @@ class EC2LLMDeployer:
         logger.info(f"Model ID", model_id=self.model_id)
         logger.info(f"Local Endpoint", local_endpoint=f"http://localhost:{self.local_port}/v1")
 
-        # AWS Calculator link
-        calculator_url = "https://calculator.aws/#/createCalculator/ec2-enhancement"
-        logger.info(f"Estimate cost", calculator_url=calculator_url)
-        logger.info("In the calculator:")
-        logger.info(f"1. Choose a Region", region=self.region_name)
-        logger.info(f"2. Search instance type", instance_type=self.instance_type)
+        # # AWS Calculator link
+        # calculator_url = "https://calculator.aws/#/createCalculator/ec2-enhancement"
+        # logger.info(f"Estimate cost", calculator_url=calculator_url)
+        # logger.info("In the calculator:")
+        # logger.info(f"1. Choose a Region", region=self.region_name)
+        # logger.info(f"2. Search instance type", instance_type=self.instance_type)
 
         logger.info("=" * 60)
 
@@ -291,6 +296,38 @@ class EC2LLMDeployer:
             )
             logger.info(f"Stack {operation_type} completed successfully.")
 
+    def calculate_cost(self) -> float:
+        """
+        Calculate the cost of the EC2 instance based on the instance type, region, and usage time.
+
+        Returns:
+            float: The total cost
+        """
+        try:
+            # Set AWS credentials from environment variables
+            os.environ['AWS_ACCESS_KEY_ID'] = os.environ.get('RACE_AWS_ACCESS_KEY_ID', '')
+            os.environ['AWS_SECRET_ACCESS_KEY'] = os.environ.get('RACE_AWS_SECRET_ACCESS_KEY', '')
+            os.environ['AWS_SESSION_TOKEN'] = os.environ.get('RACE_AWS_SESSION_TOKEN', '')
+            os.environ['AWS_DEFAULT_REGION'] = os.environ.get('RACE_AWS_REGION', 'us-west-2')
+
+            # Get EC2 offer
+            ec2_offer = awspricing.offer('AmazonEC2')
+            
+            # Get on-demand hourly rate for the instance type
+            hourly_price = ec2_offer.ondemand_hourly(self.instance_type, 'Linux', region=self.region_name)
+            
+            # Calculate duration in hours
+            duration_seconds = (self.stop_time - self.start_time).total_seconds()
+            duration_hours = duration_seconds / 3600
+            
+            # Calculate total cost
+            total_cost = hourly_price * duration_hours
+            
+            return total_cost
+        except Exception as e:
+            logger.error(f"Error calculating cost: {str(e)}")
+            return 0.0
+
     def deploy(self) -> Dict[str, Any]:
         """
         Deploy the LLM on EC2 using CloudFormation.
@@ -298,6 +335,10 @@ class EC2LLMDeployer:
         Returns:
             Dict containing stack details
         """
+        # Record the start time
+        self.start_time = datetime.datetime.now()
+        logger.info(f"Stack deployment started at {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        
         try:
             # Get the CloudFormation template
             template_path = Path(__file__).parent / \
@@ -690,33 +731,13 @@ class EC2LLMDeployer:
         raise TimeoutError(
             f"vLLM did not become ready in ({max_wait_time} seconds)")
 
-    def test_llm(self, max_wait_time: int = 900) -> bool:
+    def test_llm(self) -> bool:
         """
-        Send a test request to the LLM and print the response.
-
-        Args:
-            max_wait_time (int): Maximum time to wait for the LLM to be ready in seconds
-
-        Returns:
-            bool: True if the test was successful, False otherwise
-
-        Raises:
-            TimeoutError: If the LLM does not become ready within the specified time
+        Send a test request to LLM
         """
-        if not self.instance_id:
-            logger.error("No instance ID available. Deploy the stack first.")
-            return False
-
-        # Poll the health endpoint until the LLM is ready
-        try:
-            self.wait_for_llm_ready(max_wait_time=max_wait_time)
-        except TimeoutError as e:
-            logger.error(f"LLM is not ready: {str(e)}")
-            raise
-
         try:
             # Prepare the test request
-            url = f"http://localhost:{self.local_port}/v1/completions"
+            url = f"http://localhost:{self.local_port}/v1/chat/completions"
             headers = {
                 "Content-Type": "application/json"
             }
@@ -725,10 +746,13 @@ class EC2LLMDeployer:
             if self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"
 
-            # Prepare a friendly welcome message
+            # Prepare a friendly welcome message using chat format
             data = {
                 "model": self.model_id,
-                "prompt": "Say hello and introduce yourself as a helpful AI assistant deployed on AWS EC2.",
+                "messages": [
+                    {"role": "system", "content": "You are a helpful AI assistant deployed on AWS EC2."},
+                    {"role": "user", "content": "Say hello and introduce yourself."}
+                ],
                 "max_tokens": 100,
                 "temperature": 0.7
             }
@@ -740,7 +764,7 @@ class EC2LLMDeployer:
             if response.status_code == 200:
                 result = response.json()
                 generated_text = result.get("choices", [{}])[
-                    0].get("text", "").strip()
+                    0].get("message", {}).get("content", "").strip()
 
                 logger.info("LLM Test Response:")
                 logger.info("-" * 50)
@@ -764,7 +788,7 @@ class EC2LLMDeployer:
 
     def register_socket(self):
         """
-        Register a socket at /tmp/ec2_llm_{deployer_id} that listens for 'kill-stack' commands.
+        Register a socket at /tmp/ec2_llm_{deployer_id}_port{port} that listens for 'kill-stack' commands.
         When 'kill-stack' is received, the deployer will clean up everything.
 
         Returns:
@@ -774,6 +798,9 @@ class EC2LLMDeployer:
             # Create a Unix domain socket
             self.socket_server = socket.socket(
                 socket.AF_UNIX, socket.SOCK_STREAM)
+
+            # Update socket path to include port information
+            self.socket_path = f"/tmp/ec2_llm_{self.deployer_id}_port{self.local_port}"
 
             # Remove the socket file if it already exists
             if os.path.exists(self.socket_path):
@@ -885,6 +912,31 @@ class EC2LLMDeployer:
         """
         Clean up all resources.
         """
+        # Record the stop time
+        self.stop_time = datetime.datetime.now()
+        
+        # Calculate and report the runtime and cost
+        if self.start_time:
+            runtime = self.stop_time - self.start_time
+            hours, remainder = divmod(runtime.total_seconds(), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            
+            logger.info("=" * 60)
+            logger.info("STACK TIMING AND COST REPORT")
+            logger.info("=" * 60)
+            logger.info(f"Start time: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Stop time: {self.stop_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Total runtime: {int(hours)}h {int(minutes)}m {int(seconds)}s")
+            
+            # Calculate and report cost
+            try:
+                total_cost = self.calculate_cost()
+                logger.info(f"Estimated cost: ${total_cost:.2f}")
+            except Exception as e:
+                logger.error(f"Error calculating cost: {str(e)}")
+            
+            logger.info("=" * 60)
+        
         self._cleanup_socket()
 
         if self.stack_name:
@@ -972,6 +1024,24 @@ def list_ec2_llm_sockets() -> List[str]:
     return socket_files
 
 
+def extract_port_from_socket_path(socket_path: str) -> Optional[int]:
+    try:
+        # Extract port from socket path using regex
+        import re
+        match = re.search(r'_port(\d+)$', socket_path)
+        if match:
+            return int(match.group(1))
+        return None
+    except Exception as e:
+        logger.error(f"Error extracting port from socket path: {str(e)}")
+        return None
+
+
+def find_socket_by_id(instance_id: str) -> List[str]:
+    socket_files = glob.glob(f"/tmp/ec2_llm_{instance_id}*")
+    return socket_files
+
+
 def stop_instances(instance_id: Optional[str] = None) -> None:
     """
     Stop running EC2 LLM instances.
@@ -988,7 +1058,9 @@ def stop_instances(instance_id: Optional[str] = None) -> None:
 
         logger.info(f"Found {len(socket_files)} running EC2 LLM instances:")
         for socket_file in socket_files:
-            logger.info(f"  {socket_file}")
+            port = extract_port_from_socket_path(socket_file)
+            port_info = f" (port: {port})" if port else ""
+            logger.info(f"  {socket_file}{port_info}")
 
         # Send kill command to all sockets
         logger.info("Sending kill command to all instances...")
@@ -997,20 +1069,73 @@ def stop_instances(instance_id: Optional[str] = None) -> None:
 
         logger.info("All instances have been instructed to shut down.")
     else:
-        # Send kill command to the specified socket
-        socket_path = f"/tmp/ec2_llm_{instance_id}"
-        if os.path.exists(socket_path):
-            logger.info(
-                f"Sending kill command to instance with ID {instance_id}...")
-            if send_kill_command_to_socket(socket_path):
-                logger.info(
-                    f"Instance with ID {instance_id} has been instructed to shut down.")
-            else:
-                logger.error(
-                    f"Failed to send kill command to instance with ID {instance_id}.")
+        # Find sockets for the specified instance ID
+        socket_files = find_socket_by_id(instance_id)
+        if socket_files:
+            logger.info(f"Found {len(socket_files)} sockets for instance ID {instance_id}:")
+            for socket_file in socket_files:
+                port = extract_port_from_socket_path(socket_file)
+                port_info = f" (port: {port})" if port else ""
+                logger.info(f"  {socket_file}{port_info}")
+                
+            # Send kill command to all found sockets
+            logger.info(f"Sending kill command to instance with ID {instance_id}...")
+            for socket_file in socket_files:
+                send_kill_command_to_socket(socket_file)
+                
+            logger.info(f"Instance with ID {instance_id} has been instructed to shut down.")
         else:
-            logger.error(
-                f"No running EC2 LLM instance found with ID {instance_id}.")
+            logger.error(f"No running EC2 LLM instance found with ID {instance_id}.")
+
+
+def wait_for_llm_instances(instance_id: Optional[str] = None, check_interval: int = 5) -> bool:
+    """
+    Wait for LLM instances to be ready by polling test_llm until it returns true.
+    
+    Args:
+        instance_id (Optional[str]): ID of the instance to wait for. If None, waits for any instance.
+        check_interval (int): Time between checks in seconds
+        max_wait_time (int): Maximum time to wait in seconds
+        
+    Returns:
+        bool: True if an instance is ready, False otherwise
+    """
+    logger.info(f"Waiting for {'any' if instance_id is None else instance_id} LLM instance to be ready...")
+    
+    while True:
+        # List all socket files or specific instance sockets
+        if instance_id is None:
+            socket_files = list_ec2_llm_sockets()
+        else:
+            socket_files = find_socket_by_id(instance_id)
+            
+        if not socket_files:
+            logger.info(f"No {'any' if instance_id is None else instance_id} LLM instances found. Waiting...")
+            time.sleep(check_interval)
+            continue
+            
+        # Try to test each instance
+        for socket_file in socket_files:
+            try:
+                # Extract port from socket path
+                port = extract_port_from_socket_path(socket_file)
+                if port is None:
+                    logger.warning(f"Could not extract port from socket path: {socket_file}")
+                    continue
+                    
+                # Create a temporary deployer to test the LLM
+                temp_deployer = EC2LLMDeployer(local_port=port)
+                
+                # Test if the LLM is ready
+                if temp_deployer.test_llm():
+                    logger.info(f"LLM instance at port {port} is ready!")
+                    return True
+            except Exception as e:
+                logger.debug(f"Error testing LLM at {socket_file}: {str(e)}")
+                
+        # Wait before checking again
+        logger.info(f"No ready LLM instances found. Retrying in {check_interval} seconds...")
+        time.sleep(check_interval)
 
 
 def send_kill_command_to_socket(socket_path: str) -> bool:
@@ -1093,6 +1218,8 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
                         help="Custom ID for this deployer (used for deployer identification)")
     parser.add_argument("--stop", type=str, default=None, nargs='?', const='all', metavar="ID",
                         help="Stop running EC2 LLM instances. If no ID is provided, stops all instances. If ID is provided, stops only that instance.")
+    parser.add_argument("--wait", type=str, default=None, nargs='?', const='all', metavar="ID",
+                        help="Wait for LLM instances to be ready. If no ID is provided, waits for any instance. If ID is provided, waits only for that instance.")
 
     args = parser.parse_args()
 
@@ -1100,6 +1227,12 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
     if args.stop is not None:
         instance_id = None if args.stop == 'all' else args.stop
         stop_instances(instance_id)
+        sys.exit(0)
+        
+    # Handle the --wait argument if provided (if provided but without id, it will be all, if not provided, it will be None)
+    if args.wait is not None:
+        instance_id = None if args.wait == 'all' else args.wait
+        wait_for_llm_instances(instance_id, check_interval=5)
         sys.exit(0)
 
     # Register signal handlers for various termination signals
@@ -1152,7 +1285,8 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
 
                 # Send a test request to the LLM if requested
                 if args.test:
-                    deployer.test_llm(max_wait_time=args.wait_time)
+                    deployer.wait_for_llm_ready(max_wait_time=args.wait_time)
+                    deployer.test_llm()
 
             # Keep the main thread running until interrupted
             try:
