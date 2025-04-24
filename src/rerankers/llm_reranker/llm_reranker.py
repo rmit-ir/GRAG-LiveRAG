@@ -93,7 +93,7 @@ class LLMReranker(RerankerInterface):
         elif self.strategy == "listwise":
             reranked_hits = self._listwise_rerank(query, truncated_hits)
         elif self.strategy == "setwise":
-            reranked_hits = self._setwise_rerank(query, truncated_hits)
+            reranked_hits = self._setwise_rerank(query, truncated_hits, k)
         else:
             # This should never happen due to validation in __init__
             self.log.error("Unknown reranking strategy",
@@ -359,7 +359,7 @@ class LLMReranker(RerankerInterface):
 
         return reranked_hits
 
-    def _setwise_rerank(self, query: str, hits: List[SearchHit]) -> List[SearchHit]:
+    def _setwise_rerank(self, query: str, hits: List[SearchHit], k: int = None) -> List[SearchHit]:
         """
         Rerank documents using setwise strategy.
         Iteratively select the most relevant document from the set.
@@ -367,6 +367,7 @@ class LLMReranker(RerankerInterface):
         Args:
             query: The user query
             hits: List of retrieved documents
+            k: Number of documents to return (default: all)
 
         Returns:
             Reranked list of SearchHit objects
@@ -379,11 +380,22 @@ class LLMReranker(RerankerInterface):
         remaining_hits = hits.copy()
         reranked_hits = []
 
+        # Set default value for k if not provided
+        if k is None:
+            k = len(hits)
+
         # Iteratively select the most relevant document
         while remaining_hits:
             if len(remaining_hits) == 1:
                 # Last document, just add it
                 reranked_hits.append(remaining_hits[0])
+                break
+            
+            # Early return if we've collected enough documents
+            if len(reranked_hits) >= k:
+                self.log.debug("Early return from setwise reranking", 
+                               collected=len(reranked_hits), 
+                               requested=k)
                 break
 
             # Extract document texts

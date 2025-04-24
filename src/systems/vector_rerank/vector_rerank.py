@@ -155,7 +155,7 @@ if __name__ == "__main__":
     load_dotenv()
 
     result = test_rag_system(VectorRerank(
-        rag_llm_client="general_openai_client",
+        rag_llm_client="ai71_client",
     ), "I'm interested in crime-solving games but want something more educational - are there any games that teach you real skills while you investigate cases?")
 
     # Evaluate
