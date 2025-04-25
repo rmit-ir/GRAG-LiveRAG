@@ -91,3 +91,4 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 | 2025-04-25 | qpp_fusion eff_queries=4 | Unknown | 1.42 | 0.58 |
 | 2025-04-25 | vector_rerank setwise | dmds_JK09SKjyanxs1.multi.n5.tsv | 0.6 | 0 |
 | 2025-04-25 | vector_rerank setwise | dmds_fJ20pJnq9zc05.easy.n5.tsv | 1.6 | 0.4 |
+| 2025-04-25 | basic_rag | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.0 | 0.4 |

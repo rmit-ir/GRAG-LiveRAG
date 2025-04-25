@@ -97,4 +97,4 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
 
     load_dotenv()
-    test_rag_system(VectorRAG(), "What is the capital of France?")
+    test_rag_system(VectorRAG(), "How many housing units does Andrew's Glen provide?")

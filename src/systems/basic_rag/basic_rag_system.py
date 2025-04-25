@@ -98,4 +98,4 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
 
     load_dotenv()
-    test_rag_system(BasicRAGSystem(), "What is retrieval-augmented generation?")
+    test_rag_system(BasicRAGSystem(), "How many housing units does Andrew's Glen provide?")
