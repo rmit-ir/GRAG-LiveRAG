@@ -92,6 +92,6 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 | 2025-04-25 | vector_rerank setwise | dmds_JK09SKjyanxs1.multi.n5.tsv | 0.6 | 0 | - | - |
 | 2025-04-25 | vector_rerank setwise | dmds_fJ20pJnq9zc05.easy.n5.tsv | 1.6 | 0.4 | - | - |
 | 2025-04-25 | basic_rag k=10 | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.0 | 0.4 | - | - |
-| 2025-04-25 | basic_rag k=20 | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.0 | 0.4 | 0.5 | - |
-| 2025-04-25 | basic_rag k10, new prompt | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.2 | 0.8 | 0.5 | - |
+| 2025-04-25 | basic_rag k=20 | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.0 | 0.4 | 0.5 | 0.25 |
+| 2025-04-25 | basic_rag k10, new prompt | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.2 | 0.8 | 0.5 | 0.25 |
 | 2025-04-25 | basic_rag k10, new prompt | dmds_fJ20pJnq9zcO1.n100.tsv | 1.41 | 0.59 | 0.46 | 0.34 |
