@@ -22,6 +22,15 @@ The evaluator calculates the following metrics:
 - **Gold Docs Count**: The number of documents in the gold context
 - **Correct Docs Count**: The number of documents that were correctly retrieved
 
+### Interpretation
+
+- Higher recall indicates that the retrieval system is finding most of the relevant documents
+- Higher precision indicates that the retrieval system is not including many irrelevant documents, not needed for LiveRAG (gold document is only 1 or 2)
+- Higher F1 indicates a good balance between recall and precision, not needed for LiveRAG (gold document is only 1 or 2)
+- Higher NDCG@10 indicates better ranking quality of retrieved documents. This is important for fundamental RAG systems like bm25/embedding based. But for the final system this is not important, all 10 will be used for answer generation and judgement.
+
+For LiveRAG, the most important metric is recall.
+
 ## Document ID Handling
 
 The evaluator handles the different formats of document IDs between retrieved chunks and gold context:
@@ -58,12 +67,3 @@ print(f"Average Context Precision: {evaluation_result.metrics['avg_context_preci
 print(f"Average Context F1: {evaluation_result.metrics['avg_context_f1']}")
 print(f"NDCG@10: {evaluation_result.metrics['ndcg_10']}")
 ```
-
-## Interpretation
-
-- Higher recall indicates that the retrieval system is finding most of the relevant documents
-- Higher precision indicates that the retrieval system is not including many irrelevant documents, not needed for LiveRAG (gold document is only 1 or 2)
-- Higher F1 indicates a good balance between recall and precision, not needed for LiveRAG (gold document is only 1 or 2)
-- Higher NDCG@10 indicates better ranking quality of retrieved documents. This is important for fundamental RAG systems like bm25/embedding based. But for the final system this is not important, all 10 will be used for answer generation and judgement.
-
-For LiveRAG, the most important metric is recall.
