@@ -77,21 +77,23 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 
 ## Development Logs
 
-| Date | Name | Dataset | Relevance | Faithfulness | Recall | nDCG@10 |
-|------|------|---------|--------------------:|----------------------:|--------:|--------:|
-| 2025-04-21 | rewrite_queries_fusion_rag | dmds_1GMhaG2S7ONAd.multi.n50.tsv | 1.57 | 0.57 | - | - |
-| 2025-04-22 | rewrite_queries_fusion_rag | dmds_1GMhaG2S7ONAd.multi.n50.tsv | 1.50 | 0.66 | - | - |
-| 2025-04-24 | basic_rag | dmds_fJ20pJnq9zcO1.n100.tsv | 1.51 | 0.43 | - | - |
-| 2025-04-24 | qpp_fusion doc=10, q_doc=10 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.57 | 0.64 | - | - |
-| 2025-04-24 | qpp_fusion doc=5, q_doc=200 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.34 | 0.63 | - | - |
-| 2025-04-24 | qpp_fusion doc=10, q_doc=200 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.38 | 0.56 | - | - |
-| 2025-04-25 | qpp_fusion eff_queries=1 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.25 | 0.55 | - | - |
-| 2025-04-25 | qpp_fusion eff_queries=2 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.34 | 0.5 | - | - |
-| 2025-04-25 | qpp_fusion eff_queries=3 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.33 | 0.64 | - | - |
-| 2025-04-25 | qpp_fusion eff_queries=4 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.42 | 0.58 | - | - |
-| 2025-04-25 | vector_rerank setwise | dmds_JK09SKjyanxs1.multi.n5.tsv | 0.6 | 0 | - | - |
-| 2025-04-25 | vector_rerank setwise | dmds_fJ20pJnq9zc05.easy.n5.tsv | 1.6 | 0.4 | - | - |
-| 2025-04-25 | basic_rag k=10 | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.0 | 0.4 | - | - |
-| 2025-04-25 | basic_rag k=20 | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.0 | 0.4 | 0.5 | 0.25 |
-| 2025-04-25 | basic_rag k10, new prompt | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.2 | 0.8 | 0.5 | 0.25 |
-| 2025-04-25 | basic_rag k10, new prompt | dmds_fJ20pJnq9zcO1.n100.tsv | 1.41 | 0.59 | 0.46 | 0.34 |
+This section is deprecated in favor of the [RMIT LiveRAG Systems Test Log.xlsx](https://rmiteduau.sharepoint.com/:x:/r/sites/ComplexQuestionAnswering-LiveRAGSIGIR2025/_layouts/15/Doc2.aspx?action=editNew&sourcedoc=%7B73ac296d-d3cb-461a-be97-469f2252ee1a%7D&wdOrigin=TEAMS-MAGLEV.teamsSdk_ns.rwc&wdExp=TEAMS-TREATMENT&wdhostclicktime=1745570795224&web=1)
+
+| Date | Name | Dataset | Relevance | Faithfulness |
+|------|------|---------|--------------------:|----------------------:|
+| 2025-04-21 | rewrite_queries_fusion_rag | dmds_1GMhaG2S7ONAd.multi.n50.tsv | 1.57 | 0.57 |
+| 2025-04-22 | rewrite_queries_fusion_rag | dmds_1GMhaG2S7ONAd.multi.n50.tsv | 1.50 | 0.66 |
+| 2025-04-24 | basic_rag | dmds_fJ20pJnq9zcO1.n100.tsv | 1.51 | 0.43 |
+| 2025-04-24 | qpp_fusion doc=10, q_doc=10 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.57 | 0.64 |
+| 2025-04-24 | qpp_fusion doc=5, q_doc=200 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.34 | 0.63 |
+| 2025-04-24 | qpp_fusion doc=10, q_doc=200 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.38 | 0.56 |
+| 2025-04-25 | qpp_fusion eff_queries=1 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.25 | 0.55 |
+| 2025-04-25 | qpp_fusion eff_queries=2 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.34 | 0.5 |
+| 2025-04-25 | qpp_fusion eff_queries=3 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.33 | 0.64 |
+| 2025-04-25 | qpp_fusion eff_queries=4 | dmds_fJ20pJnq9zcO1.n100.tsv | 1.42 | 0.58 |
+| 2025-04-25 | vector_rerank setwise | dmds_JK09SKjyanxs1.multi.n5.tsv | 0.6 | 0 |
+| 2025-04-25 | vector_rerank setwise | dmds_fJ20pJnq9zc05.easy.n5.tsv | 1.6 | 0.4 |
+| 2025-04-25 | basic_rag k=10 | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.0 | 0.4 |
+| 2025-04-25 | basic_rag k=20 | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.0 | 0.4 |
+| 2025-04-25 | basic_rag k10, new prompt | dmds_JK09SKjyanxs1.multi.n5.tsv | 1.2 | 0.8 |
+| 2025-04-25 | basic_rag k10, new prompt | dmds_fJ20pJnq9zcO1.n100.tsv | 1.41 | 0.59 |
