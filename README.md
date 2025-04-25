@@ -94,7 +94,7 @@ The LiveRAG project follows a structured workflow for developing, running, and e
 
    This generates results in [data/rag_results/](data/rag_results/) (git ignored).
 
-   For detailed usage of RAG systems, refer to [systems/README.md](src/systems/README.md).
+   For detailed usage of RAG systems, refer to [systems/README.md](src/systems/).
 
 3. **Evaluate Results**: Compare RAG system outputs against reference answers
 
@@ -134,6 +134,7 @@ This repository includes several scripts and notebooks for working with the Live
 - [create_datamorgana_dataset.py](scripts/create_datamorgana_dataset.py): Generate synthetic Q&A datasets using DataMorgana
 - [run.py](scripts/run.py): Run a specified RAG system on a dataset of questions and save the results
 - [evaluate.py](scripts/evaluate.py): Evaluate RAG system results against reference answers (DataMorgana dataset) using specified evaluators
+- [deploy_ec2_llm.py](scripts/aws/deploy_ec2_llm.py): Deploy and run LLMs on AWS EC2 instances
 
 #### Notebooks
 
