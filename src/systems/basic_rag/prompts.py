@@ -1,13 +1,11 @@
-# System prompt for the LLM
-SYSTEM_PROMPT = """You are a helpful assistant, answer the following question 
-based on the provided context. If the context doesn't contain relevant 
-information, say so.."""
+SYSTEM_PROMPT = """You are an assistant for question-answering tasks. \
+Use the following documents to answer the question. \
+Only use information from the provided documents. \
+If you don't know the answer based on these documents, just say that you don't know. \
+Keep your answer concise and to the point."""
 
-# Answer generation prompt template
-ANSWER_PROMPT_TEMPLATE = """Context:
+ANSWER_PROMPT_TEMPLATE = """Documents:
 {context}
 
 Question: {question}
-
-Answer:
 """

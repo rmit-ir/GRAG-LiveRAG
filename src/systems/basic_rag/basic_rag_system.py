@@ -20,7 +20,7 @@ class BasicRAGSystem(RAGSystemInterface):
     
     log = get_logger("basic_rag_system")
     
-    def __init__(self, llm_client="ai71_client"):
+    def __init__(self, llm_client="ai71_client", k=10):
         """
         Initialize the BasicRAGSystem.
         
@@ -29,6 +29,7 @@ class BasicRAGSystem(RAGSystemInterface):
         """
         self.query_service = QueryService()
         
+        self.k = k
         model_id = "tiiuae/falcon3-10b-instruct"
         
         if llm_client == "general_openai_client":
@@ -46,6 +47,7 @@ class BasicRAGSystem(RAGSystemInterface):
         
         self.log.info("BasicRAGSystem initialized", 
                      llm_model=model_id,
+                     k=k,
                      llm_client=client_type)
     
     def process_question(self, question: str, qid: str = None) -> RAGResult:
@@ -53,7 +55,7 @@ class BasicRAGSystem(RAGSystemInterface):
         self.log.info("Processing question", question=question, qid=qid)
         
         # Search for documents using keyword search
-        hits = self.query_service.query_keywords(question, k=10)
+        hits = self.query_service.query_keywords(question, k=self.k)
         self.log.debug("Retrieved documents", hits_count=len(hits))
         
         # Extract document contents and IDs
