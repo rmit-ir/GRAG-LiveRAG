@@ -8,26 +8,22 @@ The evaluator calculates the following metrics:
 
 - **Context Recall**: The proportion of gold context documents that were successfully retrieved, important
   - Formula: `|retrieved_docs ∩ gold_docs| / |gold_docs|`
+  - Higher recall indicates that the retrieval system is finding most of the relevant documents
   
 - **Context Precision**: The proportion of retrieved documents that are in the gold context, not important for LiveRAG
   - Formula: `|retrieved_docs ∩ gold_docs| / |retrieved_docs|`
+  - Higher precision indicates that the retrieval system is not including many irrelevant documents, not needed for LiveRAG (gold document is only 1 or 2)
   
 - **Context F1**: The harmonic mean of precision and recall, not important for LiveRAG
   - Formula: `2 * (precision * recall) / (precision + recall)`
+  - Higher F1 indicates a good balance between recall and precision, not needed for LiveRAG (gold document is only 1 or 2)
 
 - **NDCG@10**: Normalized Discounted Cumulative Gain at rank 10, important for fundamental RAG systems
-  - Measures ranking quality, with higher scores indicating relevant documents are ranked higher
+  - Higher NDCG@10 indicates better ranking quality of retrieved documents. This is important for fundamental RAG systems like bm25/embedding based. But for the final system this is not important, all 10 will be used for answer generation and judgement.
 
 - **Retrieved Docs Count**: The number of unique documents retrieved
 - **Gold Docs Count**: The number of documents in the gold context
 - **Correct Docs Count**: The number of documents that were correctly retrieved
-
-### Interpretation
-
-- Higher recall indicates that the retrieval system is finding most of the relevant documents
-- Higher precision indicates that the retrieval system is not including many irrelevant documents, not needed for LiveRAG (gold document is only 1 or 2)
-- Higher F1 indicates a good balance between recall and precision, not needed for LiveRAG (gold document is only 1 or 2)
-- Higher NDCG@10 indicates better ranking quality of retrieved documents. This is important for fundamental RAG systems like bm25/embedding based. But for the final system this is not important, all 10 will be used for answer generation and judgement.
 
 For LiveRAG, the most important metric is recall.
 
