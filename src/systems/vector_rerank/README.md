@@ -30,17 +30,6 @@ For help with command-line options:
 uv run scripts/run.py --system systems.vector_rerank.vector_rerank.VectorRerank --help
 ```
 
-## Configuration Options
-
-The VectorRerank system accepts the following configuration parameters:
-
-- `llm_client`: LLM client to use (default: "ai71_client")
-- `reranker_strategy`: Reranking strategy to use - "pointwise", "pairwise", "listwise", or "setwise" (default: "setwise")
-- `reranker_k`: Number of documents to return after reranking (default: 5)
-- `role_playing`: Whether to use role playing in reranker prompts (default: True)
-- `tone_words`: Tone words to use in reranker prompts (default: "Please")
-- `evidence_first`: Whether to put evidence before instructions in reranker prompts (default: True)
-
 Example with custom configuration:
 
 ```bash
