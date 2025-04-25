@@ -52,7 +52,7 @@ class VectorRAG(RAGSystemInterface):
 
         # Search for documents using vector embedding search
         hits = self.query_service.query_embedding(question, k=10)
-        self.log.debug("Retrieved documents", hits_count=len(hits))
+        self.log.debug("Retrieved documents", hits=hits)
 
         # Extract document contents and IDs
         doc_contents = [hit.metadata.text for hit in hits]
