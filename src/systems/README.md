@@ -75,9 +75,6 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 - **[QPPFusionSystem](./qpp_fusion/qpp_fusion_rag.py)**: Advanced implementation that uses Query Performance Prediction (QPP) to select the most effective queries from multiple generated queries and applies fusion search
   - Path: `systems.qpp_fusion.qpp_fusion_rag.QPPFusionSystem`
 
-- **[VectorQPP](./vector_qpp/vector_qpp.py)**: Vector search implementation with Query Performance Prediction to assess the quality of search results
-  - Path: `systems.vector_qpp.vector_qpp.VectorQPP`
-
 ## Development Logs
 
 | Date | Name | Dataset | Relevance | Faithfulness |
