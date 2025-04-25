@@ -264,6 +264,12 @@ LOG_LEVEL=DEBUG uv run scripts/your_script.py
 
 Or set `LOG_LEVEL=DEBUG` in your `.env` file.
 
+## Debugging
+
+If you want to debug your code, you can use the VS Code debugger. Refer to [.vscode/launch.json](.vscode/launch.json) for an example configuration.
+
+Then you can just add your breakpoints in the code and run the debugger in VS Code.
+
 ## Dependency Management
 
 Add a dependency

@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Context Recall Evaluator",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "scripts.evaluate",
+            "justMyCode": true,
+            "args": [
+                "--evaluator", "evaluators.context_recall.evaluator.ContextRecall",
+                "--results", "data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv",
+                "--reference", "data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv"
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ]
+}

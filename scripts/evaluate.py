@@ -15,6 +15,7 @@ import time
 import argparse
 import importlib
 import inspect
+import ast
 import pandas as pd
 from typing import List, Dict, Any, Type
 
@@ -252,12 +253,18 @@ def load_reference_qa_pairs(reference_file: str) -> List[QAPair]:
                     except json.JSONDecodeError:
                         context = [context]
                 
-                doc_ids = row.get('document_ids', [])
+                doc_ids = row.get('document_ids', "[]")
                 if isinstance(doc_ids, str):
                     try:
+                        # First try json.loads
                         doc_ids = json.loads(doc_ids)
                     except json.JSONDecodeError:
-                        doc_ids = [doc_ids]
+                        # If that fails, try ast.literal_eval which can handle Python literals
+                        try:
+                            doc_ids = ast.literal_eval(doc_ids)
+                        except (SyntaxError, ValueError):
+                            # If both fail, treat as a single document ID
+                            doc_ids = [doc_ids]
                 
                 # Extract question categories from column names
                 question_categories = []
