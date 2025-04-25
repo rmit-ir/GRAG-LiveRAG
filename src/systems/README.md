@@ -77,7 +77,7 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 
 ## Development Logs
 
-This section is deprecated in favor of the [RMIT LiveRAG Systems Test Log.xlsx](https://rmiteduau.sharepoint.com/:x:/r/sites/ComplexQuestionAnswering-LiveRAGSIGIR2025/_layouts/15/Doc2.aspx?action=editNew&sourcedoc=%7B73ac296d-d3cb-461a-be97-469f2252ee1a%7D&wdOrigin=TEAMS-MAGLEV.teamsSdk_ns.rwc&wdExp=TEAMS-TREATMENT&wdhostclicktime=1745570795224&web=1)
+This section is deprecated in favor of the [RMIT LiveRAG Systems Test Log.xlsx](https://rmiteduau.sharepoint.com/:x:/r/sites/ComplexQuestionAnswering-LiveRAGSIGIR2025/_layouts/15/Doc2.aspx?action=editNew&sourcedoc=%7B73ac296d-d3cb-461a-be97-469f2252ee1a%7D&wdOrigin=TEAMS-MAGLEV.teamsSdk_ns.rwc&wdExp=TEAMS-TREATMENT&wdhostclicktime=1745570795224&web=1).
 
 | Date | Name | Dataset | Relevance | Faithfulness |
 |------|------|---------|--------------------:|----------------------:|
