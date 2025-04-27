@@ -113,6 +113,38 @@ The LiveRAG project follows a structured workflow for developing, running, and e
 
 This workflow enables systematic development and benchmarking of RAG systems, allowing for continuous improvement through iterative refinement.
 
+### Example of "Run System and Evaluate" in one command
+
+With default AI71 LLMs:
+
+```bash
+# Run the RAG system over the dataset
+uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv; \
+
+# Evaluate the results
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num_threads 20; \
+```
+
+With EC2 LLMs (involve starting and stopping EC2 instance), this will take 9min to start the instance:
+
+```bash
+# Launch the LLM, it will be available at localhost
+uv run scripts/aws/deploy_ec2_llm.py
+
+####################################################
+# In a separate terminal
+# Wait until the LLM is ready,
+uv run scripts/aws/deploy_ec2_llm.py --wait; \
+say 'llm is ready'; \
+# Run the RAG system over the dataset
+uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num-threads 20 --rag_llm_client general_openai_client; \
+# Stop the EC2 LLM instance
+uv run scripts/aws/deploy_ec2_llm.py --stop; \
+# Evaluate the results
+uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num_threads 20; \
+say "evaluation finished"
+```
+
 ## Usage
 
 Run your scripts:
@@ -123,7 +155,7 @@ uv run scripts/your_script.py
 uv run -p 3.12 scripts/your_script.py
 ```
 
-Or notebooks, just open them in VS Code and run them using the python environment from `.venv`.
+For notebooks, just open them in VS Code and run them using the python environment from `.venv`.
 
 ### Available Scripts and Notebooks
 
