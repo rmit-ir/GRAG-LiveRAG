@@ -120,7 +120,6 @@ With default AI71 LLMs:
 ```bash
 # Run the RAG system over the dataset
 uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv; \
-
 # Evaluate the results
 uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num_threads 20; \
 ```
@@ -132,7 +131,7 @@ With EC2 LLMs (involve starting and stopping EC2 instance), this will take 9min 
 uv run scripts/aws/deploy_ec2_llm.py
 
 ####################################################
-# In a separate terminal
+# In a separate terminal, run these as one command
 # Wait until the LLM is ready,
 uv run scripts/aws/deploy_ec2_llm.py --wait; \
 say 'llm is ready'; \
