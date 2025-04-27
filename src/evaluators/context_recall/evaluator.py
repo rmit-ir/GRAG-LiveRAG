@@ -1,9 +1,7 @@
 """
 Context Recall Evaluator for RAG systems.
 
-This evaluator calculates the recall of retrieved documents compared to gold context documents.
-It measures how many of the retrieved chunks are also included in the gold context document IDs.
-It also calculates NDCG@10 to evaluate the ranking quality of the retrieved documents.
+uv run scripts/evaluate.py --evaluator evaluators.context_recall.evaluator.ContextRecall --help
 """
 import re
 import time
