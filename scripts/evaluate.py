@@ -25,6 +25,7 @@ from systems.rag_result import RAGResult
 from services.ds_data_morgana import QAPair, CategoryDict
 from evaluators.evaluator_interface import EvaluatorInterface
 from evaluators.evaluation_result import EvaluationResult
+from utils.time_utils import to_sec
 
 
 logger = get_logger("evaluate")
@@ -598,11 +599,12 @@ def main():
         overall_time_ms = (time.time() - start_time) * 1000
         
         print(f"\nEvaluation complete!")
-        print(f"Total time: {overall_time_ms:.2f} ms ({overall_time_ms/1000:.2f} s)")
+        print(f"Total evaluation time: {to_sec(overall_time_ms)}s")
+        print(f"Average time per query: {to_sec(overall_time_ms / evaluation_result.sample_count)}s")
         print(f"Results evaluated: {evaluation_result.sample_count}")
         if evaluation_result.total_time_ms is not None:
-            print(f"Evaluation time: {evaluation_result.total_time_ms:.2f} ms ({evaluation_result.total_time_ms/1000:.2f} s)")
-            print(f"Average query eval time: {evaluation_result.total_time_ms / evaluation_result.sample_count:.2f} ms")
+            print(f"Total real evaluation time: {to_sec(evaluation_result.total_time_ms)}s")
+            print(f"Average real query eval time: {to_sec(evaluation_result.total_time_ms / evaluation_result.sample_count)}s")
         if evaluation_result.total_cost is not None:
             print(f"Total cost: ${evaluation_result.total_cost:.6f} USD")
             print(f"Average cost per query: ${evaluation_result.total_cost / evaluation_result.sample_count:.6f} USD")

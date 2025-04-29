@@ -20,7 +20,6 @@ dependencies = [
     "sqids>=0.5.1",
     "levenshtein>=0.27.1",
     "sagemaker>=2.230.0",
-    "format-duration>=0.0.5",
 ]
 
 [build-system]

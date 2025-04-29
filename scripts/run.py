@@ -25,9 +25,9 @@ import json
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
 from utils.system_params import extract_system_parameters, get_system_params_from_args
-from utils.time_utils import format_time_ms
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
+from utils.time_utils import to_sec
 
 
 logger = get_logger("run")
@@ -219,7 +219,7 @@ def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any]
         logger.info(f"Completed question {i+1}/{total_questions}", 
                    question=question,
                    answer_length=result.answer_words_count,
-                   processing_time=format_time_ms(result.total_time_ms))
+                   processing_time_sec=to_sec(result.total_time_ms))
         
         return result
     
@@ -286,7 +286,7 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str,
                 logger.info(f"Completed question {i+1}/{total_questions}", 
                            question=question,
                            answer_length=result.answer_words_count,
-                           processing_time=format_time_ms(result.total_time_ms))
+                           processing_time_sec=to_sec(result.total_time_ms))
             
             except Exception as e:
                 logger.error(f"Error processing question {i+1}/{total_questions}", 
@@ -328,10 +328,10 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str,
     logger.info("Finished processing all questions", 
                total_processed=len(results),
                total_questions=total_questions,
-               total_time=format_time_ms(total_time_ms),
-               avg_time_per_question=format_time_ms(avg_time_per_question_ms),
-               sum_individual_times=format_time_ms(sum_individual_times_ms),
-               avg_individual_time=format_time_ms(avg_individual_time_ms))
+               total_time_sec=to_sec(total_time_ms),
+               avg_time_per_question_sec=to_sec(avg_time_per_question_ms),
+               sum_individual_times_sec=to_sec(sum_individual_times_ms),
+               avg_individual_time_sec=to_sec(avg_individual_time_ms))
     
     return results
 
@@ -478,9 +478,10 @@ def main():
                    trec_output=trec_output_path)
         
         print(f"\nProcessing complete!")
-        print(f"Total time: {format_time_ms(overall_time_ms)}")
-        print(f"Question time: {format_time_ms(total_time_ms)}")
-        print(f"Average time per question: {format_time_ms(total_time_ms/len(results))}")
+        print(f"Total running time: {to_sec(overall_time_ms)}s")
+        print(f"Average time per question: {to_sec(overall_time_ms/len(results))}s")
+        print(f"Total real question time: {to_sec(total_time_ms)}s")
+        print(f"Real time per question: {to_sec(total_time_ms/len(results))}s")
         print(f"Questions processed: {len(results)}")
         print(f"\nResults saved to:")
         print(f"  - TSV: {tsv_output_path}")
