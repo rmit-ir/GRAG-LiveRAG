@@ -1,18 +1,26 @@
 """
 Utility functions for time-related operations.
 """
+import warnings
 
 
 def format_time_ms(ms: float) -> str:
     """
     Format milliseconds into a human-readable string with appropriate units.
-
+    
+    DEPRECATED: This function is deprecated and will be removed in a future version.
+    
     Args:
         ms: Time in milliseconds
 
     Returns:
         Formatted time string (e.g., "50ms", "45s", "5min", etc.)
     """
+    warnings.warn(
+        "The format_time_ms function is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     ms = int(ms)
     if ms < 0:
         return ms
