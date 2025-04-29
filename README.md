@@ -6,7 +6,7 @@ A research project for live retrieval-augmented generation for the SIGIR 2025 Li
 
 Project management: [rmit-liverag-2025 on Linear](https://linear.app/rmit-liverag-2025/team/RMI/view/kanban-2d49ab9d373f)
 
-This project is part of the SIGIR 2025 LiveRAG Challenge, which focuses on building effective Retrieval-Augmented Generation systems. The challenge documentation and resources are available in the `hf-space-LiveRAG-challenge` git submodule.
+This project is part of the SIGIR 2025 LiveRAG Challenge, which focuses on building effective Retrieval-Augmented Generation systems. The challenge documentation and resources are available at <https://huggingface.co/spaces/LiveRAG/Challenge>.
 
 ## Installation
 
@@ -28,18 +28,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### Set up the project
 
-1. Clone this repository with submodules:
+1. Clone this repository:
 
 ```bash
-git clone --recurse-submodules https://github.com/rmit-ir/LiveRAG
+git clone https://github.com/rmit-ir/LiveRAG
 cd LiveRAG
-```
-
-If you've already cloned the repository without submodules, you can initialize and update them:
-
-```bash
-git submodule init
-git submodule update
 ```
 
 2. Install dependencies
