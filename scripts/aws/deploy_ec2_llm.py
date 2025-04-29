@@ -48,7 +48,7 @@ class EC2LLMDeployer:
         self,
         model_id: str = "tiiuae/falcon3-10b-instruct",
         region_name: str = None,
-        instance_type: str = "g6e.4xlarge",
+        instance_type: str = "g6e.8xlarge",
         stack_name: str = None,
         local_port: int = 8987,
         ami_id: str = "ami-04f4302ff68e424cf",

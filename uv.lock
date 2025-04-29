@@ -437,6 +437,15 @@ wheels = [
 ]
 
 [[package]]
+name = "format-duration"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/98/65c2c76ff091255360d6b733217d3e66be8ff24200c3f5a3b6f6f0d65a10/format_duration-0.0.5.tar.gz", hash = "sha256:c5b99fb28e819cff2b96738ebd2569bed4fa317008c700cdf083d9c858eec048", size = 3413 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/35/3e/265bdeea2940a4ecfadfc1556dffca052c561c670efbc5107bcd061be742/format_duration-0.0.5-py3-none-any.whl", hash = "sha256:0699418eff4f3bc8df8df9ece5c4485d43916d79d01b1f43bbf4d6e0dbf7344c", size = 4845 },
+]
+
+[[package]]
 name = "fsspec"
 version = "2025.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -982,6 +991,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
+    { name = "format-duration" },
     { name = "langchain-aws" },
     { name = "langchain-openai" },
     { name = "levenshtein" },
@@ -1008,6 +1018,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = "==1.35.88" },
+    { name = "format-duration", specifier = ">=0.0.5" },
     { name = "langchain-aws", specifier = ">=0.2.13" },
     { name = "langchain-openai", specifier = ">=0.3.12" },
     { name = "levenshtein", specifier = ">=0.27.1" },
