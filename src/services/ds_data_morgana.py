@@ -294,11 +294,11 @@ class DataMorgana:
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, filename)
         
-        # Read the data
-        df = pd.read_json(file_url, lines=True)
+        # Read the data from DataMorgana URL
+        df = pd.read_json(file_url, lines=True, encoding='utf-8')
         
         # Save raw generated qa_pairs to local file
-        df.to_json(save_path, orient='records', lines=True, force_ascii=False, encoding='utf-8')
+        df.to_json(save_path, orient='records', lines=True, force_ascii=False)
         self.log.info(f"Saved results to {save_path}")
         
         return save_path

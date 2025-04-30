@@ -2,22 +2,12 @@
 """
 Script to create a DataMorgana query answer dataset and represent it in a tabular format.
 
-This script can be run with uv to generate a dataset of question-answer pairs using DataMorgana,
-and then convert it to a pandas DataFrame for analysis and storage.
-
-Usage:
-    uv run scripts/create_datamorgana_dataset.py [options]
-
-Options:
-    --n_questions=<n>       Number of questions to generate [default: 2]
-    --output=<path>         Path to save the output file [default: auto-generated in data/generated_qa_pairs/]
-    --format=<format>       Output format (tsv, excel, parquet, jsonl) [default: tsv]
-    --document_ids=<ids>    Comma-separated list of document IDs to use (optional)
-    --wait_time=<seconds>   Time to wait between polling attempts in seconds [default: 5]
-    --config=<path>         Path to config file [default: scripts/config/datamorgana_config.json]
+uv run scripts/create_datamorgana_dataset.py [options]
 
 The script uses a JSON configuration file to define question and user categories for DataMorgana.
-This file is located in the scripts/config/ directory by default.
+
+This file is located in the scripts/config/ directory by default, you can also 
+specify a custom path with --config
 """
 
 import os
@@ -64,6 +54,9 @@ Examples:
     
     # Generate 20 questions in JSONL format with longer wait time between polling
     uv run scripts/create_datamorgana_dataset.py --n_questions=20 --format=jsonl --wait_time=10
+    
+    # Process results from an existing generation ID
+    uv run scripts/create_datamorgana_dataset.py --generation-id=your-generation-id
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -79,6 +72,8 @@ Examples:
                         help="Time to wait between polling attempts in seconds")
     parser.add_argument("--config", type=str, default=None,
                         help="Path to config file")
+    parser.add_argument("--generation-id", type=str, default=None,
+                        help="Generation ID to wait for results instead of creating new generation")
     return parser.parse_args()
 
 
@@ -159,12 +154,73 @@ def save_dataframe(df: pd.DataFrame, output_path: str, format: str):
         df.to_parquet(output_path, index=False)
         logger.info("Saved dataset as Parquet", path=output_path, rows=len(df))
     elif format == 'jsonl':
-        df.to_json(output_path, orient='records', lines=True,
-                   force_ascii=False, encoding='utf-8')
+        df.to_json(output_path, orient='records', lines=True, force_ascii=False)
         logger.info("Saved dataset as JSONL", path=output_path, rows=len(df))
     else:
         logger.error("Unsupported format", format=format)
         raise ValueError(f"Unsupported format: {format}")
+
+
+def process_generation_results(dm, generation_id, wait_time, output=None, format="tsv"):
+    """
+    Process generation results from a given generation ID.
+    
+    Args:
+        dm: DataMorgana client
+        generation_id: ID of the generation to process
+        wait_time: Time to wait between polling attempts in seconds
+        output: Path to save the output file (optional)
+        format: Output format (tsv, excel, parquet, jsonl)
+        
+    Returns:
+        pd.DataFrame: DataFrame with the processed results
+    """
+    # Wait for and retrieve generation results
+    logger.info("Waiting for generation results", generation_id=generation_id, wait_time=wait_time)
+    qa_pairs = dm.wait_generation_results(generation_id, sleep_sec=wait_time)
+    logger.info("Retrieved QA pairs", count=len(qa_pairs))
+    
+    # Convert to enhanced DataFrame
+    logger.debug("Converting to DataFrame")
+    df = qa_pairs_to_enhanced_dataframe(qa_pairs)
+    
+    # Log DataFrame info
+    logger.info("DataFrame created",
+                shape=df.shape,
+                columns=list(df.columns),
+                avg_question_length=df['question_length'].mean(),
+                avg_answer_length=df['answer_length'].mean())
+    
+    # Save DataFrame
+    if output:
+        output_path = output
+    else:
+        # Generate default output path with number of records
+        short_id = generate_short_id()
+        record_count = len(df)
+        filename = f"dmds_{short_id}.n{record_count}.{format}"
+        output_path = os.path.join(get_data_dir(), "generated_qa_pairs", filename)
+        logger.debug("Generated output path", path=output_path)
+    
+    save_dataframe(df, output_path, format)
+    
+    # Log summary statistics
+    logger.info("Dataset summary", total_qa_pairs=len(df))
+    
+    # Question categories distribution
+    question_categories = {}
+    for col in [c for c in df.columns if c.startswith('question_') and c != 'question_length']:
+        question_categories[col] = df[col].value_counts().to_dict()
+    logger.info("Question categories distribution", categories=question_categories)
+    
+    # User categories distribution
+    user_categories = {}
+    for col in [c for c in df.columns if c.startswith('user_')]:
+        user_categories[col] = df[col].value_counts().to_dict()
+    logger.info("User categories distribution", categories=user_categories)
+    
+    logger.info("DataMorgana dataset creation completed successfully", output_path=output_path)
+    return df
 
 
 def main():
@@ -180,6 +236,18 @@ def main():
     # Initialize DataMorgana client
     logger.info("Initializing DataMorgana client")
     dm = DataMorgana()
+
+    # Check if generation ID is provided
+    if args.generation_id:
+        logger.info("Using provided generation ID", generation_id=args.generation_id)
+        # Skip generation step and process results directly
+        return process_generation_results(
+            dm=dm,
+            generation_id=args.generation_id,
+            wait_time=args.wait_time,
+            output=args.output,
+            format=args.format
+        )
 
     # Parse document IDs if provided
     document_ids = None
@@ -215,59 +283,17 @@ def main():
         logger.info("Generation request submitted",
                     generation_id=generation_id)
 
-        # Wait for and retrieve generation results
-        logger.info("Waiting for generation results", wait_time=args.wait_time)
-        qa_pairs = dm.wait_generation_results(
-            generation_id, sleep_sec=args.wait_time)
-        logger.info("Retrieved QA pairs", count=len(qa_pairs))
+        # Process the generation results
+        return process_generation_results(
+            dm=dm,
+            generation_id=generation_id,
+            wait_time=args.wait_time,
+            output=args.output,
+            format=args.format
+        )
     except Exception as e:
         logger.error("Failed to generate QA pairs", error=str(e))
         raise
-
-    # Convert to enhanced DataFrame
-    logger.debug("Converting to DataFrame")
-    df = qa_pairs_to_enhanced_dataframe(qa_pairs)
-
-    # Log DataFrame info
-    logger.info("DataFrame created",
-                shape=df.shape,
-                columns=list(df.columns),
-                avg_question_length=df['question_length'].mean(),
-                avg_answer_length=df['answer_length'].mean())
-
-    # Save DataFrame
-    if args.output:
-        output_path = args.output
-    else:
-        # Generate default output path with number of records
-        short_id = generate_short_id()
-        record_count = len(df)
-        filename = f"dmds_{short_id}.n{record_count}.{args.format}"
-        output_path = os.path.join(
-            get_data_dir(), "generated_qa_pairs", filename)
-        logger.debug("Generated output path", path=output_path)
-
-    save_dataframe(df, output_path, args.format)
-
-    # Log summary statistics
-    logger.info("Dataset summary", total_qa_pairs=len(df))
-
-    # Question categories distribution
-    question_categories = {}
-    for col in [c for c in df.columns if c.startswith('question_') and c != 'question_length']:
-        question_categories[col] = df[col].value_counts().to_dict()
-    logger.info("Question categories distribution",
-                categories=question_categories)
-
-    # User categories distribution
-    user_categories = {}
-    for col in [c for c in df.columns if c.startswith('user_')]:
-        user_categories[col] = df[col].value_counts().to_dict()
-    logger.info("User categories distribution", categories=user_categories)
-
-    logger.info("DataMorgana dataset creation completed successfully",
-                output_path=output_path)
-    return df
 
 
 if __name__ == "__main__":

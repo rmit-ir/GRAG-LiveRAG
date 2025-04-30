@@ -1,20 +1,34 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Debug Context Recall Evaluator",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "scripts.evaluate",
-            "justMyCode": true,
-            "args": [
-                "--evaluator", "evaluators.context_recall.evaluator.ContextRecall",
-                "--results", "data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv",
-                "--reference", "data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv"
-            ],
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            }
-        }
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Context Recall Evaluator",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "scripts.evaluate",
+      "justMyCode": true,
+      "args": [
+        "--evaluator",
+        "evaluators.context_recall.evaluator.ContextRecall",
+        "--results",
+        "data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv",
+        "--reference",
+        "data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "Debug create datamorgana dataset",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "scripts.create_datamorgana_dataset",
+      "justMyCode": true,
+      "args": ["--generation-id", "f150a5c7-3c47-473f-856d-8c0507256939"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    }
+  ]
 }
