@@ -93,7 +93,7 @@
         {
           "name": "single-doc",
           "description": "a question that can be answered using information from a single document",
-          "probability": 0.5,
+          "probability": 0.4,
           "is_multi_doc": false
         },
         {
@@ -106,6 +106,12 @@
           "name": "multi-aspect",
           "description": "A question about two different aspects of the same entity/concept. For example: 'What are the advantages of AI-powered diagnostics, and what are the associated risks of bias in medical decision-making?', 'How do cryptocurrencies enable financial inclusion, and what are the security risks associated with them?'. The information required to answer the question needs to come from two documents, specifically, the first document must provide information about the first aspect, while the second must provide information about the second aspect.",
           "probability": 0.3,
+          "is_multi_doc": true
+        },
+        {
+          "name": "three-doc",
+          "description": "a question that can be answered using information from multiple documents, but not necessarily comparing or contrasting them. The information required to answer the question needs to come from three documents specifically. For example: 'What are the main themes in the works of Shakespeare, and how do they compare to those of his contemporaries?', 'What are the key features of the latest iPhone model, and how does it compare to previous versions?'. The information required to answer the question needs to come from three documents, specifically, the first document must provide information about the first aspect, while the second must provide information about the second aspect, and the third must provide information about the third aspect.",
+          "probability": 0.1,
           "is_multi_doc": true
         }
       ]
