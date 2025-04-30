@@ -20,6 +20,8 @@ dependencies = [
     "sqids>=0.5.1",
     "levenshtein>=0.27.1",
     "sagemaker>=2.230.0",
+    "uvicorn>=0.34.2",
+    "fastapi>=0.115.12",
 ]
 
 [build-system]
