@@ -37,7 +37,7 @@ At this point, you can access the model at <http://localhost:8987/v1/>. Try `uv 
 > Leaving the GPU resources running can incur big costs, so make sure to stop it on time.
 >
 > Actively check at <https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks>
-> to see if there are any llm_xxx stacks running, in case they are yours, delete them.
+> to see if there are any llm_xxx stacks running, in case they are yours and not deleted or being deleted, delete them.
 
 Extra commands:
 
