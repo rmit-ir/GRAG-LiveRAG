@@ -2,6 +2,7 @@
 """
 Custom HuggingFace handler that supports both token logits and text generation.
 Return logits for specific tokens and generate text.
+This version supports dispatching inference tasks to separate GPUs when multiple are available.
 
 python -m pip install torch transformers fastapi uvicorn accelerate
 python llm_server.py --batch-size 64
@@ -21,10 +22,15 @@ import logging
 import asyncio
 import multiprocessing
 import threading
+import queue
 import uuid
+import os
+import gc
 from typing import Dict, List, TypedDict, Optional, Union, Tuple, Set, Any
 from transformers import AutoTokenizer, AutoModelForCausalLM
-import gc
+
+# Set multiprocessing start method to 'spawn' to avoid CUDA initialization issues
+multiprocessing.set_start_method('spawn', force=True)
 
 # Define request type constants
 REQUEST_TYPE_LOGITS = "logits"
@@ -84,488 +90,230 @@ class GenerationRequestDict(TypedDict):
     output_scores: bool
 
 
-class BatchProcessor:
+def worker_process(model_id, gpu_id, request_queue, response_queue, status_queue, shutdown_event):
     """
-    Processes batches of requests in a separate process to bypass the GIL.
+    Worker process function that processes batches of requests.
+    Each worker is assigned to a specific GPU if available.
+    
+    Args:
+        model_id: ID of the model to load
+        gpu_id: ID of the GPU to use (-1 for CPU)
+        request_queue: Queue for receiving requests
+        response_queue: Queue for sending results
+        status_queue: Queue for sending status updates
+        shutdown_event: Event for signaling shutdown
     """
-
-    def __init__(self, model_id: str, max_batch_size: int = 8):
-        """
-        Initialize the batch processor.
-
-        Args:
-            model_id: ID of the model to load
-            max_batch_size: Maximum number of requests in a batch
-        """
-        self.model_id = model_id
-        self.max_batch_size = max_batch_size
-
-        # Queues for communication between processes
-        # These queues are created before the worker process and shared through inheritance
-        self.request_queue = multiprocessing.Queue()
-        self.response_queue = multiprocessing.Queue()
-        self.status_queue = multiprocessing.Queue()  # Queue for model status updates
-        self.shutdown_event = multiprocessing.Event()
+    try:
+        # Set CUDA_VISIBLE_DEVICES environment variable for this process
+        if gpu_id >= 0:
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+            logger.info(f"Worker set CUDA_VISIBLE_DEVICES={gpu_id}")
         
-        # Model status tracking
-        self.model_ready = False
-
-        # Start the worker process
-        self.worker_process = multiprocessing.Process(
-            target=self._worker_process_function,
-            daemon=True
-        )
-        self.worker_process.start()
-
-        # Dictionary to store pending requests
-        self.pending_requests = {}
-
-        # Start the response handler
-        self.response_handler_running = True
-        self.loop = asyncio.new_event_loop()
-        self.response_handler_thread = threading.Thread(
-            target=self._run_response_handler_in_thread,
-            daemon=True
-        )
-        self.response_handler_thread.start()
-
-        logger.info(
-            f"Started batch processor with max batch size {max_batch_size}")
-
-    def _run_response_handler_in_thread(self):
-        """
-        Run the response handler in a separate thread with its own event loop.
-        """
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_until_complete(self._handle_responses())
-
-    async def _handle_responses(self):
-        """
-        Handle responses from the worker process.
-        """
-        while self.response_handler_running:
-            try:
-                # Check if we have any responses
-                if not self.response_queue.empty():
-                    request_id, result = self.response_queue.get_nowait()
-
-                    # Check if we have a pending request with this ID
-                    if request_id in self.pending_requests:
-                        # Set the result and remove from pending requests
-                        self.pending_requests[request_id].set_result(result)
-                        del self.pending_requests[request_id]
-
-                # Sleep a bit to avoid busy waiting
-                await asyncio.sleep(0.01)
-            except Exception as e:
-                logger.error(f"Error handling response: {str(e)}")
-                await asyncio.sleep(0.1)  # Sleep longer on error
-
-    def _worker_process_function(self):
-        """
-        Worker process function that processes batches of requests.
-        """
+        # Set process name for better monitoring
         try:
-            # Update status to loading
-            loading_status: ModelStatusDict = {
-                "status": "loading", 
-                "message": f"Loading model {self.model_id}"
-            }
-            self.status_queue.put(loading_status)
+            import setproctitle
+            setproctitle.setproctitle(f"llm_worker_gpu_{gpu_id}")
+        except ImportError:
+            pass
             
-            # Load model in the worker process
-            logger.info(f"Loading model {self.model_id} in worker process")
-            device = "cuda" if torch.cuda.is_available(
-            ) else "mps" if torch.backends.mps.is_available() else "cpu"
-
-            # Load tokenizer
-            try:
-                tokenizer_status: ModelStatusDict = {
-                    "status": "loading", 
-                    "message": "Loading tokenizer"
-                }
-                self.status_queue.put(tokenizer_status)
-                tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-                if tokenizer.pad_token is None:
-                    tokenizer.pad_token = tokenizer.eos_token
-            except Exception as e:
-                error_msg = f"Failed to load tokenizer: {str(e)}"
-                logger.error(error_msg)
-                error_status: ModelStatusDict = {
-                    "status": "error", 
-                    "message": error_msg
-                }
-                self.status_queue.put(error_status)
-                raise
-
-            # Load model
-            try:
-                model_loading_status: ModelStatusDict = {
-                    "status": "loading", 
-                    "message": "Loading model weights"
-                }
-                self.status_queue.put(model_loading_status)
-                if device == "mps":
-                    model = AutoModelForCausalLM.from_pretrained(
-                        self.model_id,
-                        torch_dtype=torch.float16,
-                    )
-                    model = model.to(torch.device("mps"))
-                else:
-                    model = AutoModelForCausalLM.from_pretrained(
-                        self.model_id,
-                        device_map="auto",
-                        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-                    )
-            except Exception as e:
-                error_msg = f"Failed to load model: {str(e)}"
-                logger.error(error_msg)
-                model_error_status: ModelStatusDict = {
-                    "status": "error", 
-                    "message": error_msg
-                }
-                self.status_queue.put(model_error_status)
-                raise
-
-            logger.info(f"Model loaded successfully on {device}")
-            
-            # Send a message to the parent process that the model is ready
-            ready_status: ModelStatusDict = {
-                "status": "ready", 
-                "device": device, 
-                "message": "Model loaded and ready to serve requests"
-            }
-            self.status_queue.put(ready_status)
-            
-            # Process batches continuously
-            while not self.shutdown_event.is_set():
-                batch = []
-
-                # Get the first request (blocking)
-                try:
-                    request = self.request_queue.get(timeout=1.0)
-                    if request is None:  # Shutdown signal
-                        self.shutdown_event.set()
-                        break
-                    batch.append(request)
-                except Exception:
-                    # Queue.Empty or other exception, try again
-                    continue
-
-                # Try to get more requests up to max_batch_size (non-blocking)
-                while len(batch) < self.max_batch_size:
-                    try:
-                        request = self.request_queue.get_nowait()
-                        if request is None:  # Shutdown signal
-                            self.shutdown_event.set()
-                            break
-                        batch.append(request)
-                    except Exception:
-                        # Queue is empty or other exception, process what we have
-                        break
-
-                # Process the batch
-                if batch:
-                    # Group requests by type (logits or generation)
-                    logits_requests = []
-                    generation_requests = []
-
-                    for req in batch:
-                        # Use the 'type' field from the request dictionary
-                        request_type = req["type"]
-                        if request_type == REQUEST_TYPE_LOGITS:
-                            logits_requests.append(req)
-                        elif request_type == REQUEST_TYPE_GENERATION:
-                            generation_requests.append(req)
-                        else:
-                            logger.error(
-                                f"Unknown request type: {request_type}")
-
-                    # Process logits requests
-                    if logits_requests:
-                        logger.info(
-                            f"Processing batch of {len(logits_requests)} logits requests")
-                        self._process_logits_batch(
-                            logits_requests, model, tokenizer, device)
-
-                    # Process generation requests
-                    if generation_requests:
-                        logger.info(
-                            f"Processing batch of {len(generation_requests)} generation requests")
-                        self._process_generation_batch(
-                            generation_requests, model, tokenizer, device)
-
-                    # Clean up memory
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    else:
-                        gc.collect()
-
+        # Update status to loading
+        loading_status = {
+            "status": "loading", 
+            "message": f"Loading model {model_id} on GPU {gpu_id}"
+        }
+        status_queue.put(loading_status)
+        
+        # Set device based on assigned GPU
+        # When using CUDA_VISIBLE_DEVICES, the worker process only sees one GPU (device 0)
+        if gpu_id >= 0 and torch.cuda.is_available():
+            device = "cuda:0"  # Always use cuda:0 when CUDA_VISIBLE_DEVICES is set
+            logger.info(f"Worker using GPU {gpu_id} (mapped to cuda:0): {torch.cuda.get_device_name(0)}")
+        elif torch.backends.mps.is_available():
+            device = "mps"
+            logger.info(f"Worker using MPS device")
+        else:
+            device = "cpu"
+            logger.info(f"Worker using CPU")
+        
+        # Load tokenizer first
+        tokenizer_status = {
+            "status": "loading", 
+            "message": "Loading tokenizer"
+        }
+        status_queue.put(tokenizer_status)
+        
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+        
+        logger.info("Tokenizer loaded successfully")
+        
+        # Load model
+        model_loading_status = {
+            "status": "loading", 
+            "message": "Loading model weights"
+        }
+        status_queue.put(model_loading_status)
+        
+        logger.info(f"Loading model {model_id} on {device}")
+        
+        try:
+            if device == "mps":
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_id,
+                    torch_dtype=torch.float16,
+                )
+                model = model.to(torch.device("mps"))
+            elif device.startswith("cuda"):
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_id,
+                    device_map="auto",  # Will map to the only visible GPU
+                    torch_dtype=torch.float16,
+                )
+            else:
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_id,
+                    torch_dtype=torch.float32,
+                )
+                model = model.to(torch.device("cpu"))
         except Exception as e:
-            error_msg = f"Worker process error: {str(e)}"
+            error_msg = f"Failed to load model: {str(e)}"
             logger.error(error_msg)
-            # Update status queue with error
-            worker_error_status: ModelStatusDict = {
+            error_status = {
                 "status": "error", 
                 "message": error_msg
             }
-            self.status_queue.put(worker_error_status)
-
-    def _process_logits_batch(
-        self,
-        batch: List[LogitsRequestDict],
-        model: "AutoModelForCausalLM",
-        tokenizer: "AutoTokenizer",
-        device: Union[str, torch.device]
-    ) -> None:
-        """
-        Process a batch of logits requests with true batching.
-        This implementation batches all prompts together regardless of uniqueness,
-        allowing for a single forward pass through the model.
+            status_queue.put(error_status)
+            raise
+            
+        logger.info(f"Model loaded successfully on {device}")
         
-        Args:
-            batch: List of logits request dictionaries
-            model: The loaded language model
-            tokenizer: The tokenizer for the model
-            device: The device to run inference on (cuda, mps, or cpu)
-        """
-        try:
-            # Prepare data structures to track requests and their tokens
-            all_prompts: List[str] = []
-            request_info: List[Tuple[str, List[str], int]] = []  # Store (request_id, tokens, batch_idx) for each request
-            
-            # Collect all prompts and tokens
-            for idx, req in enumerate(batch):
-                prompt: str = req["prompt"]
-                request_id: str = req["id"]
-                tokens: List[str] = req["tokens"]
-                
-                all_prompts.append(prompt)
-                request_info.append((request_id, tokens, idx))
-            
-            # Tokenize all prompts in a single batch with padding
-            # This ensures all sequences have the same length
-            inputs: Dict[str, torch.Tensor] = tokenizer(
-                all_prompts,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                return_attention_mask=True
-            ).to(device)
-            
-            # Collect all unique tokens across all requests
-            all_tokens: Set[str] = set()
-            for _, tokens, _ in request_info:
-                all_tokens.update(tokens)
-            
-            all_tokens_list: List[str] = list(all_tokens)
-            token_ids: List[int] = []
-            
-            # Get token IDs for all tokens
-            for token in all_tokens_list:
-                token_id: int = tokenizer.encode(token, add_special_tokens=False)[0]
-                token_ids.append(token_id)
-            
-            # Create a mapping from token to token_id for faster lookup
-            token_to_id: Dict[str, int] = {token: token_id for token, token_id in zip(all_tokens_list, token_ids)}
-            
-            # Generate logits for all prompts in a single forward pass
-            with torch.no_grad():
-                outputs = model(**inputs)
-                # Get logits for the last token of each sequence
-                # Shape: [batch_size, vocab_size]
-                batch_logits: torch.Tensor = outputs.logits[:, -1, :]
-            
-            # Process each request
-            for request_id, tokens, batch_idx in request_info:
-                # Get the logits for this specific request
-                logits: torch.Tensor = batch_logits[batch_idx]
-                
-                # Extract logits for the requested tokens
-                token_logits: Dict[str, float] = {}
-                for token in tokens:
-                    token_id = token_to_id[token]
-                    token_logits[token] = logits[token_id].item()
-                
-                # Calculate probabilities for the requested tokens
-                item_logits: List[float] = [logits[token_to_id[token]].item() for token in tokens]
-                item_logits_tensor: torch.Tensor = torch.tensor(item_logits)
-                item_probs: List[float] = torch.nn.functional.softmax(item_logits_tensor, dim=0).tolist()
-                token_probs: Dict[str, float] = {token: prob for token, prob in zip(tokens, item_probs)}
-                
-                # Apply softmax to the entire logits tensor to get raw probabilities
-                full_probs: torch.Tensor = torch.nn.functional.softmax(logits, dim=0)
-                
-                # Find the token with the highest probability
-                max_prob_idx: int = torch.argmax(full_probs).item()
-                max_prob_token: str = tokenizer.decode([max_prob_idx])
-                
-                # Extract raw probabilities for the requested tokens
-                raw_token_probs: Dict[str, float] = {
-                    token: full_probs[token_to_id[token]].item()
-                    for token in tokens
-                }
-                
-                # Create result
-                result: LogitsResultDict = {
-                    "logits": token_logits,
-                    "probabilities": token_probs,
-                    "raw_probabilities": raw_token_probs,
-                    "next_token": max_prob_token
-                }
-                
-                # Send result back through the response queue
-                self.response_queue.put((request_id, result))
-                
-            # Log the performance gain from batching
-            if len(all_prompts) > 1:
-                logger.info(f"Batch processed logits for {len(all_prompts)} prompts in a single forward pass")
-                
-        except Exception as e:
-            logger.error(f"Error processing logits batch: {str(e)}")
-            # Send error to all items in the batch
-            error_result: ErrorResultDict = {"error": str(e)}
-            for req in batch:
-                request_id: str = req["id"]
-                self.response_queue.put((request_id, error_result))
-
-    def _process_generation_batch(
-        self,
-        batch: List[GenerationRequestDict],
-        model: "AutoModelForCausalLM",
-        tokenizer: "AutoTokenizer",
-        device: Union[str, torch.device]
-    ) -> None:
-        """
-        Process a batch of generation requests with true batching.
-        This implementation groups requests with similar parameters to enable
-        batched generation where possible.
+        # Send ready status
+        ready_status = {
+            "status": "ready", 
+            "device": device, 
+            "message": "Model loaded and ready to serve requests"
+        }
+        status_queue.put(ready_status)
         
-        Args:
-            batch: List of generation request dictionaries
-            model: The loaded language model
-            tokenizer: The tokenizer for the model
-            device: The device to run inference on (cuda, mps, or cpu)
-        """
-        try:
-            # Group requests by similar generation parameters
-            # This allows us to batch requests with the same max_tokens, temperature, etc.
-            parameter_groups: Dict[Tuple[int, float, bool], List[Tuple[str, str, Optional[List[Dict[str, str]]]]]] = {}
-            
-            for req in batch:
-                request_id: str = req["id"]
-                prompt: str = req["prompt"]
-                messages: Optional[List[Dict[str, str]]] = req.get("messages")
-                max_tokens: int = req["max_tokens"]
-                temperature: float = req.get("temperature", 0.7)
-                output_scores: bool = req.get("output_scores", False)
+        # Process requests
+        while not shutdown_event.is_set():
+            try:
+                # Get a request from the queue with timeout
+                request = request_queue.get(timeout=1.0)
                 
-                # Create a key for grouping similar requests
-                param_key = (max_tokens, temperature, output_scores)
+                if request is None:  # Shutdown signal
+                    break
+                    
+                request_id = request["id"]
+                request_type = request["type"]
                 
-                if param_key not in parameter_groups:
-                    parameter_groups[param_key] = []
-                
-                parameter_groups[param_key].append((request_id, prompt, messages))
-            
-            # Process each parameter group
-            for param_key, requests in parameter_groups.items():
-                max_tokens, temperature, output_scores = param_key
-                
-                # Process requests with the same parameters in batches
-                # For simplicity, we'll process requests with messages separately
-                prompts_only: List[Tuple[str, str, None]] = []
-                messages_only: List[Tuple[str, str, List[Dict[str, str]]]] = []
-                
-                for request_id, prompt, messages in requests:
-                    if messages:
-                        messages_only.append((request_id, prompt, messages))
-                    else:
-                        prompts_only.append((request_id, prompt, None))
-                
-                # Process prompts-only batch
-                if prompts_only:
+                if request_type == REQUEST_TYPE_LOGITS:
+                    # Process logits request
+                    prompt = request["prompt"]
+                    tokens = request["tokens"]
+                    
                     try:
-                        # Extract prompts and request IDs
-                        prompt_request_ids: List[str] = [req_id for req_id, _, _ in prompts_only]
-                        prompts: List[str] = [prompt for _, prompt, _ in prompts_only]
-                        
-                        # Tokenize all prompts in a single batch
-                        inputs: Dict[str, torch.Tensor] = tokenizer(
-                            prompts,
+                        # Tokenize the prompt
+                        inputs = tokenizer(
+                            prompt,
                             return_tensors="pt",
                             padding=True,
-                            truncation=True
+                            truncation=True,
+                            return_attention_mask=True
                         ).to(device)
                         
-                        # Generate text for all prompts in a single batch
-                        generation_kwargs: Dict[str, Any] = {
-                            "max_new_tokens": max_tokens,
-                            "temperature": temperature,
-                            "output_scores": output_scores,
-                            "return_dict_in_generate": True
+                        # Get token IDs for requested tokens
+                        token_ids = []
+                        for token in tokens:
+                            token_id = tokenizer.encode(token, add_special_tokens=False)[0]
+                            token_ids.append(token_id)
+                        
+                        # Generate logits
+                        with torch.no_grad():
+                            outputs = model(**inputs)
+                            # Get logits for the last token
+                            logits = outputs.logits[0, -1, :]
+                        
+                        # Extract logits for the requested tokens
+                        token_logits = {}
+                        for token, token_id in zip(tokens, token_ids):
+                            token_logits[token] = logits[token_id].item()
+                        
+                        # Calculate probabilities
+                        item_logits = [logits[token_id].item() for token_id in token_ids]
+                        item_logits_tensor = torch.tensor(item_logits)
+                        item_probs = torch.nn.functional.softmax(item_logits_tensor, dim=0).tolist()
+                        token_probs = {token: prob for token, prob in zip(tokens, item_probs)}
+                        
+                        # Apply softmax to the entire logits tensor
+                        full_probs = torch.nn.functional.softmax(logits, dim=0)
+                        
+                        # Find the token with the highest probability
+                        max_prob_idx = torch.argmax(full_probs).item()
+                        max_prob_token = tokenizer.decode([max_prob_idx])
+                        
+                        # Extract raw probabilities
+                        raw_token_probs = {
+                            token: full_probs[token_id].item()
+                            for token, token_id in zip(tokens, token_ids)
                         }
                         
-                        outputs = model.generate(
-                            **inputs,
-                            **generation_kwargs
-                        )
+                        # Create result
+                        result = {
+                            "logits": token_logits,
+                            "probabilities": token_probs,
+                            "raw_probabilities": raw_token_probs,
+                            "next_token": max_prob_token
+                        }
                         
-                        # Process each result
-                        for i, request_id in enumerate(prompt_request_ids):
-                            # Extract response for this request
-                            response_ids: torch.Tensor = outputs.sequences[i]
-                            response: str = tokenizer.decode(
-                                response_ids, skip_special_tokens=True
-                            )
-                            
-                            # Extract only the assistant's response (remove the prompt)
-                            original_prompt = prompts[i]
-                            content: str = response[len(original_prompt):].strip()
-                            
-                            # Create result
-                            result: GenerationResultDict = {"text": content}
-                            
-                            # Add logits if requested
-                            if output_scores and hasattr(outputs, "scores"):
-                                # Convert logits to Python lists (only for the generated tokens)
-                                logits_list: List[List[float]] = []
-                                for score_tensor in outputs.scores:
-                                    # Get the logits for this specific request
-                                    token_logits: List[float] = score_tensor[i].detach().cpu().tolist()
-                                    logits_list.append(token_logits)
-                                result["logits"] = logits_list
-                            
-                            # Send result back through the response queue
-                            self.response_queue.put((request_id, result))
-                        
-                        logger.info(f"Batch processed {len(prompts)} generation requests")
+                        # Send result
+                        response_queue.put((request_id, result))
                         
                     except Exception as e:
-                        logger.error(f"Error processing generation batch: {str(e)}")
-                        # Send error to all items in the batch
-                        error_result: ErrorResultDict = {"error": str(e)}
-                        for request_id, _, _ in prompts_only:
-                            self.response_queue.put((request_id, error_result))
+                        logger.error(f"Error processing logits request: {str(e)}")
+                        error_result = {"error": str(e)}
+                        response_queue.put((request_id, error_result))
                 
-                # Process messages-only requests individually for now
-                # Chat templates make batching more complex
-                for request_id, prompt, messages in messages_only:
+                elif request_type == REQUEST_TYPE_GENERATION:
+                    # Process generation request
+                    prompt = request.get("prompt", "")
+                    messages = request.get("messages")
+                    max_tokens = request.get("max_tokens", 100)
+                    temperature = request.get("temperature", 0.7)
+                    output_scores = request.get("output_scores", False)
+                    
                     try:
-                        # Format input using chat template
-                        formatted_prompt: str = tokenizer.apply_chat_template(
-                            messages,
-                            tokenize=False,
-                            add_generation_prompt=True
-                        )
-                        
-                        # Tokenize input
-                        inputs: Dict[str, torch.Tensor] = tokenizer(
-                            formatted_prompt, return_tensors="pt"
-                        ).to(device)
+                        if messages:
+                            # Format input using chat template
+                            formatted_prompt = tokenizer.apply_chat_template(
+                                messages,
+                                tokenize=False,
+                                add_generation_prompt=True
+                            )
+                            
+                            # Tokenize input
+                            inputs = tokenizer(
+                                formatted_prompt, 
+                                return_tensors="pt",
+                                padding=True,
+                                truncation=True
+                            ).to(device)
+                            
+                            original_prompt = formatted_prompt
+                        else:
+                            # Tokenize the prompt directly
+                            inputs = tokenizer(
+                                prompt,
+                                return_tensors="pt",
+                                padding=True,
+                                truncation=True
+                            ).to(device)
+                            
+                            original_prompt = prompt
                         
                         # Generate text
-                        generation_kwargs: Dict[str, Any] = {
+                        generation_kwargs = {
                             "max_new_tokens": max_tokens,
                             "temperature": temperature,
                             "output_scores": output_scores,
@@ -578,72 +326,227 @@ class BatchProcessor:
                         )
                         
                         # Extract response
-                        response_ids: torch.Tensor = outputs.sequences[0]
-                        response: str = tokenizer.decode(
+                        response_ids = outputs.sequences[0]
+                        response = tokenizer.decode(
                             response_ids, skip_special_tokens=True
                         )
                         
-                        # Extract only the assistant's response (remove the prompt)
-                        content: str = response[len(formatted_prompt):].strip()
+                        # Extract only the assistant's response
+                        content = response[len(original_prompt):].strip()
                         
                         # Create result
-                        result: GenerationResultDict = {"text": content}
+                        result = {"text": content}
                         
                         # Add logits if requested
                         if output_scores and hasattr(outputs, "scores"):
-                            # Convert logits to Python lists (only for the generated tokens)
-                            logits_list: List[List[float]] = []
+                            # Convert logits to Python lists
+                            logits_list = []
                             for score_tensor in outputs.scores:
-                                # Get the logits for the token with highest probability
-                                token_logits: List[float] = score_tensor[0].detach().cpu().tolist()
+                                token_logits = score_tensor[0].detach().cpu().tolist()
                                 logits_list.append(token_logits)
                             result["logits"] = logits_list
                         
-                        # Send result back through the response queue
-                        self.response_queue.put((request_id, result))
+                        # Send result
+                        response_queue.put((request_id, result))
                         
                     except Exception as e:
                         logger.error(f"Error processing generation request: {str(e)}")
-                        error_result: ErrorResultDict = {"error": str(e)}
-                        self.response_queue.put((request_id, error_result))
-                        
-        except Exception as e:
-            logger.error(f"Error processing generation batch: {str(e)}")
-            # Send error to all items in the batch
-            error_result: ErrorResultDict = {"error": str(e)}
-            for req in batch:
-                request_id: str = req["id"]
-                self.response_queue.put((request_id, error_result))
+                        error_result = {"error": str(e)}
+                        response_queue.put((request_id, error_result))
+                
+                else:
+                    logger.error(f"Unknown request type: {request_type}")
+                    error_result = {"error": f"Unknown request type: {request_type}"}
+                    response_queue.put((request_id, error_result))
+                
+                # Clean up memory
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                else:
+                    gc.collect()
+                    
+            except queue.Empty:
+                # Queue is empty, continue
+                continue
+            except Exception as e:
+                logger.error(f"Error in worker: {str(e)}")
+                if 'request_id' in locals():
+                    error_result = {"error": str(e)}
+                    response_queue.put((request_id, error_result))
+                    
+    except Exception as e:
+        error_msg = f"Worker process error: {str(e)}"
+        logger.error(error_msg)
+        worker_error_status = {
+            "status": "error", 
+            "message": error_msg
+        }
+        status_queue.put(worker_error_status)
 
+
+class BatchProcessor:
+    """
+    Processes batches of requests using multiple worker processes, one per GPU if available.
+    """
+    
+    def __init__(self, model_id: str, max_batch_size: int = 8, num_workers: int = None):
+        """
+        Initialize the batch processor.
+        
+        Args:
+            model_id: ID of the model to load
+            max_batch_size: Maximum number of requests in a batch
+            num_workers: Number of worker processes (default: one per GPU)
+        """
+        self.model_id = model_id
+        self.max_batch_size = max_batch_size
+        
+        # Detect available GPUs
+        if torch.cuda.is_available():
+            self.gpu_count = torch.cuda.device_count()
+            logger.info(f"Detected {self.gpu_count} GPUs")
+            for i in range(self.gpu_count):
+                logger.info(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
+        else:
+            self.gpu_count = 0
+            logger.info("No GPUs detected, using CPU")
+        
+        # Determine number of workers based on available GPUs
+        if num_workers is None:
+            if self.gpu_count > 0:
+                # Default to one worker per GPU
+                self.num_workers = self.gpu_count
+            else:
+                # If no GPUs, use one worker
+                self.num_workers = 1
+        else:
+            self.num_workers = max(1, num_workers)
+            
+        logger.info(f"Initializing batch processor with {self.num_workers} workers")
+        
+        # Queues for communication
+        self.request_queue = multiprocessing.Queue()
+        self.response_queue = multiprocessing.Queue()
+        self.status_queue = multiprocessing.Queue()
+        self.shutdown_event = multiprocessing.Event()
+        
+        # Start worker processes
+        self.workers = []
+        
+        for i in range(self.num_workers):
+            # Assign GPU ID: if we have enough GPUs, each worker gets its own
+            # If we have fewer GPUs than workers, distribute workers across GPUs
+            gpu_id = i % max(1, self.gpu_count) if self.gpu_count > 0 else -1
+            
+            process = multiprocessing.Process(
+                target=worker_process,
+                args=(model_id, gpu_id, self.request_queue, self.response_queue, 
+                      self.status_queue, self.shutdown_event),
+                daemon=True
+            )
+            process.start()
+            self.workers.append(process)
+            
+            if self.gpu_count > 0:
+                logger.info(f"Worker {i} assigned to GPU {gpu_id}")
+            else:
+                logger.info(f"Worker {i} assigned to CPU")
+        
+        # Model status tracking
+        self.model_ready = False
+        self.workers_ready = 0
+        
+        # Dictionary to store pending requests
+        self.pending_requests = {}
+        
+        # Start the response handler
+        self.response_handler_running = True
+        self.loop = asyncio.new_event_loop()
+        self.response_handler_thread = threading.Thread(
+            target=self._run_response_handler_in_thread,
+            daemon=True
+        )
+        self.response_handler_thread.start()
+        
+        logger.info(f"Started batch processor with max batch size {max_batch_size}")
+    
+    def _run_response_handler_in_thread(self):
+        """
+        Run the response handler in a separate thread with its own event loop.
+        """
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self._handle_responses())
+    
+    async def _handle_responses(self):
+        """
+        Handle responses from the worker processes.
+        """
+        while self.response_handler_running:
+            try:
+                # Check if we have any responses
+                if not self.response_queue.empty():
+                    request_id, result = self.response_queue.get_nowait()
+                    
+                    # Check if we have a pending request with this ID
+                    if request_id in self.pending_requests:
+                        # Set the result and remove from pending requests
+                        self.pending_requests[request_id].set_result(result)
+                        del self.pending_requests[request_id]
+                
+                # Check for status updates
+                if not self.status_queue.empty():
+                    status = self.status_queue.get_nowait()
+                    status_type = status.get("status")
+                    
+                    # Log the status update
+                    message = status.get("message", "")
+                    logger.info(f"Model status update: {status_type} - {message}")
+                    
+                    # Update model_ready flag based on status
+                    if status_type == "ready":
+                        self.workers_ready += 1
+                        if self.workers_ready >= self.num_workers:
+                            self.model_ready = True
+                            logger.info("All workers are ready to serve requests")
+                    elif status_type in ["error", "shutdown"]:
+                        # If any worker has an error, mark the model as not ready
+                        self.model_ready = False
+                
+                # Sleep a bit to avoid busy waiting
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                logger.error(f"Error handling response: {str(e)}")
+                await asyncio.sleep(0.1)  # Sleep longer on error
+    
     async def process_logits_request(self, prompt: str, tokens: List[str]) -> Dict:
         """
         Process a logits request and return the result.
-
+        
         Args:
             prompt: The input prompt
             tokens: List of tokens to get logits for
-
+            
         Returns:
             Dictionary with logits and probabilities
         """
         # Generate a unique request ID
         request_id = str(uuid.uuid4())
-
+        
         # Create a future to wait for the result
         future = asyncio.Future()
         self.pending_requests[request_id] = future
-
+        
         # Create a structured request dictionary
-        request: LogitsRequestDict = {
+        request = {
             "type": REQUEST_TYPE_LOGITS,
             "id": request_id,
             "prompt": prompt,
             "tokens": tokens
         }
-
+        
         # Add request to the queue
         self.request_queue.put(request)
-
+        
         # Wait for the result
         try:
             result = await asyncio.wait_for(future, timeout=60.0)
@@ -658,7 +561,7 @@ class BatchProcessor:
             if request_id in self.pending_requests:
                 del self.pending_requests[request_id]
             return {"error": f"Request failed: {str(e)}"}
-
+    
     async def process_generation_request(
         self,
         prompt: str,
@@ -669,26 +572,26 @@ class BatchProcessor:
     ) -> Dict:
         """
         Process a generation request and return the result.
-
+        
         Args:
             prompt: The input prompt
             messages: List of message dictionaries with role and content
             max_tokens: Maximum number of tokens to generate
             temperature: Temperature for generation
             output_scores: Whether to output token scores
-
+            
         Returns:
             Dictionary with generated text and optionally logits
         """
         # Generate a unique request ID
         request_id = str(uuid.uuid4())
-
+        
         # Create a future to wait for the result
         future = asyncio.Future()
         self.pending_requests[request_id] = future
-
+        
         # Create a structured request dictionary
-        request: GenerationRequestDict = {
+        request = {
             "type": REQUEST_TYPE_GENERATION,
             "id": request_id,
             "prompt": prompt,
@@ -697,10 +600,10 @@ class BatchProcessor:
             "temperature": temperature,
             "output_scores": output_scores
         }
-
+        
         # Add request to the queue
         self.request_queue.put(request)
-
+        
         # Wait for the result
         try:
             # Longer timeout for generation
@@ -716,7 +619,7 @@ class BatchProcessor:
             if request_id in self.pending_requests:
                 del self.pending_requests[request_id]
             return {"error": f"Request failed: {str(e)}"}
-
+    
     def shutdown(self):
         """
         Shutdown the batch processor.
@@ -724,44 +627,42 @@ class BatchProcessor:
         logger.info("Shutting down batch processor")
         
         # Update status queue
-        shutdown_init_status: ModelStatusDict = {
+        shutdown_init_status = {
             "status": "shutting_down", 
             "message": "Shutting down model server"
         }
         self.status_queue.put(shutdown_init_status)
-
+        
         # Stop the response handler
         self.response_handler_running = False
-
-        # Signal worker to stop
-        self.request_queue.put(None)
-
-        # Wait for worker to terminate
-        self.worker_process.join(timeout=5.0)
-        if self.worker_process.is_alive():
-            logger.warning(
-                "Worker process did not terminate gracefully, terminating")
-            self.worker_process.terminate()
-            # Update status queue
-            terminate_error_status: ModelStatusDict = {
-                "status": "error", 
-                "message": "Worker process did not terminate gracefully"
-            }
-            self.status_queue.put(terminate_error_status)
-        else:
-            # Update status queue
-            shutdown_complete_status: ModelStatusDict = {
-                "status": "shutdown", 
-                "message": "Model server shutdown complete"
-            }
-            self.status_queue.put(shutdown_complete_status)
-
+        
+        # Signal shutdown
+        self.shutdown_event.set()
+        
+        # Send shutdown signal to all workers
+        for _ in range(self.num_workers):
+            self.request_queue.put(None)
+        
+        # Wait for all workers to terminate
+        for i, process in enumerate(self.workers):
+            process.join(timeout=5.0)
+            if process.is_alive():
+                logger.warning(f"Worker {i} did not terminate gracefully, terminating")
+                process.terminate()
+        
         # Wait for response handler thread to terminate
         self.response_handler_thread.join(timeout=5.0)
-
+        
         # Close the event loop
         if hasattr(self, 'loop') and self.loop.is_running():
             self.loop.call_soon_threadsafe(self.loop.stop)
+        
+        # Update status queue
+        shutdown_complete_status = {
+            "status": "shutdown", 
+            "message": "Model server shutdown complete"
+        }
+        self.status_queue.put(shutdown_complete_status)
 
 
 # For local testing
@@ -775,22 +676,25 @@ if __name__ == "__main__":
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description="Run the LLM server with batch processing")
+        description="Run the LLM server with multi-GPU support")
     parser.add_argument(
         "--model", type=str, default='tiiuae/falcon3-10b-instruct', help="Model ID to use")
     parser.add_argument("--port", type=int, default=8000,
                         help="Port to run the server on")
     parser.add_argument("--batch-size", type=int, default=8,
                         help="Maximum batch size")
+    parser.add_argument("--num-workers", type=int, default=None,
+                        help="Number of worker processes (default: one per GPU)")
     args = parser.parse_args()
 
     # Create FastAPI app
-    app = FastAPI(title="LLM API Server with Batch Processing")
+    app = FastAPI(title="LLM API Server with Multi-GPU Support")
 
     # Initialize batch processor
     batch_processor = BatchProcessor(
         model_id=args.model,
-        max_batch_size=args.batch_size
+        max_batch_size=args.batch_size,
+        num_workers=args.num_workers
     )
 
     # Define request models
@@ -840,39 +744,6 @@ if __name__ == "__main__":
         )
         return JSONResponse(content=result)
 
-    # Start a background task to monitor the model status
-    @app.on_event("startup")
-    async def startup_event():
-        asyncio.create_task(monitor_model_status())
-    
-    async def monitor_model_status():
-        """
-        Monitor the model status queue for updates from the worker process.
-        """
-        while True:
-            try:
-                # Check if we have any status updates (non-blocking)
-                if not batch_processor.status_queue.empty():
-                    status: ModelStatusDict = batch_processor.status_queue.get_nowait()
-                    status_type = status.get("status")
-                    
-                    # Log the status update
-                    message = status.get("message", "")
-                    logger.info(f"Model status update: {status_type} - {message}")
-                    
-                    # Update model_ready flag based on status
-                    if status_type == "ready":
-                        batch_processor.model_ready = True
-                        logger.info("Model is ready to serve requests")
-                    elif status_type in ["error", "shutdown"]:
-                        batch_processor.model_ready = False
-                    
-                # Sleep a bit to avoid busy waiting
-                await asyncio.sleep(0.1)
-            except Exception as e:
-                logger.error(f"Error monitoring model status: {str(e)}")
-                await asyncio.sleep(1.0)  # Sleep longer on error
-    
     @app.get("/health")
     async def health_check():
         """
@@ -881,13 +752,13 @@ if __name__ == "__main__":
         device = "cuda" if torch.cuda.is_available(
         ) else "mps" if torch.backends.mps.is_available() else "cpu"
         
-        # Check if the worker process is alive
-        worker_alive = batch_processor.worker_process.is_alive()
+        # Check if all workers are alive
+        workers_alive = all(worker.is_alive() for worker in batch_processor.workers)
         
-        if not worker_alive:
-            error_response: ModelStatusDict = {
+        if not workers_alive:
+            error_response = {
                 "status": "error",
-                "message": "Model worker process is not running",
+                "message": "One or more model worker processes are not running",
                 "device": device
             }
             return JSONResponse(
@@ -897,9 +768,9 @@ if __name__ == "__main__":
         
         # Check if the model is ready
         if not batch_processor.model_ready:
-            initializing_response: ModelStatusDict = {
+            initializing_response = {
                 "status": "initializing",
-                "message": "Model is still loading",
+                "message": f"Model is still loading ({batch_processor.workers_ready}/{batch_processor.num_workers} workers ready)",
                 "device": device
             }
             return JSONResponse(
@@ -908,12 +779,45 @@ if __name__ == "__main__":
             )
         
         # If we get here, the model is ready
-        ready_response: ModelStatusDict = {
+        ready_response = {
             "status": "ok",
-            "message": "Model is loaded and ready to serve requests",
-            "device": device
+            "message": f"Model is loaded and ready with {batch_processor.num_workers} workers",
+            "device": device,
+            "workers": batch_processor.num_workers
         }
         return {**ready_response, "model": args.model}
+
+    @app.get("/stats")
+    async def get_stats():
+        """
+        Get server statistics.
+        """
+        import psutil
+        
+        stats = {
+            "cpu_percent": psutil.cpu_percent(interval=0.1, percpu=True),
+            "memory_percent": psutil.virtual_memory().percent,
+            "workers": batch_processor.num_workers,
+            "model_ready": batch_processor.model_ready,
+            "workers_ready": batch_processor.workers_ready
+        }
+        
+        # Add GPU stats if available
+        if torch.cuda.is_available():
+            try:
+                gpu_stats = []
+                for i in range(torch.cuda.device_count()):
+                    gpu_stats.append({
+                        "id": i,
+                        "name": torch.cuda.get_device_name(i),
+                        "memory_allocated": torch.cuda.memory_allocated(i) / (1024 ** 3),  # GB
+                        "memory_reserved": torch.cuda.memory_reserved(i) / (1024 ** 3)  # GB
+                    })
+                stats["gpu"] = gpu_stats
+            except Exception as e:
+                stats["gpu_error"] = str(e)
+        
+        return stats
 
     # Shutdown handler
     @app.on_event("shutdown")
