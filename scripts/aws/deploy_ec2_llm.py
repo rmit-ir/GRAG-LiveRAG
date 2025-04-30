@@ -1218,7 +1218,7 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
                         help="Hugging Face model ID to deploy")
     parser.add_argument("--region", type=str, default=None,
                         help="AWS region name")
-    parser.add_argument("--instance-type", type=str, default="g6e.4xlarge",
+    parser.add_argument("--instance-type", type=str, default="g6e.8xlarge",
                         help="EC2 instance type, see https://aws.amazon.com/ec2/instance-types/")
     parser.add_argument("--stack-name", type=str, default=None,
                         help="CloudFormation stack name")
