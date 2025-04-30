@@ -1,5 +1,7 @@
 # AWS
 
+Check your deployed CloudFormation stacks at: <https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks>
+
 ## Deploy EC2 LLM
 
 The `deploy_ec2_llm.py` script allows you to deploy a HuggingFace compatible model on an EC2 instance using CloudFormation. It:
@@ -10,8 +12,35 @@ The `deploy_ec2_llm.py` script allows you to deploy a HuggingFace compatible mod
 
 ### Basic Usage
 
+Setup credentials:
+
+1. Get aws secret keys at <https://rmit-research.awsapps.com/start/#/>, select an account and click on "Access keys"
+2. Copy secrets from "Option 3"
+3. Edit .env and fill in `RACE_AWS_ACCESS_KEY_ID`, `RACE_AWS_SECRET_ACCESS_KEY`, `RACE_AWS_SESSION_TOKEN`. Leave `RACE_AWS_REGION` as `us-west-2` (default).
+
+Setup a requirement:
+
 ```bash
-# Deploy a model (Ctrl+C to stop and destroy all resources)
+# Install AWS CLI plugin, used to ssh into the EC2 instance and set up port forwarding
+brew install --cask session-manager-plugin
+```
+
+Deploy default model (Ctrl+C to stop and destroy all resources)
+
+```bash
+uv run scripts/aws/deploy_ec2_llm.py
+```
+
+> [!IMPORTANT]  
+> Leaving the GPU resources running can incur big costs, so make sure to stop it on time.
+>
+> Actively check at <https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks>
+> to see if there are any llm_xxx stacks running, in case they are yours, delete them.
+
+Extra commands:
+
+```bash
+# Deploy a particular model
 uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/falcon3-10b-instruct
 
 # Stop and destroy all resources
