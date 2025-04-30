@@ -31,6 +31,8 @@ Deploy default model (Ctrl+C to stop and destroy all resources)
 uv run scripts/aws/deploy_ec2_llm.py
 ```
 
+At this point, you can access the model at <http://localhost:8987/v1/>. Try `uv run src/services/llms/general_openai_client.py` to request the model.
+
 > [!IMPORTANT]  
 > Leaving the GPU resources running can incur big costs, so make sure to stop it on time.
 >
