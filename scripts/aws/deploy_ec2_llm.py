@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 """
-Script to deploy an LLM on EC2 using CloudFormation.
-Connects to the EC2 instance using Session Manager, installs and runs vLLM directly,
+Script to deploy an application on EC2 using CloudFormation.
+Connects to the EC2 instance using Session Manager, installs and runs the application directly,
 and sets up port forwarding for local access.
 
 All resources created in this script must be deleted upon exiting!
 """
 from services import aws_costs
+from services.aws_costs import get_ec2_price
 from session_manager import SessionManager
 from utils.query_utils import generate_short_id
 from utils.logging_utils import get_logger
+from ec2_app import EC2App, PortMapping, create_vllm_app, create_mini_tgi_app
 import os
 import sys
 import time
 import signal
 import argparse
 import subprocess
-import requests
 import atexit
 import threading
 import socket
 import glob
 import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 
 from botocore.exceptions import ClientError, WaiterError
 
@@ -32,13 +33,13 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 
 # Initialize logger
-logger = get_logger("deploy_ec2_llm")
+logger = get_logger("deploy_ec2_app")
 
 
-class EC2LLMDeployer:
+class EC2Deployer:
     """
-    Class to deploy an LLM on EC2 using CloudFormation.
-    Connects to the EC2 instance using Session Manager, installs and runs vLLM directly,
+    Class to deploy an application on EC2 using CloudFormation.
+    Connects to the EC2 instance using Session Manager, installs and runs the application directly,
     and sets up port forwarding for local access.
 
     Can be used as a context manager to ensure proper cleanup of resources.
@@ -46,26 +47,27 @@ class EC2LLMDeployer:
 
     def __init__(
         self,
-        model_id: str = "tiiuae/falcon3-10b-instruct",
+        app: EC2App,
         region_name: str = None,
         instance_type: str = "g6e.8xlarge",
         stack_name: str = None,
-        local_port: int = 8987,
         ami_id: str = "ami-04f4302ff68e424cf",
         deployer_id: str = None,
+        api_key: str = None,
         print_info: bool = True,
     ):
         """
-        Initialize the EC2 LLM deployer.
+        Initialize the EC2 deployer.
 
         Args:
-            model_id (str): The Hugging Face model ID to deploy
-            region_name (str, optional): AWS region name. If None, uses RACE_AWS_REGION from env
-            instance_type (str): EC2 instance type for deployment
-            stack_name (str, optional): CloudFormation stack name. If None, generates one
-            local_port (int): Local port for port forwarding (default: 8987)
-            ami_id (str): AMI ID to use for the EC2 instance (Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6)
-            deployer_id (str, optional): Custom ID for this deployer. If None, generates one
+            app: The EC2App to deploy
+            region_name: AWS region name. If None, uses RACE_AWS_REGION from env
+            instance_type: EC2 instance type for deployment
+            stack_name: CloudFormation stack name. If None, generates one
+            ami_id: AMI ID to use for the EC2 instance
+            deployer_id: Custom ID for this deployer. If None, generates one
+            api_key: API key for the application
+            print_info: Whether to print stack information
         """
         # Initialize timing tracking
         self.start_time = None
@@ -86,39 +88,35 @@ class EC2LLMDeployer:
         self.ec2_client = self.boto_session.client('ec2')
 
         # Store configuration
-        self.model_id = model_id
+        self.app = app
         self.instance_type = instance_type
 
         # Generate short stack name if not provided
         if stack_name is None:
-            # Use short model identifier (first letters of model name parts)
-            model_parts = model_id.split('/')[-1].split('-')
-            model_short = ''.join([part[0] for part in model_parts])
-            # Use last 4 digits of timestamp for uniqueness
+            # Use app name and timestamp for uniqueness
             timestamp_short = str(int(time.time()))[-4:]
-            self.stack_name = f"llm-{model_short}-{timestamp_short}"
+            self.stack_name = f"{app.name}-{timestamp_short}"
         else:
             self.stack_name = stack_name
 
         # Store other parameters
-        self.remote_port = 8000  # Fixed remote port for vLLM
-        self.local_port = local_port  # Configurable local port for port forwarding
         self.ami_id = ami_id
 
-        # Use EC2_LLM_API_KEY from environment
-        self.api_key = os.environ.get("EC2_LLM_API_KEY", "")
+        # Use API_KEY from environment or parameter
+        self.api_key = api_key or os.environ.get(
+            f"{app.name.upper()}_API_KEY", "")
 
         # Track deployed resources
         self.instance_id = None
 
         # Socket related attributes
-        self.socket_path = f"/tmp/ec2_llm_{self.deployer_id}_port{self.local_port}"
+        self.socket_path = f"/tmp/ec2_app_{self.deployer_id}_port{app.local_port}"
         self.socket_thread = None
         self.socket_server = None
         self._should_stop = False
 
         logger.debug(
-            f"Initialized EC2 LLM deployer with model: {model_id}, ID: {self.deployer_id}")
+            f"Initialized EC2 deployer with app: {app.name}, ID: {self.deployer_id}")
         if print_info:
             self.print_stack_info()
 
@@ -126,34 +124,21 @@ class EC2LLMDeployer:
         """
         Print key information about the deploying stack and provide a link to the AWS calculator
         for cost estimation.
-
-        This method displays:
-        - Stack name and region
-        - Instance type and AMI ID
-        - Model being deployed
-        - Estimated hourly cost reference via AWS calculator link
         """
-        logger.info("=" * 60)
-        logger.info("EC2 LLM STACK INFORMATION")
-        logger.info("=" * 60)
-
-        # Basic stack information
-        logger.info(f"Stack Name", stack_name=self.stack_name)
-        logger.info(f"AWS Region", region=self.region_name)
-        logger.info(f"Instance Type", instance_type=self.instance_type)
-        logger.info(f"AMI ID", ami_id=self.ami_id)
-        logger.info(f"Model ID", model_id=self.model_id)
-        logger.info(f"Local Endpoint",
-                    local_endpoint=f"http://localhost:{self.local_port}/v1")
-
-        # # AWS Calculator link
-        # calculator_url = "https://calculator.aws/#/createCalculator/ec2-enhancement"
-        # logger.info(f"Estimate cost", calculator_url=calculator_url)
-        # logger.info("In the calculator:")
-        # logger.info(f"1. Choose a Region", region=self.region_name)
-        # logger.info(f"2. Search instance type", instance_type=self.instance_type)
-
-        logger.info("=" * 60)
+        # Get and display hourly price information
+        hourly_price = get_ec2_price(self.instance_type, self.region_name)
+        if hourly_price is not None:
+            logger.info(f"EC2 Hourly Price: ${hourly_price:.4f}/hour")
+        else:
+            logger.info("EC2 Hourly Price: Price information not available")
+            
+        # Use the app's print_info method
+        self.app.print_info(
+            stack_name=self.stack_name,
+            region_name=self.region_name,
+            instance_type=self.instance_type,
+            ami_id=self.ami_id
+        )
 
     def print_stack_events(self, last_event_id=None):
         """
@@ -301,7 +286,7 @@ class EC2LLMDeployer:
 
     def deploy(self) -> Dict[str, Any]:
         """
-        Deploy the LLM on EC2 using CloudFormation.
+        Deploy the application on EC2 using CloudFormation.
 
         Returns:
             Dict containing stack details
@@ -325,7 +310,7 @@ class EC2LLMDeployer:
             parameters = [
                 {
                     'ParameterKey': 'ModelId',
-                    'ParameterValue': self.model_id
+                    'ParameterValue': self.app.name  # Using app name as ModelId for compatibility
                 },
                 {
                     'ParameterKey': 'InstanceType',
@@ -370,7 +355,7 @@ class EC2LLMDeployer:
                 'stack_name': self.stack_name,
                 'instance_id': self.instance_id,
                 'api_key': self.api_key,
-                'model_id': self.model_id
+                'app_name': self.app.name
             }
 
         except WaiterError as e:
@@ -462,9 +447,9 @@ class EC2LLMDeployer:
             logger.error(f"Error connecting to instance: {str(e)}")
             return False
 
-    def run_vllm_service(self) -> bool:
+    def run_app_service(self) -> bool:
         """
-        Install and run vLLM directly on the EC2 instance as a systemd service.
+        Install and run the application on the EC2 instance.
 
         Returns:
             bool: True if service is started successfully, False otherwise
@@ -474,67 +459,88 @@ class EC2LLMDeployer:
             return False
 
         try:
-            # Upload the installation script
-            install_script_path = Path(
-                __file__).parent / "config" / "install_vllm.sh"
-            remote_install_path = "/tmp/install_vllm.sh"
-
-            logger.info(
-                f"Uploading vLLM installation script to {remote_install_path}...")
+            # Upload the setup script
+            remote_setup_path = f"/tmp/{os.path.basename(self.app.setup_script)}"
+            logger.info(f"Uploading setup script to {remote_setup_path}...")
             self.session_manager.upload_file(
                 instance_id=self.instance_id,
-                local_path=str(install_script_path),
-                remote_path=remote_install_path
+                local_path=str(self.app.setup_script),
+                remote_path=remote_setup_path
             )
 
             # Make the script executable and run it
-            logger.info("Installing vLLM...")
+            logger.info(f"Installing {self.app.name}...")
             self.session_manager.execute_command(
                 instance_id=self.instance_id,
                 commands=[
-                    f"chmod +x {remote_install_path}",
-                    f"sudo {remote_install_path}"
+                    f"chmod +x {remote_setup_path}",
+                    f"sudo {remote_setup_path}"
                 ]
             )
 
-            # Upload the service setup script
-            service_script_path = Path(
-                __file__).parent / "config" / "setup_vllm_service.sh"
-            remote_service_path = "/tmp/setup_vllm_service.sh"
+            # Upload the program file if provided
+            if self.app.program_file:
+                remote_program_path = f"/tmp/{os.path.basename(self.app.program_file)}"
+                logger.info(
+                    f"Uploading program file to {remote_program_path}...")
+                self.session_manager.upload_file(
+                    instance_id=self.instance_id,
+                    local_path=str(self.app.program_file),
+                    remote_path=remote_program_path
+                )
 
-            logger.info(
-                f"Uploading vLLM service setup script to {remote_service_path}...")
+            # Upload the launch script
+            remote_launch_path = f"/tmp/{os.path.basename(self.app.launch_script)}"
+            logger.info(f"Uploading launch script to {remote_launch_path}...")
             self.session_manager.upload_file(
                 instance_id=self.instance_id,
-                local_path=str(service_script_path),
-                remote_path=remote_service_path
+                local_path=str(self.app.launch_script),
+                remote_path=remote_launch_path
             )
 
             # Make the script executable and run it with parameters
-            logger.info("Setting up vLLM service...")
+            logger.info(f"Setting up {self.app.name} service...")
+
+            # Prepare environment variables
+            env_vars = f"PORT={self.app.remote_port} API_KEY=\"{self.api_key}\""
+
+            # Add program file path if provided
+            if self.app.program_file:
+                env_vars += f" PROGRAM_FILE=\"{remote_program_path}\""
+
+            # Add additional parameters from app.params
+            if self.app.params:
+                for key, value in self.app.params.items():
+                    env_vars += f" {key}=\"{value}\""
+
+            # Prepare final command arguments with environment variables
+            command_args = [
+                f"chmod +x {remote_launch_path}",
+                f"{env_vars} sudo {remote_launch_path}"
+            ]
+
             result = self.session_manager.execute_command(
                 instance_id=self.instance_id,
-                commands=[
-                    f"chmod +x {remote_service_path}",
-                    f"sudo {remote_service_path} {self.model_id} {self.remote_port} {self.api_key}"
-                ]
+                commands=command_args
             )
 
             # Check if the service was started successfully
             if result.get('Status') == 'Success':
-                logger.info("vLLM service started successfully.")
+                logger.info(f"{self.app.name} service started successfully.")
                 return True
             else:
-                time.sleep(3600)  # Wait for a moment before checking logs
-                logger.error("Failed to start vLLM service.")
+                logger.error(f"Failed to start {self.app.name} service.")
                 return False
         except Exception as e:
-            logger.error(f"Error setting up vLLM service: {str(e)}")
+            logger.error(f"Error setting up {self.app.name} service: {str(e)}")
             return False
 
-    def setup_port_forwarding(self) -> Dict[str, Any]:
+    def setup_port_forwarding(self, port_mapping: Optional[PortMapping] = None) -> Dict[str, Any]:
         """
         Set up port forwarding to the EC2 instance using SessionManager.
+
+        Args:
+            port_mapping: Optional specific port mapping to use. If None, uses the primary port mapping.
 
         Returns:
             Dict containing the process and monitoring thread information
@@ -544,20 +550,30 @@ class EC2LLMDeployer:
             return None
 
         try:
+            # Use the specified port mapping or the primary one
+            mapping = port_mapping or self.app.primary_port_mapping
+            remote_port = mapping["remote_port"]
+            local_port = mapping["local_port"]
+
             # Use the SessionManager's setup_port_forwarding method
-            self.port_forwarding = self.session_manager.setup_port_forwarding(
+            port_forwarding = self.session_manager.setup_port_forwarding(
                 instance_id=self.instance_id,
-                remote_port=self.remote_port,
-                local_port=self.local_port
+                remote_port=remote_port,
+                local_port=local_port
             )
-            return self.port_forwarding
+
+            # Store the port forwarding info if it's the primary mapping
+            if not port_mapping or mapping == self.app.primary_port_mapping:
+                self.port_forwarding = port_forwarding
+
+            return port_forwarding
         except Exception as e:
             logger.error(f"Error setting up port forwarding: {str(e)}")
             return None
 
     def tail_service_logs(self, in_thread=False) -> Optional[threading.Thread]:
         """
-        Tail the logs of the vLLM systemd service using direct AWS SSM command.
+        Tail the logs of the application service using the configured log command.
         Logs are redirected to a file in /tmp/ instead of being displayed in real-time.
 
         Args:
@@ -572,19 +588,19 @@ class EC2LLMDeployer:
 
         def _tail_logs():
             try:
-                logger.info("Tailing vLLM service logs...")
+                logger.info(f"Tailing {self.app.name} service logs...")
 
                 # Create a log file with a unique name
-                log_file_path = f"/tmp/vllm_service_logs_{self.instance_id}_{int(time.time())}.log"
+                log_file_path = f"/tmp/{self.app.name}_logs_{self.instance_id}_{int(time.time())}.log"
                 log_file = open(log_file_path, "w")
 
-                # Construct the AWS SSM command to directly execute journalctl
+                # Construct the AWS SSM command to directly execute the log command
                 ssm_command = [
                     "aws", "ssm", "start-session",
                     "--target", self.instance_id,
                     "--region", self.region_name,
                     "--document-name", "AWS-StartInteractiveCommand",
-                    "--parameters", "command=['sudo journalctl -u vllm.service -f']"
+                    "--parameters", f"command=['{self.app.log_command}']"
                 ]
 
                 # Set up environment variables for the subprocess
@@ -613,7 +629,7 @@ class EC2LLMDeployer:
                 )
 
                 logger.info(
-                    f"To view vLLM logs in real-time, run: tail -f {log_file_path}")
+                    f"To view {self.app.name} logs in real-time, run: tail -f {log_file_path}")
 
                 # Wait for the process to complete
                 process.wait()
@@ -637,7 +653,8 @@ class EC2LLMDeployer:
             # Run in a separate thread
             log_thread = threading.Thread(target=_tail_logs, daemon=True)
             log_thread.start()
-            logger.info("Started vLLM log tailing in a separate thread")
+            logger.info(
+                f"Started {self.app.name} log tailing in a separate thread")
             return log_thread
         else:
             # Run in the main thread
@@ -647,122 +664,38 @@ class EC2LLMDeployer:
                 logger.info("Log tailing interrupted.")
             return None
 
-    def wait_for_llm_ready(self, max_wait_time: int = 900, check_interval: int = 5) -> bool:
+    def wait_for_app_ready(self, max_wait_time: int = 900, check_interval: int = 5) -> bool:
         """
-        Poll the vLLM health endpoint until it returns a successful response or times out.
+        Poll the application health endpoint until it returns a successful response or times out.
 
         Args:
             max_wait_time (int): Maximum time to wait in seconds
             check_interval (int): Time between health checks in seconds
 
         Returns:
-            bool: True if the LLM is ready, False otherwise
+            bool: True if the application is ready, False otherwise
         """
         if not self.instance_id:
             logger.error("No instance ID available. Deploy the stack first.")
             return False
 
-        health_url = f"http://localhost:{self.local_port}/health"
-        logger.info(f"Waiting for vLLM to be ready (polling {health_url} )...")
-
-        # Prepare headers with API key if provided
-        headers = {}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
-        start_time = time.time()
-        while (time.time() - start_time) < max_wait_time:
-            try:
-                response = requests.get(health_url, headers=headers, timeout=5)
-                if response.status_code == 200:
-                    logger.info("vLLM is ready!")
-
-                    # Print common vLLM API endpoints
-                    base_url = f"http://localhost:{self.local_port}"
-                    logger.info("Common vLLM API endpoints:")
-                    logger.info(f"  Health check:     {base_url}/health")
-                    logger.info(f"  List models:      {base_url}/v1/models")
-                    logger.info(
-                        f"  Text completion:  {base_url}/v1/completions")
-                    logger.info(
-                        f"  Chat completion:  {base_url}/v1/chat/completions")
-                    logger.info(
-                        f"  Embeddings:       {base_url}/v1/embeddings")
-
-                    return True
-                else:
-                    logger.debug(
-                        f"vLLM not ready yet. Status code: {response.status_code}")
-            except requests.exceptions.RequestException:
-                logger.debug("vLLM health check failed, retrying...")
-
-            # Wait before checking again
-            time.sleep(check_interval)
-
-        logger.error(
-            f"Timed out waiting for vLLM to be ready after {max_wait_time} seconds")
-        raise TimeoutError(
-            f"vLLM did not become ready in ({max_wait_time} seconds)")
-
-    def test_llm(self) -> bool:
-        """
-        Send a test request to LLM
-        """
+        # Use the app's wait_for_ready method
         try:
-            # Prepare the test request
-            url = f"http://localhost:{self.local_port}/v1/chat/completions"
-            headers = {
-                "Content-Type": "application/json"
-            }
-
-            # Add API key if provided
-            if self.api_key:
-                headers["Authorization"] = f"Bearer {self.api_key}"
-
-            # Prepare a friendly welcome message using chat format
-            data = {
-                "model": self.model_id,
-                "messages": [
-                    {"role": "system",
-                        "content": "You are a helpful AI assistant deployed on AWS EC2."},
-                    {"role": "user", "content": "Say hello and introduce yourself."}
-                ],
-                "max_tokens": 100,
-                "temperature": 0.7
-            }
-
-            logger.info("Sending test request to the LLM...")
-            response = requests.post(
-                url, headers=headers, json=data, timeout=30)
-
-            if response.status_code == 200:
-                result = response.json()
-                generated_text = result.get("choices", [{}])[
-                    0].get("message", {}).get("content", "").strip()
-
-                logger.info("LLM Test Response:")
-                logger.info("-" * 50)
-                logger.info(generated_text)
-                logger.info("-" * 50)
-                logger.info("LLM is working correctly!")
-                return True
-            else:
-                logger.error(
-                    f"Error testing LLM: Status code {response.status_code}")
-                logger.error(f"Response: {response.text}")
-                return False
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error connecting to LLM: {str(e)}")
-            logger.info(
-                "The LLM might still be initializing. Try again in a few moments.")
-            return False
+            return self.app.wait_for_ready(max_wait_time=max_wait_time, check_interval=check_interval)
         except Exception as e:
-            logger.error(f"Error testing LLM: {str(e)}")
+            logger.error(f"Error waiting for app to be ready: {str(e)}")
             return False
+
+    def test_app(self) -> bool:
+        """
+        Send a test request to the application
+        """
+        # Use the app's test_request method
+        return self.app.test_request()
 
     def register_socket(self):
         """
-        Register a socket at /tmp/ec2_llm_{deployer_id}_port{port} that listens for 'kill-stack' commands.
+        Register a socket at /tmp/ec2_app_{deployer_id}_port{port} that listens for 'kill-stack' commands.
         When 'kill-stack' is received, the deployer will clean up everything.
 
         Returns:
@@ -774,7 +707,7 @@ class EC2LLMDeployer:
                 socket.AF_UNIX, socket.SOCK_STREAM)
 
             # Update socket path to include port information
-            self.socket_path = f"/tmp/ec2_llm_{self.deployer_id}_port{self.local_port}"
+            self.socket_path = f"/tmp/ec2_app_{self.deployer_id}_port{self.app.local_port}"
 
             # Remove the socket file if it already exists
             if os.path.exists(self.socket_path):
@@ -870,7 +803,7 @@ class EC2LLMDeployer:
         Enter the context manager.
 
         Returns:
-            EC2LLMDeployer: The deployer instance
+            EC2Deployer: The deployer instance
         """
         return self
 
@@ -1002,6 +935,10 @@ class EC2LLMDeployer:
                     f"Visit: https://{self.region_name}.console.aws.amazon.com/cloudformation/home?region={self.region_name}#/stacks")
 
 
+# Global variable to store the deployer instance
+deployer = None
+
+
 def signal_handler(sig, frame):
     """
     Handle signals to terminate the stack and clean up resources.
@@ -1018,18 +955,19 @@ def cleanup_on_exit():
     Ensure cleanup happens when the script exits for any reason.
     """
     logger.info("Script is exiting. Ensuring all resources are cleaned up...")
-    if deployer:
+    global deployer
+    if deployer is not None:
         deployer.cleanup()
 
 
-def list_ec2_llm_sockets() -> List[str]:
+def list_ec2_app_sockets() -> List[str]:
     """
-    List all socket files matching the pattern /tmp/ec2_llm_*
+    List all socket files matching the pattern /tmp/ec2_app_*
 
     Returns:
         List[str]: List of socket file paths
     """
-    socket_files = glob.glob("/tmp/ec2_llm_*")
+    socket_files = glob.glob("/tmp/ec2_app_*")
     return socket_files
 
 
@@ -1047,25 +985,25 @@ def extract_port_from_socket_path(socket_path: str) -> Optional[int]:
 
 
 def find_socket_by_id(instance_id: str) -> List[str]:
-    socket_files = glob.glob(f"/tmp/ec2_llm_{instance_id}*")
+    socket_files = glob.glob(f"/tmp/ec2_app_{instance_id}*")
     return socket_files
 
 
 def stop_instances(instance_id: Optional[str] = None) -> None:
     """
-    Stop running EC2 LLM instances.
+    Stop running EC2 app instances.
 
     Args:
         instance_id (Optional[str]): ID of the instance to stop. If None, stops all instances.
     """
     if instance_id is None:
         # List all socket files
-        socket_files = list_ec2_llm_sockets()
+        socket_files = list_ec2_app_sockets()
         if not socket_files:
-            logger.info("No running EC2 LLM instances found.")
+            logger.info("No running EC2 app instances found.")
             return
 
-        logger.info(f"Found {len(socket_files)} running EC2 LLM instances:")
+        logger.info(f"Found {len(socket_files)} running EC2 app instances:")
         for socket_file in socket_files:
             port = extract_port_from_socket_path(socket_file)
             port_info = f" (port: {port})" if port else ""
@@ -1098,35 +1036,34 @@ def stop_instances(instance_id: Optional[str] = None) -> None:
                 f"Instance with ID {instance_id} has been instructed to shut down.")
         else:
             logger.error(
-                f"No running EC2 LLM instance found with ID {instance_id}.")
+                f"No running EC2 app instance found with ID {instance_id}.")
 
 
-def wait_for_llm_instances(instance_id: Optional[str] = None, check_interval: int = 5) -> bool:
+def wait_for_app_instances(instance_id: Optional[str] = None, check_interval: int = 5) -> bool:
     """
-    Wait for LLM instances to be ready by polling test_llm until it returns true.
+    Wait for app instances to be ready by polling test_app until it returns true.
 
     Args:
         instance_id (Optional[str]): ID of the instance to wait for. If None, waits for any instance.
         check_interval (int): Time between checks in seconds
-        max_wait_time (int): Maximum time to wait in seconds
 
     Returns:
         bool: True if an instance is ready, False otherwise
     """
     logger.info(
-        f"Waiting for {'any' if instance_id is None else instance_id} LLM instance to be ready...")
+        f"Waiting for {'any' if instance_id is None else instance_id} app instance to be ready...")
     stack_info_printed = False
 
     while True:
         # List all socket files or specific instance sockets
         if instance_id is None:
-            socket_files = list_ec2_llm_sockets()
+            socket_files = list_ec2_app_sockets()
         else:
             socket_files = find_socket_by_id(instance_id)
 
         if not socket_files:
             logger.info(
-                f"No {'any' if instance_id is None else instance_id} LLM instances found. Retrying in {check_interval} seconds...")
+                f"No {'any' if instance_id is None else instance_id} app instances found. Retrying in {check_interval} seconds...")
             time.sleep(check_interval)
             continue
 
@@ -1140,21 +1077,27 @@ def wait_for_llm_instances(instance_id: Optional[str] = None, check_interval: in
                         f"Could not extract port from socket path: {socket_file}")
                     continue
 
-                # Create a temporary deployer to test the LLM
-                temp_deployer = EC2LLMDeployer(
-                    local_port=port, print_info=(not stack_info_printed))
-                stack_info_printed = True
+                # Create a temporary deployer to test the app
+                # This is a simplified approach - in a real implementation, we would need to know the app type
+                logger.info(f"Testing app at port {port}...")
 
-                # Test if the LLM is ready
-                if temp_deployer.test_llm():
-                    logger.info(f"LLM instance at port {port} is ready!")
-                    return True
+                # Here we would need to determine the app type and create the appropriate EC2App instance
+                # For now, we'll just check if the port is responding
+                try:
+                    response = requests.get(
+                        f"http://localhost:{port}/health", timeout=5)
+                    if response.status_code == 200:
+                        logger.info(f"App instance at port {port} is ready!")
+                        return True
+                except Exception as e:
+                    logger.debug(f"App at port {port} not ready: {str(e)}")
+
             except Exception as e:
-                logger.debug(f"Error testing LLM at {socket_file}: {str(e)}")
+                logger.debug(f"Error testing app at {socket_file}: {str(e)}")
 
         # Wait before checking again
         logger.info(
-            f"No ready LLM instances found. Retrying in {check_interval} seconds...")
+            f"No ready app instances found. Retrying in {check_interval} seconds...")
         time.sleep(check_interval)
 
 
@@ -1198,6 +1141,9 @@ def send_kill_command_to_socket(socket_path: str) -> bool:
         return False
 
 
+# These functions have been moved to ec2_app.py
+
+
 if __name__ == "__main__":
     from dotenv import load_dotenv
 
@@ -1211,11 +1157,13 @@ if __name__ == "__main__":
         exit(1)
 
     # Parse command line arguments
-    command_desc = """Deploy an LLM on EC2 using CloudFormation.
-Before deploying EC2 LLM stack, make sure that your environment variables (or .env) include RACE_AWS_ aws access keys."""
+    command_desc = """Deploy an application on EC2 using CloudFormation.
+Before deploying EC2 app stack, make sure that your environment variables (or .env) include RACE_AWS_ aws access keys."""
     parser = argparse.ArgumentParser(description=command_desc)
+    parser.add_argument("--app-type", type=str, choices=["vllm", "mini-tgi"], default="vllm",
+                        help="Type of application to deploy")
     parser.add_argument("--model-id", type=str, default="tiiuae/falcon3-10b-instruct",
-                        help="Hugging Face model ID to deploy")
+                        help="Hugging Face model ID to deploy (for vLLM)")
     parser.add_argument("--region", type=str, default=None,
                         help="AWS region name")
     parser.add_argument("--instance-type", type=str, default="g6e.8xlarge",
@@ -1231,15 +1179,19 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
     parser.add_argument("--port-forward", action="store_true", default=True,
                         help="Set up port forwarding to the EC2 instance")
     parser.add_argument("--test", action="store_true", default=True,
-                        help="Send a test request to the LLM after deployment")
+                        help="Send a test request to the app after deployment")
     parser.add_argument("--wait-time", type=int, default=1800,
-                        help="Timeout for retrying vLLM service after it starts until it's fully ready")
+                        help="Timeout for retrying app service after it starts until it's fully ready")
     parser.add_argument("--id", type=str, default=None,
                         help="Custom ID for this deployer (used for deployer identification)")
     parser.add_argument("--stop", type=str, default=None, nargs='?', const='all', metavar="ID",
-                        help="Stop running EC2 LLM instances. If no ID is provided, stops all instances. If ID is provided, stops only that instance.")
+                        help="Stop running EC2 app instances. If no ID is provided, stops all instances. If ID is provided, stops only that instance.")
     parser.add_argument("--wait", type=str, default=None, nargs='?', const='all', metavar="ID",
-                        help="Wait for LLM instances to be ready. If no ID is provided, waits for any instance. If ID is provided, waits only for that instance.")
+                        help="Wait for app instances to be ready. If no ID is provided, waits for any instance. If ID is provided, waits only for that instance.")
+    parser.add_argument("--param", action="append", metavar="KEY=VALUE",
+                        help="Additional parameters to pass to the application. Can be specified multiple times. Use --param-help for details.")
+    parser.add_argument("--param-help", action="store_true",
+                        help="Show detailed help for available parameters for each app type")
 
     args = parser.parse_args()
 
@@ -1252,7 +1204,7 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
     # Handle the --wait argument if provided (if provided but without id, it will be all, if not provided, it will be None)
     if args.wait is not None:
         instance_id = None if args.wait == 'all' else args.wait
-        wait_for_llm_instances(instance_id, check_interval=5)
+        wait_for_app_instances(instance_id, check_interval=5)
         sys.exit(0)
 
     # Register signal handlers for various termination signals
@@ -1263,13 +1215,54 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
     # Register atexit handler to ensure cleanup on exit
     atexit.register(cleanup_on_exit)
 
+    # Show detailed parameter help if requested
+    if args.param_help:
+        print("\nDetailed Parameter Help:")
+        print("\nFor vLLM app:")
+        print("  --param MODEL_ID=tiiuae/falcon3-10b-instruct  # Hugging Face model ID")
+        print("  --param TENSOR_PARALLEL=2                     # Number of GPUs for tensor parallelism (0 for auto)")
+        print("  --param MAX_NUM_BATCHED_TOKENS=4096           # Maximum number of tokens to batch")
+        print("  --param GPU_MEMORY_UTILIZATION=0.9            # GPU memory utilization (0.0-1.0)")
+        print("  --param ENABLE_CHUNKED_PREFILL=true           # Enable chunked prefill (true/false)")
+        print("\nFor mini-TGI app:")
+        print("  --param MODEL_ID=tiiuae/falcon3-10b-instruct  # Hugging Face model ID")
+        print("  --param MAX_BATCH_SIZE=16                     # Maximum batch size")
+        print("  --param MAX_TOKENS=4096                       # Maximum number of tokens to generate")
+        print("\nExample usage:")
+        print("  python scripts/aws/deploy_ec2_llm.py --app-type vllm --param MODEL_ID=meta-llama/Llama-2-7b-chat-hf --param TENSOR_PARALLEL=2")
+        sys.exit(0)
+
+    # Parse parameters from --param arguments
+    params = {}
+    if args.param:
+        for param in args.param:
+            try:
+                key, value = param.split('=', 1)
+                params[key.strip()] = value.strip()
+            except ValueError:
+                logger.warning(
+                    f"Invalid parameter format: {param}. Expected format: key=value")
+
+    # Add model_id to params if specified
+    if args.model_id:
+        params['MODEL_ID'] = args.model_id
+
+    # Create the appropriate EC2App based on the app type
+    if args.app_type == "vllm":
+        app = create_vllm_app(local_port=args.local_port, params=params)
+    elif args.app_type == "mini-tgi":
+        app = create_mini_tgi_app(local_port=args.local_port, params=params)
+    else:
+        logger.error(f"Unsupported app type: {args.app_type}")
+        sys.exit(1)
+
     # Create deployer using context manager pattern
-    with EC2LLMDeployer(
-        model_id=args.model_id,
+    deployer = None  # Initialize deployer variable for signal handler
+    with EC2Deployer(
+        app=app,
         region_name=args.region,
         instance_type=args.instance_type,
         stack_name=args.stack_name,
-        local_port=args.local_port,
         ami_id=args.ami_id,
         deployer_id=args.id
     ) as deployer:
@@ -1283,17 +1276,17 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
             if not deployer.wait_for_instance_ssm_ready():
                 logger.error(
                     "Instance not ready for SSM connections. Exiting.")
-                raise
+                raise Exception("Instance not ready for SSM connections")
 
             # Connect to the instance
             if not deployer.connect_to_instance():
                 logger.error("Failed to connect to instance. Exiting.")
-                raise
+                raise Exception("Failed to connect to instance")
 
-            # Install and run vLLM service
-            if not deployer.run_vllm_service():
-                logger.error("Failed to run vLLM service. Exiting.")
-                raise
+            # Install and run app service
+            if not deployer.run_app_service():
+                logger.error(f"Failed to run {app.name} service. Exiting.")
+                raise Exception(f"Failed to run {app.name} service")
 
             # Start log tailing in a separate thread
             log_thread = deployer.tail_service_logs(in_thread=True)
@@ -1303,10 +1296,10 @@ Before deploying EC2 LLM stack, make sure that your environment variables (or .e
             if args.port_forward:
                 port_forwarding = deployer.setup_port_forwarding()
 
-                # Send a test request to the LLM if requested
+                # Send a test request to the app if requested
                 if args.test:
-                    deployer.wait_for_llm_ready(max_wait_time=args.wait_time)
-                    deployer.test_llm()
+                    deployer.wait_for_app_ready(max_wait_time=args.wait_time)
+                    deployer.test_app()
 
             # Keep the main thread running until interrupted
             try:
