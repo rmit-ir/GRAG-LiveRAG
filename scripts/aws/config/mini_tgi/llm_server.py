@@ -22,7 +22,7 @@ import asyncio
 import multiprocessing
 import threading
 import uuid
-from typing import Dict, List, TypedDict, Optional
+from typing import Dict, List, TypedDict, Optional, Union, Tuple, Set, Any
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import gc
 
@@ -311,186 +311,308 @@ class BatchProcessor:
             }
             self.status_queue.put(worker_error_status)
 
-    def _process_logits_batch(self, batch, model, tokenizer, device):
+    def _process_logits_batch(
+        self,
+        batch: List[LogitsRequestDict],
+        model: "AutoModelForCausalLM",
+        tokenizer: "AutoTokenizer",
+        device: Union[str, torch.device]
+    ) -> None:
         """
-        Process a batch of logits requests.
+        Process a batch of logits requests with true batching.
+        This implementation batches all prompts together regardless of uniqueness,
+        allowing for a single forward pass through the model.
+        
+        Args:
+            batch: List of logits request dictionaries
+            model: The loaded language model
+            tokenizer: The tokenizer for the model
+            device: The device to run inference on (cuda, mps, or cpu)
         """
         try:
-            # Group by unique prompts to optimize tokenization
-            prompt_groups = {}
-            for req in batch:
-                prompt = req["prompt"]
-                request_id = req["id"]
-                tokens = req["tokens"]
+            # Prepare data structures to track requests and their tokens
+            all_prompts: List[str] = []
+            request_info: List[Tuple[str, List[str], int]] = []  # Store (request_id, tokens, batch_idx) for each request
+            
+            # Collect all prompts and tokens
+            for idx, req in enumerate(batch):
+                prompt: str = req["prompt"]
+                request_id: str = req["id"]
+                tokens: List[str] = req["tokens"]
                 
-                if prompt not in prompt_groups:
-                    prompt_groups[prompt] = []
-                prompt_groups[prompt].append((request_id, tokens))
-
-            # Process each prompt group
-            for prompt, items in prompt_groups.items():
-                # Tokenize once for this prompt
-                inputs = tokenizer(prompt, return_tensors="pt").to(device)
-
-                # Get all unique tokens to check across all items with this prompt
-                all_tokens = set()
-                for _, tokens in items:
-                    all_tokens.update(tokens)
-
-                all_tokens_list = list(all_tokens)
-                token_ids = []
-
-                # Get token IDs for all tokens
-                for token in all_tokens_list:
-                    token_id = tokenizer.encode(
-                        token, add_special_tokens=False)[0]
-                    token_ids.append(token_id)
-
-                # Generate logits once for this prompt
-                with torch.no_grad():
-                    outputs = model(**inputs)
-                    # outputs.logits.shape is (batch_size, sequence_length, vocab_size)
-                    # at this point, sequence_length is input_length + 1,
-                    # we need all token probabilities (list) of the last token, for all batches,
-                    # so [:, -1, :] gives us [all_batches, last_token, full_vocab_probabilities]
-                    # Get logits for the last token
-                    logits = outputs.logits[:, -1, :]
-
-                # Extract logits for all tokens user passed in (Yes, No, Hello, etc.)
-                all_token_logits = {
-                    token: logits[0, token_id].item()
-                    for token, token_id in zip(all_tokens_list, token_ids)
+                all_prompts.append(prompt)
+                request_info.append((request_id, tokens, idx))
+            
+            # Tokenize all prompts in a single batch with padding
+            # This ensures all sequences have the same length
+            inputs: Dict[str, torch.Tensor] = tokenizer(
+                all_prompts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                return_attention_mask=True
+            ).to(device)
+            
+            # Collect all unique tokens across all requests
+            all_tokens: Set[str] = set()
+            for _, tokens, _ in request_info:
+                all_tokens.update(tokens)
+            
+            all_tokens_list: List[str] = list(all_tokens)
+            token_ids: List[int] = []
+            
+            # Get token IDs for all tokens
+            for token in all_tokens_list:
+                token_id: int = tokenizer.encode(token, add_special_tokens=False)[0]
+                token_ids.append(token_id)
+            
+            # Create a mapping from token to token_id for faster lookup
+            token_to_id: Dict[str, int] = {token: token_id for token, token_id in zip(all_tokens_list, token_ids)}
+            
+            # Generate logits for all prompts in a single forward pass
+            with torch.no_grad():
+                outputs = model(**inputs)
+                # Get logits for the last token of each sequence
+                # Shape: [batch_size, vocab_size]
+                batch_logits: torch.Tensor = outputs.logits[:, -1, :]
+            
+            # Process each request
+            for request_id, tokens, batch_idx in request_info:
+                # Get the logits for this specific request
+                logits: torch.Tensor = batch_logits[batch_idx]
+                
+                # Extract logits for the requested tokens
+                token_logits: Dict[str, float] = {}
+                for token in tokens:
+                    token_id = token_to_id[token]
+                    token_logits[token] = logits[token_id].item()
+                
+                # Calculate probabilities for the requested tokens
+                item_logits: List[float] = [logits[token_to_id[token]].item() for token in tokens]
+                item_logits_tensor: torch.Tensor = torch.tensor(item_logits)
+                item_probs: List[float] = torch.nn.functional.softmax(item_logits_tensor, dim=0).tolist()
+                token_probs: Dict[str, float] = {token: prob for token, prob in zip(tokens, item_probs)}
+                
+                # Apply softmax to the entire logits tensor to get raw probabilities
+                full_probs: torch.Tensor = torch.nn.functional.softmax(logits, dim=0)
+                
+                # Find the token with the highest probability
+                max_prob_idx: int = torch.argmax(full_probs).item()
+                max_prob_token: str = tokenizer.decode([max_prob_idx])
+                
+                # Extract raw probabilities for the requested tokens
+                raw_token_probs: Dict[str, float] = {
+                    token: full_probs[token_to_id[token]].item()
+                    for token in tokens
                 }
-
-                # For each item, extract its specific tokens' logits and probabilities
-                for request_id, item_tokens in items:
-                    # Extract this item's token logits
-                    token_logits = {
-                        token: all_token_logits[token] for token in item_tokens
-                    }
-
-                    # For probabilities, we need to renormalize for just this item's tokens
-                    item_logits = [all_token_logits[token]
-                                   for token in item_tokens]
-                    item_logits_tensor = torch.tensor(item_logits)
-                    item_probs = torch.nn.functional.softmax(
-                        item_logits_tensor, dim=0).tolist()
-                    token_probs = {
-                        token: prob for token, prob in zip(item_tokens, item_probs)
-                    }
-
-                    # Apply softmax to the entire logits tensor to get raw probabilities for all tokens
-                    full_logits_tensor = logits[0]
-                    full_probs = torch.nn.functional.softmax(full_logits_tensor, dim=0)
-                    
-                    # Find the token with the highest probability
-                    max_prob_idx = torch.argmax(full_probs).item()
-                    max_prob_token = tokenizer.decode([max_prob_idx])
-                    
-                    # Extract raw probabilities for the requested tokens
-                    raw_token_probs = {
-                        token: full_probs[token_id].item()
-                        for token, token_id in zip(all_tokens_list, token_ids)
-                    }
-                    
-                    # Create result with the new fields
-                    result = {
-                        "logits": token_logits,
-                        "probabilities": token_probs,
-                        "raw_probabilities": raw_token_probs,
-                        "next_token": max_prob_token
-                    }
-
-                    # Send result back through the response queue
-                    self.response_queue.put((request_id, result))
-
+                
+                # Create result
+                result: LogitsResultDict = {
+                    "logits": token_logits,
+                    "probabilities": token_probs,
+                    "raw_probabilities": raw_token_probs,
+                    "next_token": max_prob_token
+                }
+                
+                # Send result back through the response queue
+                self.response_queue.put((request_id, result))
+                
+            # Log the performance gain from batching
+            if len(all_prompts) > 1:
+                logger.info(f"Batch processed logits for {len(all_prompts)} prompts in a single forward pass")
+                
         except Exception as e:
             logger.error(f"Error processing logits batch: {str(e)}")
             # Send error to all items in the batch
-            error_result = {"error": str(e)}
+            error_result: ErrorResultDict = {"error": str(e)}
             for req in batch:
-                request_id = req["id"]
+                request_id: str = req["id"]
                 self.response_queue.put((request_id, error_result))
 
-    def _process_generation_batch(self, batch, model, tokenizer, device):
+    def _process_generation_batch(
+        self,
+        batch: List[GenerationRequestDict],
+        model: "AutoModelForCausalLM",
+        tokenizer: "AutoTokenizer",
+        device: Union[str, torch.device]
+    ) -> None:
         """
-        Process a batch of generation requests.
+        Process a batch of generation requests with true batching.
+        This implementation groups requests with similar parameters to enable
+        batched generation where possible.
+        
+        Args:
+            batch: List of generation request dictionaries
+            model: The loaded language model
+            tokenizer: The tokenizer for the model
+            device: The device to run inference on (cuda, mps, or cpu)
         """
         try:
-            # Process each generation request individually for now
-            # In the future, we could optimize this for batched generation
+            # Group requests by similar generation parameters
+            # This allows us to batch requests with the same max_tokens, temperature, etc.
+            parameter_groups: Dict[Tuple[int, float, bool], List[Tuple[str, str, Optional[List[Dict[str, str]]]]]] = {}
+            
             for req in batch:
-                request_id = req["id"]
-                prompt = req["prompt"]
-                messages = req.get("messages")
-                max_tokens = req["max_tokens"]
-                temperature = req.get("temperature", 0.7)
-                output_scores = req.get("output_scores", False)
-
-                try:
-                    # Format input using chat template if messages are provided
+                request_id: str = req["id"]
+                prompt: str = req["prompt"]
+                messages: Optional[List[Dict[str, str]]] = req.get("messages")
+                max_tokens: int = req["max_tokens"]
+                temperature: float = req.get("temperature", 0.7)
+                output_scores: bool = req.get("output_scores", False)
+                
+                # Create a key for grouping similar requests
+                param_key = (max_tokens, temperature, output_scores)
+                
+                if param_key not in parameter_groups:
+                    parameter_groups[param_key] = []
+                
+                parameter_groups[param_key].append((request_id, prompt, messages))
+            
+            # Process each parameter group
+            for param_key, requests in parameter_groups.items():
+                max_tokens, temperature, output_scores = param_key
+                
+                # Process requests with the same parameters in batches
+                # For simplicity, we'll process requests with messages separately
+                prompts_only: List[Tuple[str, str, None]] = []
+                messages_only: List[Tuple[str, str, List[Dict[str, str]]]] = []
+                
+                for request_id, prompt, messages in requests:
                     if messages:
-                        formatted_prompt = tokenizer.apply_chat_template(
+                        messages_only.append((request_id, prompt, messages))
+                    else:
+                        prompts_only.append((request_id, prompt, None))
+                
+                # Process prompts-only batch
+                if prompts_only:
+                    try:
+                        # Extract prompts and request IDs
+                        prompt_request_ids: List[str] = [req_id for req_id, _, _ in prompts_only]
+                        prompts: List[str] = [prompt for _, prompt, _ in prompts_only]
+                        
+                        # Tokenize all prompts in a single batch
+                        inputs: Dict[str, torch.Tensor] = tokenizer(
+                            prompts,
+                            return_tensors="pt",
+                            padding=True,
+                            truncation=True
+                        ).to(device)
+                        
+                        # Generate text for all prompts in a single batch
+                        generation_kwargs: Dict[str, Any] = {
+                            "max_new_tokens": max_tokens,
+                            "temperature": temperature,
+                            "output_scores": output_scores,
+                            "return_dict_in_generate": True
+                        }
+                        
+                        outputs = model.generate(
+                            **inputs,
+                            **generation_kwargs
+                        )
+                        
+                        # Process each result
+                        for i, request_id in enumerate(prompt_request_ids):
+                            # Extract response for this request
+                            response_ids: torch.Tensor = outputs.sequences[i]
+                            response: str = tokenizer.decode(
+                                response_ids, skip_special_tokens=True
+                            )
+                            
+                            # Extract only the assistant's response (remove the prompt)
+                            original_prompt = prompts[i]
+                            content: str = response[len(original_prompt):].strip()
+                            
+                            # Create result
+                            result: GenerationResultDict = {"text": content}
+                            
+                            # Add logits if requested
+                            if output_scores and hasattr(outputs, "scores"):
+                                # Convert logits to Python lists (only for the generated tokens)
+                                logits_list: List[List[float]] = []
+                                for score_tensor in outputs.scores:
+                                    # Get the logits for this specific request
+                                    token_logits: List[float] = score_tensor[i].detach().cpu().tolist()
+                                    logits_list.append(token_logits)
+                                result["logits"] = logits_list
+                            
+                            # Send result back through the response queue
+                            self.response_queue.put((request_id, result))
+                        
+                        logger.info(f"Batch processed {len(prompts)} generation requests")
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing generation batch: {str(e)}")
+                        # Send error to all items in the batch
+                        error_result: ErrorResultDict = {"error": str(e)}
+                        for request_id, _, _ in prompts_only:
+                            self.response_queue.put((request_id, error_result))
+                
+                # Process messages-only requests individually for now
+                # Chat templates make batching more complex
+                for request_id, prompt, messages in messages_only:
+                    try:
+                        # Format input using chat template
+                        formatted_prompt: str = tokenizer.apply_chat_template(
                             messages,
                             tokenize=False,
                             add_generation_prompt=True
                         )
-                    else:
-                        formatted_prompt = prompt
-
-                    # Tokenize input
-                    inputs = tokenizer(
-                        formatted_prompt, return_tensors="pt").to(device)
-
-                    # Generate text
-                    generation_kwargs = {
-                        "max_new_tokens": max_tokens,
-                        "temperature": temperature,
-                        "output_scores": output_scores,
-                        "return_dict_in_generate": True
-                    }
-
-                    outputs = model.generate(
-                        **inputs,
-                        **generation_kwargs
-                    )
-
-                    # Extract response
-                    response_ids = outputs.sequences[0]
-                    response = tokenizer.decode(
-                        response_ids, skip_special_tokens=True)
-
-                    # Extract only the assistant's response (remove the prompt)
-                    content = response[len(formatted_prompt):].strip()
-
-                    # Create result
-                    result = {"text": content}
-
-                    # Add logits if requested
-                    if output_scores and hasattr(outputs, "scores"):
-                        # Convert logits to Python lists (only for the generated tokens)
-                        logits_list = []
-                        for score_tensor in outputs.scores:
-                            # Get the logits for the token with highest probability
-                            token_logits = score_tensor[0].detach(
-                            ).cpu().tolist()
-                            logits_list.append(token_logits)
-                        result["logits"] = logits_list
-
-                    # Send result back through the response queue
-                    self.response_queue.put((request_id, result))
-
-                except Exception as e:
-                    logger.error(
-                        f"Error processing generation request: {str(e)}")
-                    self.response_queue.put((request_id, {"error": str(e)}))
-
+                        
+                        # Tokenize input
+                        inputs: Dict[str, torch.Tensor] = tokenizer(
+                            formatted_prompt, return_tensors="pt"
+                        ).to(device)
+                        
+                        # Generate text
+                        generation_kwargs: Dict[str, Any] = {
+                            "max_new_tokens": max_tokens,
+                            "temperature": temperature,
+                            "output_scores": output_scores,
+                            "return_dict_in_generate": True
+                        }
+                        
+                        outputs = model.generate(
+                            **inputs,
+                            **generation_kwargs
+                        )
+                        
+                        # Extract response
+                        response_ids: torch.Tensor = outputs.sequences[0]
+                        response: str = tokenizer.decode(
+                            response_ids, skip_special_tokens=True
+                        )
+                        
+                        # Extract only the assistant's response (remove the prompt)
+                        content: str = response[len(formatted_prompt):].strip()
+                        
+                        # Create result
+                        result: GenerationResultDict = {"text": content}
+                        
+                        # Add logits if requested
+                        if output_scores and hasattr(outputs, "scores"):
+                            # Convert logits to Python lists (only for the generated tokens)
+                            logits_list: List[List[float]] = []
+                            for score_tensor in outputs.scores:
+                                # Get the logits for the token with highest probability
+                                token_logits: List[float] = score_tensor[0].detach().cpu().tolist()
+                                logits_list.append(token_logits)
+                            result["logits"] = logits_list
+                        
+                        # Send result back through the response queue
+                        self.response_queue.put((request_id, result))
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing generation request: {str(e)}")
+                        error_result: ErrorResultDict = {"error": str(e)}
+                        self.response_queue.put((request_id, error_result))
+                        
         except Exception as e:
             logger.error(f"Error processing generation batch: {str(e)}")
             # Send error to all items in the batch
-            error_result = {"error": str(e)}
+            error_result: ErrorResultDict = {"error": str(e)}
             for req in batch:
-                request_id = req["id"]
+                request_id: str = req["id"]
                 self.response_queue.put((request_id, error_result))
 
     async def process_logits_request(self, prompt: str, tokens: List[str]) -> Dict:

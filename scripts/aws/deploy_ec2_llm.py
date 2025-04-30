@@ -934,17 +934,17 @@ class EC2LLMDeployer:
         self._cleanup_socket()
 
         # Clean up port forwarding
-        if self.port_forwarding:
+        if hasattr(self, 'port_forwarding') and self.port_forwarding:
             logger.info("Stopping port forwarding...")
             # Terminate the process
-            if 'process' in port_forwarding:
-                port_forwarding['process'].terminate()
+            if 'process' in self.port_forwarding:
+                self.port_forwarding['process'].terminate()
             # Close the log file if it exists
-            if 'log_file' in port_forwarding and port_forwarding['log_file']:
+            if 'log_file' in self.port_forwarding and self.port_forwarding['log_file']:
                 try:
-                    port_forwarding['log_file'].close()
+                    self.port_forwarding['log_file'].close()
                     logger.info(
-                        f"Port forwarding logs are available at: {port_forwarding.get('log_file_path', 'unknown')}")
+                        f"Port forwarding logs are available at: {self.port_forwarding.get('log_file_path', 'unknown')}")
                 except Exception as e:
                     logger.warning(f"Error closing log file: {str(e)}")
 
