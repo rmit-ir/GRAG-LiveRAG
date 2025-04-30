@@ -28,6 +28,8 @@ import os
 import gc
 from typing import Dict, List, TypedDict, Optional, Union, Tuple, Set, Any
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from pydantic import BaseModel, Field
+from typing import List as PydanticList, Optional as PydanticOptional
 
 # Set multiprocessing start method to 'spawn' to avoid CUDA initialization issues
 multiprocessing.set_start_method('spawn', force=True)
@@ -44,6 +46,8 @@ logging.basicConfig(
 logger = logging.getLogger("llm-server")
 
 # Define typed dictionaries for better type checking
+# IMPORTANT: These classes need to be defined at the module level (not inside __main__)
+# to be accessible by worker processes when using multiprocessing with 'spawn' method
 
 
 class LogitsResultDict(TypedDict):
@@ -90,6 +94,26 @@ class GenerationRequestDict(TypedDict):
     max_tokens: int
     temperature: float
     output_scores: bool
+
+
+class LogitsRequest(BaseModel):
+    # Define request models
+    prompt: str
+    tokens: PydanticList[str]
+
+
+class MessageModel(BaseModel):
+    # This is a Pydantic model for API requests, different from the Message class defined at module level
+    role: str
+    content: str
+
+
+class GenerationRequest(BaseModel):
+    prompt: PydanticOptional[str] = None
+    messages: PydanticOptional[PydanticList[MessageModel]] = None
+    max_tokens: int = Field(default=100, ge=1, le=32_000)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    output_scores: bool = False
 
 
 def worker_process(model_id, gpu_id, request_queue, response_queue, status_queue, shutdown_event):
@@ -687,8 +711,6 @@ if __name__ == "__main__":
     import uvicorn
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
-    from pydantic import BaseModel, Field
-    from typing import List as PydanticList, Optional as PydanticOptional
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(
@@ -712,22 +734,6 @@ if __name__ == "__main__":
         max_batch_size=args.batch_size,
         num_workers=args.num_workers
     )
-
-    # Define request models
-    class LogitsRequest(BaseModel):
-        prompt: str
-        tokens: PydanticList[str]
-
-    class Message(BaseModel):
-        role: str
-        content: str
-
-    class GenerationRequest(BaseModel):
-        prompt: PydanticOptional[str] = None
-        messages: PydanticOptional[PydanticList[Message]] = None
-        max_tokens: int = Field(default=100, ge=1, le=32_000)
-        temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-        output_scores: bool = False
 
     @app.post("/logits")
     async def get_logits(request: LogitsRequest):

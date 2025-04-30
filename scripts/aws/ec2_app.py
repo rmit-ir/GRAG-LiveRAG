@@ -285,13 +285,8 @@ def create_vllm_app(local_port: int = 8987, api_key: str = 'random_key', params:
         setup_script=setup_script,
         launch_script=launch_script,
         program_file=None,  # vLLM doesn't need a program file
-        port_mappings=[
-            {
-                "remote_port": 8000,  # vLLM uses port 8000 by default
-                "local_port": local_port,
-                "description": "vLLM API endpoint"
-            }
-        ],
+        default_remote_port=8000,
+        default_local_port=local_port,
         log_command="sudo journalctl -u vllm.service -f",
         api_key=api_key,
         test_request_function=test_vllm_request,
@@ -389,13 +384,8 @@ def create_mini_tgi_app(local_port: int = 8977, api_key: str = 'random_key', par
         setup_script=setup_script,
         launch_script=launch_script,
         program_file=program_file,
-        port_mappings=[
-            {
-                "remote_port": 8000,
-                "local_port": local_port,
-                "description": "Mini-TGI API endpoint"
-            }
-        ],
+        default_remote_port=8000,
+        default_local_port=local_port,
         log_command="sudo journalctl -u mini-tgi.service -f",
         api_key=api_key,
         test_request_function=test_mini_tgi_request,

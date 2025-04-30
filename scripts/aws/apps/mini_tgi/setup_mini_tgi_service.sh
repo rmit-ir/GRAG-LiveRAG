@@ -16,7 +16,6 @@ echo "  PORT: $PORT"
 echo "  MODEL_ID: $MODEL_ID"
 echo "  PROGRAM_FILE: $PROGRAM_FILE"
 echo "  MAX_BATCH_SIZE: $MAX_BATCH_SIZE"
-echo "  NUM_WORKERS: $NUM_WORKERS"
 
 # Create directory for mini-TGI service
 sudo mkdir -p /opt/mini-tgi

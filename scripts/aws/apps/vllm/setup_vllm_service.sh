@@ -7,7 +7,7 @@ set -e  # Exit immediately if a command exits with a non-zero status
 # Read all parameters from environment variables with fallbacks
 MODEL_ID=${MODEL_ID:-"tiiuae/falcon3-10b-instruct"}
 PORT=${PORT:-8000}
-API_KEY=${API_KEY:-""}
+API_KEY=${API_KEY:-"random_key"}
 
 # Additional parameters with defaults
 TENSOR_PARALLEL=${TENSOR_PARALLEL:-0}  # 0 means auto-detect GPU count

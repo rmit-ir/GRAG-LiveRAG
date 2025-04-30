@@ -4,11 +4,17 @@ Check your deployed CloudFormation stacks at: <https://us-west-2.console.aws.ama
 
 ## Deploy EC2 LLM
 
-The `deploy_ec2_llm.py` script allows you to deploy a HuggingFace compatible model on an EC2 instance using CloudFormation. It:
+The `deploy_ec2_llm.py` script allows you to deploy a HuggingFace compatible model on an EC2 instance using CloudFormation. It now supports two application types:
 
-- Deploys an EC2 instance with the specified model using vLLM
-- Sets up port forwarding to access the model locally at <http://localhost:8987/v1/> (port customizable)
-- Provides OpenAI API compatible endpoints for easy integration
+1. **vLLM** - High-performance inference server with OpenAI API compatibility
+   - Deploys an EC2 instance with the specified model using vLLM
+   - Sets up port forwarding to access the model locally at <http://localhost:8987/v1/> (port customizable)
+   - Provides OpenAI API compatible endpoints for easy integration
+
+2. **mini-TGI** - Lightweight Text Generation Inference server with logits support
+   - Deploys an EC2 instance with the specified model using a custom TGI implementation
+   - Sets up port forwarding to access the model locally at <http://localhost:8977/> (port customizable)
+   - Provides both text generation and token logits endpoints
 
 ### Basic Usage
 
@@ -25,13 +31,22 @@ Setup a requirement:
 brew install --cask session-manager-plugin
 ```
 
-Deploy default model (Ctrl+C to stop and destroy all resources)
+Deploy default model with vLLM (Ctrl+C to stop and destroy all resources):
 
 ```bash
 uv run scripts/aws/deploy_ec2_llm.py
 ```
 
-At this point, you can access the model at <http://localhost:8987/v1/>. Try `uv run src/services/llms/general_openai_client.py` to request the model.
+Deploy with mini-TGI:
+
+```bash
+uv run scripts/aws/deploy_ec2_llm.py --app-type mini-tgi
+```
+
+At this point, you can access the model at:
+
+- vLLM: <http://localhost:8987/v1/> - Try `uv run src/services/llms/general_openai_client.py` to request the model
+- mini-TGI: <http://localhost:8977/> - Try `uv run src/services/llms/mini_tgi_client.py` to request the model
 
 > [!IMPORTANT]  
 > Leaving the GPU resources running can incur big costs, so make sure to stop it on time.
@@ -45,17 +60,62 @@ Extra commands:
 # Deploy a particular model
 uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/falcon3-10b-instruct
 
+# Deploy with specific app type and parameters
+uv run scripts/aws/deploy_ec2_llm.py --app-type mini-tgi --param MAX_BATCH_SIZE=64
+
 # Stop and destroy all resources
 uv run scripts/aws/deploy_ec2_llm.py --stop
 ```
+
+### Application Types
+
+#### vLLM
+
+The vLLM application provides a high-performance inference server with OpenAI API compatibility. It's ideal for applications that need to integrate with the OpenAI API format.
+
+Parameters:
+
+- `MODEL_ID`: Hugging Face model ID (default: "tiiuae/falcon3-10b-instruct")
+- `TENSOR_PARALLEL`: Number of GPUs for tensor parallelism (0 for auto)
+- `MAX_NUM_BATCHED_TOKENS`: Maximum number of tokens to batch
+- `GPU_MEMORY_UTILIZATION`: GPU memory utilization (0.0-1.0)
+- `ENABLE_CHUNKED_PREFILL`: Enable chunked prefill (true/false)
+
+Example:
+
+```bash
+uv run scripts/aws/deploy_ec2_llm.py --app-type vllm --param MODEL_ID=meta-llama/Llama-2-7b-chat-hf --param TENSOR_PARALLEL=2
+```
+
+#### mini-TGI
+
+The mini-TGI application is a lightweight Text Generation Inference server that provides both text generation and token logits endpoints. It's particularly useful for applications that need access to token probabilities.
+
+Parameters:
+
+- `MODEL_ID`: Hugging Face model ID (default: "tiiuae/falcon3-10b-instruct")
+- `MAX_BATCH_SIZE`: Maximum batch size (default: 8)
+
+Example:
+
+```bash
+uv run scripts/aws/deploy_ec2_llm.py --app-type mini-tgi --param MODEL_ID=tiiuae/falcon3-10b-instruct --param MAX_BATCH_SIZE=64
+```
+
+### Client Libraries
+
+Two client libraries are available to interact with the deployed models:
+
+1. **general_openai_client.py** - For interacting with vLLM deployments using the OpenAI API format
+2. **mini_tgi_client.py** - For interacting with mini-TGI deployments, supporting both text generation and token logits
 
 ## Suggested Workflow
 
 When working with the EC2 LLM, you can use the following workflow to efficiently manage your resources:
 
 ```bash
-# Start the model
-uv run scripts/aws/deploy_ec2_llm.py
+# Start the model (specify app-type if needed)
+uv run scripts/aws/deploy_ec2_llm.py --app-type vllm  # or mini-tgi
 
 # Run your task with automatic notification and cleanup
 uv run scripts/aws/deploy_ec2_llm.py --wait; say "The EC2 LLM is ready, starting my tasks"; run_your_task; uv run scripts/aws/deploy_ec2_llm.py --stop
@@ -63,9 +123,9 @@ uv run scripts/aws/deploy_ec2_llm.py --wait; say "The EC2 LLM is ready, starting
 
 This workflow:
 
-1. Deploys the EC2 LLM instance
+1. Deploys the EC2 LLM instance with your chosen application type
 2. Waits for the instance to be fully ready
-3. Run your tasks
+3. Runs your tasks
 4. Automatically stops and cleans up resources after your tasks are complete
 
 ## Manage The EC2 Instance

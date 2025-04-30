@@ -109,6 +109,9 @@ class EC2Deployer:
         # Track deployed resources
         self.instance_id = None
 
+        # Port forwarding related attributes
+        self.port_forwardings = None  # Dictionary of all port forwardings
+
         # Socket related attributes
         self.socket_path = f"/tmp/ec2_app_{self.deployer_id}_port{app.local_port}"
         self.socket_thread = None
@@ -535,38 +538,40 @@ class EC2Deployer:
             logger.error(f"Error setting up {self.app.name} service: {str(e)}")
             return False
 
-    def setup_port_forwarding(self, port_mapping: Optional[PortMapping] = None) -> Dict[str, Any]:
+    def setup_port_forwarding(self) -> Dict[str, Any]:
         """
-        Set up port forwarding to the EC2 instance using SessionManager.
-
-        Args:
-            port_mapping: Optional specific port mapping to use. If None, uses the primary port mapping.
+        Set up port forwarding to the EC2 instance using SessionManager for all port mappings in the app.
 
         Returns:
-            Dict containing the process and monitoring thread information
+            Dict containing the process and monitoring thread information for all port mappings
         """
         if not self.instance_id:
             logger.error("No instance ID available. Deploy the stack first.")
             return None
 
         try:
-            # Use the specified port mapping or the primary one
-            mapping = port_mapping or self.app.primary_port_mapping
-            remote_port = mapping["remote_port"]
-            local_port = mapping["local_port"]
-
-            # Use the SessionManager's setup_port_forwarding method
-            port_forwarding = self.session_manager.setup_port_forwarding(
-                instance_id=self.instance_id,
-                remote_port=remote_port,
-                local_port=local_port
-            )
-
-            # Store the port forwarding info if it's the primary mapping
-            if not port_mapping or mapping == self.app.primary_port_mapping:
-                self.port_forwarding = port_forwarding
-
-            return port_forwarding
+            # Set up port forwarding for all port mappings
+            port_forwardings = {}
+            
+            for i, mapping in enumerate(self.app.port_mappings):
+                remote_port = mapping["remote_port"]
+                local_port = mapping["local_port"]
+                description = mapping.get("description", f"Port mapping {i+1}")
+                
+                logger.info(f"Setting up port forwarding for {description}: localhost:{local_port} -> {remote_port}")
+                
+                # Use the SessionManager's setup_port_forwarding method
+                port_forwarding = self.session_manager.setup_port_forwarding(
+                    instance_id=self.instance_id,
+                    remote_port=remote_port,
+                    local_port=local_port
+                )
+                
+                # Store in the dictionary with the description as the key
+                port_forwardings[description] = port_forwarding
+            
+            logger.info(f"Set up port forwarding for {len(port_forwardings)} ports")
+            return port_forwardings
         except Exception as e:
             logger.error(f"Error setting up port forwarding: {str(e)}")
             return None
@@ -866,20 +871,22 @@ class EC2Deployer:
 
         self._cleanup_socket()
 
-        # Clean up port forwarding
-        if hasattr(self, 'port_forwarding') and self.port_forwarding:
-            logger.info("Stopping port forwarding...")
-            # Terminate the process
-            if 'process' in self.port_forwarding:
-                self.port_forwarding['process'].terminate()
-            # Close the log file if it exists
-            if 'log_file' in self.port_forwarding and self.port_forwarding['log_file']:
+        
+        # Clean up all port forwardings if we have a dictionary of them
+        if hasattr(self, 'port_forwardings') and self.port_forwardings:
+            logger.info("Stopping all port forwardings...")
+            for description, port_forwarding in self.port_forwardings.items():
                 try:
-                    self.port_forwarding['log_file'].close()
-                    logger.info(
-                        f"Port forwarding logs are available at: {self.port_forwarding.get('log_file_path', 'unknown')}")
+                    # Terminate the process
+                    if 'process' in port_forwarding:
+                        port_forwarding['process'].terminate()
+                    # Close the log file if it exists
+                    if 'log_file' in port_forwarding and port_forwarding['log_file']:
+                        port_forwarding['log_file'].close()
+                        logger.info(
+                            f"{description} port forwarding logs are available at: {port_forwarding.get('log_file_path', 'unknown')}")
                 except Exception as e:
-                    logger.warning(f"Error closing log file: {str(e)}")
+                    logger.warning(f"Error cleaning up port forwarding for {description}: {str(e)}")
 
         if self.stack_name:
             try:
@@ -1170,8 +1177,8 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
                         help="EC2 instance type, see https://aws.amazon.com/ec2/instance-types/")
     parser.add_argument("--stack-name", type=str, default=None,
                         help="CloudFormation stack name")
-    parser.add_argument("--local-port", type=int, default=8987,
-                        help="Local port for port forwarding (default: 8987)")
+    parser.add_argument("--local-port", type=int, default=None,
+                        help="Local port for port forwarding (uses app's default if not specified)")
     parser.add_argument("--ami-id", type=str, default="ami-04f4302ff68e424cf",
                         help="AMI ID to use for the EC2 instance (Deep Learning OSS Nvidia Driver AMI)")
     parser.add_argument("--stage-name", type=str, default="prod",
@@ -1221,13 +1228,12 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
         print("\nFor vLLM app:")
         print("  --param MODEL_ID=tiiuae/falcon3-10b-instruct  # Hugging Face model ID")
         print("  --param TENSOR_PARALLEL=2                     # Number of GPUs for tensor parallelism (0 for auto)")
-        print("  --param MAX_NUM_BATCHED_TOKENS=4096           # Maximum number of tokens to batch")
-        print("  --param GPU_MEMORY_UTILIZATION=0.9            # GPU memory utilization (0.0-1.0)")
+        print("  --param MAX_NUM_BATCHED_TOKENS=2048           # Maximum number of tokens to batch")
+        print("  --param GPU_MEMORY_UTILIZATION=0.95           # GPU memory utilization (0.0-1.0)")
         print("  --param ENABLE_CHUNKED_PREFILL=true           # Enable chunked prefill (true/false)")
         print("\nFor mini-TGI app:")
         print("  --param MODEL_ID=tiiuae/falcon3-10b-instruct  # Hugging Face model ID")
-        print("  --param MAX_BATCH_SIZE=16                     # Maximum batch size")
-        print("  --param MAX_TOKENS=4096                       # Maximum number of tokens to generate")
+        print("  --param MAX_BATCH_SIZE=64                     # Maximum batch size")
         print("\nExample usage:")
         print("  python scripts/aws/deploy_ec2_llm.py --app-type vllm --param MODEL_ID=meta-llama/Llama-2-7b-chat-hf --param TENSOR_PARALLEL=2")
         sys.exit(0)
@@ -1292,9 +1298,12 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
             log_thread = deployer.tail_service_logs(in_thread=True)
 
             # Set up port forwarding if requested
-            port_forwarding = None
+            port_forwardings = None
             if args.port_forward:
-                port_forwarding = deployer.setup_port_forwarding()
+                port_forwardings = deployer.setup_port_forwarding()
+                # Store the port forwardings in the deployer for cleanup
+                if isinstance(port_forwardings, dict) and len(port_forwardings) > 1:
+                    deployer.port_forwardings = port_forwardings
 
                 # Send a test request to the app if requested
                 if args.test:
@@ -1309,20 +1318,8 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
             except KeyboardInterrupt:
                 logger.info("Interrupted by user.")
             finally:
-                # Clean up port forwarding
-                if port_forwarding:
-                    logger.info("Stopping port forwarding...")
-                    # Terminate the process
-                    if 'process' in port_forwarding:
-                        port_forwarding['process'].terminate()
-                    # Close the log file if it exists
-                    if 'log_file' in port_forwarding and port_forwarding['log_file']:
-                        try:
-                            port_forwarding['log_file'].close()
-                            logger.info(
-                                f"Port forwarding logs are available at: {port_forwarding.get('log_file_path', 'unknown')}")
-                        except Exception as e:
-                            logger.warning(f"Error closing log file: {str(e)}")
+                # Port forwarding cleanup is handled by the deployer's cleanup method
+                pass
         except KeyboardInterrupt:
             logger.info("Deployment interrupted.")
         except Exception as e:

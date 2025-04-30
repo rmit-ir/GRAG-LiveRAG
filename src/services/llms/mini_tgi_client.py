@@ -45,6 +45,7 @@ class MiniTGIClient:
         
         # Set default API base URL if not provided
         if api_base is None:
+            # default defined in ec2_app.py
             api_base = "http://localhost:8977/"
         
         # Remove trailing slash if present
@@ -267,7 +268,7 @@ if __name__ == "__main__":
     # Create a MiniTGIClient instance
     client = MiniTGIClient(
         model_id="tiiuae/falcon3-10b-instruct",
-        system_message="You are an AI assistant that provides clear, concise explanations."
+        system_message="You are an AI assistant that provides clear, concise explanations.",
     )
 
     # Send the query and get the response
