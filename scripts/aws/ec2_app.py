@@ -253,7 +253,7 @@ def test_vllm_request(app: EC2App) -> bool:
         return False
 
 
-def create_vllm_app(local_port: int = 8987, api_key: str = 'random_key', params: Dict[str, str] = None) -> EC2App:
+def create_vllm_app(local_port: Optional[int] = None, api_key: Optional[str] = None, params: Dict[str, str] = None) -> EC2App:
     """
     Create an EC2App for vLLM.
 
@@ -271,6 +271,11 @@ def create_vllm_app(local_port: int = 8987, api_key: str = 'random_key', params:
     Returns:
         EC2App: The configured vLLM app
     """
+    # Use default values if None is provided
+    if local_port is None:
+        local_port = 8987
+    if api_key is None:
+        api_key = 'random_key'
     # Define paths to scripts
     setup_script = str(Path(__file__).parent / "apps" /
                        "vllm" / "install_vllm.sh")
@@ -354,7 +359,7 @@ def test_mini_tgi_request(app: EC2App) -> bool:
         return False
 
 
-def create_mini_tgi_app(local_port: int = 8977, api_key: str = 'random_key', params: Dict[str, str] = None) -> EC2App:
+def create_mini_tgi_app(local_port: Optional[int] = None, api_key: Optional[str] = None, params: Dict[str, str] = None) -> EC2App:
     """
     Create an EC2App for mini-TGI.
 
@@ -370,6 +375,11 @@ def create_mini_tgi_app(local_port: int = 8977, api_key: str = 'random_key', par
     Returns:
         EC2App: The configured mini-TGI app
     """
+    # Use default values if None is provided
+    if local_port is None:
+        local_port = 8977
+    if api_key is None:
+        api_key = 'random_key'
     # Define paths to scripts
     setup_script = str(Path(__file__).parent / "apps" /
                        "mini_tgi" / "install_mini_tgi.sh")

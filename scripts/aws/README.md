@@ -40,7 +40,7 @@ uv run scripts/aws/deploy_ec2_llm.py
 Deploy with mini-TGI:
 
 ```bash
-uv run scripts/aws/deploy_ec2_llm.py --app-type mini-tgi
+uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi
 ```
 
 At this point, you can access the model at:
@@ -60,8 +60,8 @@ Extra commands:
 # Deploy a particular model
 uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/falcon3-10b-instruct
 
-# Deploy with specific app type and parameters
-uv run scripts/aws/deploy_ec2_llm.py --app-type mini-tgi --param MAX_BATCH_SIZE=64
+# Deploy with specific app name and parameters
+uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi --param MAX_BATCH_SIZE=64
 
 # Stop and destroy all resources
 uv run scripts/aws/deploy_ec2_llm.py --stop
@@ -84,7 +84,7 @@ Parameters:
 Example:
 
 ```bash
-uv run scripts/aws/deploy_ec2_llm.py --app-type vllm --param MODEL_ID=meta-llama/Llama-2-7b-chat-hf --param TENSOR_PARALLEL=2
+uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --param MODEL_ID=meta-llama/Llama-2-7b-chat-hf --param TENSOR_PARALLEL=2
 ```
 
 #### mini-TGI
@@ -99,7 +99,7 @@ Parameters:
 Example:
 
 ```bash
-uv run scripts/aws/deploy_ec2_llm.py --app-type mini-tgi --param MODEL_ID=tiiuae/falcon3-10b-instruct --param MAX_BATCH_SIZE=64
+uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi --param MODEL_ID=tiiuae/falcon3-10b-instruct --param MAX_BATCH_SIZE=64
 ```
 
 ### Client Libraries
@@ -114,8 +114,8 @@ Two client libraries are available to interact with the deployed models:
 When working with the EC2 LLM, you can use the following workflow to efficiently manage your resources:
 
 ```bash
-# Start the model (specify app-type if needed)
-uv run scripts/aws/deploy_ec2_llm.py --app-type vllm  # or mini-tgi
+# Start the model (specify app-name if needed)
+uv run scripts/aws/deploy_ec2_llm.py --app-name vllm  # or mini-tgi
 
 # Run your task with automatic notification and cleanup
 uv run scripts/aws/deploy_ec2_llm.py --wait; say "The EC2 LLM is ready, starting my tasks"; run_your_task; uv run scripts/aws/deploy_ec2_llm.py --stop

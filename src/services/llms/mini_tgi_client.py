@@ -5,13 +5,29 @@ import os
 import json
 import time
 import requests
-from typing import Dict, Tuple, Any, List, Optional
+from typing import Dict, Tuple, Any, List, Optional, TypedDict
 from datetime import datetime
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
 
 # Initialize logger
 logger = get_logger("mini_tgi_client")
+
+
+class TokenLogitsResponse(TypedDict):
+    """TypedDict for the response from get_token_logits method."""
+    
+    logits: Dict[str, float]
+    """Dictionary mapping token strings to their logit values."""
+    
+    probabilities: Dict[str, float]
+    """Dictionary mapping token strings to their probability values."""
+    
+    raw_probabilities: Dict[str, float]
+    """Dictionary mapping token strings to their raw probability values."""
+    
+    next_token: str
+    """The predicted next token as a string."""
 
 
 class MiniTGIClient:
@@ -81,11 +97,11 @@ class MiniTGIClient:
             response = requests.get(health_url, headers=headers, timeout=5)
             if response.status_code != 200:
                 raise ValueError(f"Model health check failed with status code {response.status_code}. "
-                                "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py --app-type mini-tgi'")
+                                "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi'")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to connect to model: {str(e)}")
             raise ValueError("Failed to connect to the model. "
-                            "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py --app-type mini-tgi'") from e
+                            "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi'") from e
 
     def query(self, prompt: str) -> Tuple[Any, str]:
         """
@@ -189,7 +205,7 @@ class MiniTGIClient:
             logger.error(f"Request error: {e}")
             raise
 
-    def get_token_logits(self, prompt: str, tokens: List[str]) -> Dict[str, Any]:
+    def get_token_logits(self, prompt: str, tokens: List[str]) -> TokenLogitsResponse:
         """
         Get logits for specific tokens given a prompt.
 
@@ -198,7 +214,7 @@ class MiniTGIClient:
             tokens (List[str]): List of tokens to get logits for
 
         Returns:
-            Dict[str, Any]: Dictionary containing logits, probabilities, and next token prediction
+            TokenLogitsResponse: Dictionary containing logits, probabilities, raw_probabilities, and next token prediction
         """
         url = f"{self.api_base}/logits"
         headers = {
@@ -269,6 +285,7 @@ if __name__ == "__main__":
     client = MiniTGIClient(
         model_id="tiiuae/falcon3-10b-instruct",
         system_message="You are an AI assistant that provides clear, concise explanations.",
+        api_base='http://localhost:8000/',
     )
 
     # Send the query and get the response

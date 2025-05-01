@@ -113,13 +113,13 @@ class EC2Deployer:
         self.port_forwardings = None  # Dictionary of all port forwardings
 
         # Socket related attributes
-        self.socket_path = f"/tmp/ec2_app_{self.deployer_id}_port{app.local_port}"
+        self.socket_path = f"/tmp/ec2_app_{self.deployer_id}_app{app.name}_port{app.local_port}"
         self.socket_thread = None
         self.socket_server = None
         self._should_stop = False
 
-        logger.debug(
-            f"Initialized EC2 deployer with app: {app.name}, ID: {self.deployer_id}")
+        logger.info(
+            f"Initialized EC2 deployer with app: {app.name}, Deployer ID: {self.deployer_id}")
         if print_info:
             self.print_stack_info()
 
@@ -134,7 +134,7 @@ class EC2Deployer:
             logger.info(f"EC2 Hourly Price: ${hourly_price:.4f}/hour")
         else:
             logger.info("EC2 Hourly Price: Price information not available")
-            
+
         # Use the app's print_info method
         self.app.print_info(
             stack_name=self.stack_name,
@@ -552,25 +552,27 @@ class EC2Deployer:
         try:
             # Set up port forwarding for all port mappings
             port_forwardings = {}
-            
+
             for i, mapping in enumerate(self.app.port_mappings):
                 remote_port = mapping["remote_port"]
                 local_port = mapping["local_port"]
                 description = mapping.get("description", f"Port mapping {i+1}")
-                
-                logger.info(f"Setting up port forwarding for {description}: localhost:{local_port} -> {remote_port}")
-                
+
+                logger.info(
+                    f"Setting up port forwarding for {description}: localhost:{local_port} -> {remote_port}")
+
                 # Use the SessionManager's setup_port_forwarding method
                 port_forwarding = self.session_manager.setup_port_forwarding(
                     instance_id=self.instance_id,
                     remote_port=remote_port,
                     local_port=local_port
                 )
-                
+
                 # Store in the dictionary with the description as the key
                 port_forwardings[description] = port_forwarding
-            
-            logger.info(f"Set up port forwarding for {len(port_forwardings)} ports")
+
+            logger.info(
+                f"Set up port forwarding for {len(port_forwardings)} ports")
             return port_forwardings
         except Exception as e:
             logger.error(f"Error setting up port forwarding: {str(e)}")
@@ -711,8 +713,8 @@ class EC2Deployer:
             self.socket_server = socket.socket(
                 socket.AF_UNIX, socket.SOCK_STREAM)
 
-            # Update socket path to include port information
-            self.socket_path = f"/tmp/ec2_app_{self.deployer_id}_port{self.app.local_port}"
+            # Update socket path to include app type and port information
+            self.socket_path = f"/tmp/ec2_app_{self.deployer_id}_app{self.app.name}_port{self.app.local_port}"
 
             # Remove the socket file if it already exists
             if os.path.exists(self.socket_path):
@@ -871,7 +873,6 @@ class EC2Deployer:
 
         self._cleanup_socket()
 
-        
         # Clean up all port forwardings if we have a dictionary of them
         if hasattr(self, 'port_forwardings') and self.port_forwardings:
             logger.info("Stopping all port forwardings...")
@@ -886,7 +887,8 @@ class EC2Deployer:
                         logger.info(
                             f"{description} port forwarding logs are available at: {port_forwarding.get('log_file_path', 'unknown')}")
                 except Exception as e:
-                    logger.warning(f"Error cleaning up port forwarding for {description}: {str(e)}")
+                    logger.warning(
+                        f"Error cleaning up port forwarding for {description}: {str(e)}")
 
         if self.stack_name:
             try:
@@ -991,88 +993,124 @@ def extract_port_from_socket_path(socket_path: str) -> Optional[int]:
         return None
 
 
-def find_socket_by_id(instance_id: str) -> List[str]:
-    socket_files = glob.glob(f"/tmp/ec2_app_{instance_id}*")
+def extract_app_type_from_socket_path(socket_path: str) -> Optional[str]:
+    """
+    Extract app type from socket path.
+
+    Args:
+        socket_path (str): Path to the socket file
+
+    Returns:
+        Optional[str]: App type if found, None otherwise
+    """
+    try:
+        # Extract app type from socket path using regex
+        import re
+        match = re.search(r'_app([^_]+)', socket_path)
+        if match:
+            return match.group(1)
+        return None
+    except Exception as e:
+        logger.error(f"Error extracting app type from socket path: {str(e)}")
+        return None
+
+
+def find_socket_by_id(deployer_id: str) -> List[str]:
+    socket_files = glob.glob(f"/tmp/ec2_app_{deployer_id}*")
     return socket_files
 
 
-def stop_instances(instance_id: Optional[str] = None) -> None:
+def stop_instances(deployer_id: Optional[str] = None, app_type: Optional[str] = None) -> None:
     """
     Stop running EC2 app instances.
 
     Args:
-        instance_id (Optional[str]): ID of the instance to stop. If None, stops all instances.
+        deployer_id (Optional[str]): ID of the deployer to stop. If None, stops all instances.
+        app_type (Optional[str]): Type of application to stop (vllm, mini-tgi). If None, stops all app types.
     """
-    if instance_id is None:
-        # List all socket files
+    # Get the list of socket files based on deployer_id
+    if deployer_id is None:
         socket_files = list_ec2_app_sockets()
-        if not socket_files:
-            logger.info("No running EC2 app instances found.")
-            return
-
-        logger.info(f"Found {len(socket_files)} running EC2 app instances:")
-        for socket_file in socket_files:
-            port = extract_port_from_socket_path(socket_file)
-            port_info = f" (port: {port})" if port else ""
-            logger.info(f"  {socket_file}{port_info}")
-
-        # Send kill command to all sockets
-        logger.info("Sending kill command to all instances...")
-        for socket_file in socket_files:
-            send_kill_command_to_socket(socket_file)
-
-        logger.info("All instances have been instructed to shut down.")
     else:
-        # Find sockets for the specified instance ID
-        socket_files = find_socket_by_id(instance_id)
-        if socket_files:
-            logger.info(
-                f"Found {len(socket_files)} sockets for instance ID {instance_id}:")
-            for socket_file in socket_files:
-                port = extract_port_from_socket_path(socket_file)
-                port_info = f" (port: {port})" if port else ""
-                logger.info(f"  {socket_file}{port_info}")
+        socket_files = find_socket_by_id(deployer_id)
+    
+    if not socket_files:
+        logger.info(f"No running EC2 app instances found{' for deployer ID ' + deployer_id if deployer_id else ''}.")
+        return
+    
+    # Filter socket files by app_type if specified
+    if app_type is not None:
+        filtered_socket_files = []
+        for socket_file in socket_files:
+            socket_app_type = extract_app_type_from_socket_path(socket_file)
+            if socket_app_type == app_type:
+                filtered_socket_files.append(socket_file)
+        
+        socket_files = filtered_socket_files
+        
+        if not socket_files:
+            logger.info(f"No running {app_type} instances found{' for deployer ID ' + deployer_id if deployer_id else ''}.")
+            return
+    
+    # Log the found instances
+    logger.info(f"Found {len(socket_files)} running EC2 app instances{' for deployer ID ' + deployer_id if deployer_id else ''}{' of type ' + app_type if app_type else ''}:")
+    for socket_file in socket_files:
+        port = extract_port_from_socket_path(socket_file)
+        app_type_info = extract_app_type_from_socket_path(socket_file)
+        info = f" (type: {app_type_info}, port: {port})" if app_type_info and port else f" (port: {port})" if port else ""
+        logger.info(f"  {socket_file}{info}")
+    
+    # Send kill command to all matching sockets
+    logger.info(f"Sending kill command to {len(socket_files)} instances...")
+    for socket_file in socket_files:
+        send_kill_command_to_socket(socket_file)
+    
+    logger.info(f"All matching instances have been instructed to shut down.")
 
-            # Send kill command to all found sockets
-            logger.info(
-                f"Sending kill command to instance with ID {instance_id}...")
-            for socket_file in socket_files:
-                send_kill_command_to_socket(socket_file)
 
-            logger.info(
-                f"Instance with ID {instance_id} has been instructed to shut down.")
-        else:
-            logger.error(
-                f"No running EC2 app instance found with ID {instance_id}.")
-
-
-def wait_for_app_instances(instance_id: Optional[str] = None, check_interval: int = 5) -> bool:
+def wait_for_app_instances(deployer_id: Optional[str] = None, app_type: Optional[str] = None, check_interval: int = 5) -> bool:
     """
     Wait for app instances to be ready by polling test_app until it returns true.
 
     Args:
-        instance_id (Optional[str]): ID of the instance to wait for. If None, waits for any instance.
+        deployer_id (Optional[str]): ID of the deployer to wait for. If None, waits for any instance.
+        app_type (Optional[str]): Type of application to wait for (vllm, mini-tgi). If None, uses generic health check.
         check_interval (int): Time between checks in seconds
 
     Returns:
         bool: True if an instance is ready, False otherwise
     """
     logger.info(
-        f"Waiting for {'any' if instance_id is None else instance_id} app instance to be ready...")
+        f"Waiting for {'any' if deployer_id is None else deployer_id} app instance{' of type ' + app_type if app_type else ''} to be ready...")
     stack_info_printed = False
 
     while True:
         # List all socket files or specific instance sockets
-        if instance_id is None:
+        if deployer_id is None:
             socket_files = list_ec2_app_sockets()
         else:
-            socket_files = find_socket_by_id(instance_id)
+            socket_files = find_socket_by_id(deployer_id)
 
         if not socket_files:
             logger.info(
-                f"No {'any' if instance_id is None else instance_id} app instances found. Retrying in {check_interval} seconds...")
+                f"No {'any' if deployer_id is None else deployer_id} app instances found. Retrying in {check_interval} seconds...")
             time.sleep(check_interval)
             continue
+
+        # Filter socket files by app_type if specified
+        if app_type is not None:
+            filtered_socket_files = []
+            for socket_file in socket_files:
+                socket_app_type = extract_app_type_from_socket_path(socket_file)
+                if socket_app_type == app_type:
+                    filtered_socket_files.append(socket_file)
+            
+            socket_files = filtered_socket_files
+            
+            if not socket_files:
+                logger.info(f"No running {app_type} instances found{' for deployer ID ' + deployer_id if deployer_id else ''}. Retrying in {check_interval} seconds...")
+                time.sleep(check_interval)
+                continue
 
         # Try to test each instance
         for socket_file in socket_files:
@@ -1084,20 +1122,40 @@ def wait_for_app_instances(instance_id: Optional[str] = None, check_interval: in
                         f"Could not extract port from socket path: {socket_file}")
                     continue
 
-                # Create a temporary deployer to test the app
-                # This is a simplified approach - in a real implementation, we would need to know the app type
-                logger.info(f"Testing app at port {port}...")
+                socket_app_type = extract_app_type_from_socket_path(socket_file)
+                logger.info(f"Testing app{' of type ' + socket_app_type if socket_app_type else ''} at port {port}...")
 
-                # Here we would need to determine the app type and create the appropriate EC2App instance
-                # For now, we'll just check if the port is responding
-                try:
-                    response = requests.get(
-                        f"http://localhost:{port}/health", timeout=5)
-                    if response.status_code == 200:
-                        logger.info(f"App instance at port {port} is ready!")
-                        return True
-                except Exception as e:
-                    logger.debug(f"App at port {port} not ready: {str(e)}")
+                # Create the appropriate EC2App instance based on app_type
+                app = None
+                if app_type == "vllm" or (app_type is None and socket_app_type == "vllm"):
+                    app = create_vllm_app(local_port=port)
+                elif app_type == "mini-tgi" or (app_type is None and socket_app_type == "mini-tgi"):
+                    app = create_mini_tgi_app(local_port=port)
+
+                if app:
+                    # Use the app's test_request method to check if it's ready
+                    try:
+                        if app.test_request():
+                            logger.info(
+                                f"App instance at port {port} is ready!")
+                            return True
+                        else:
+                            logger.debug(
+                                f"App at port {port} not ready (test_request returned False)")
+                    except Exception as e:
+                        logger.debug(f"App at port {port} not ready: {str(e)}")
+                else:
+                    # Fallback to generic health check if app_type is not specified and socket_app_type is not recognized
+                    try:
+                        import requests
+                        response = requests.get(
+                            f"http://localhost:{port}/health", timeout=5)
+                        if response.status_code == 200:
+                            logger.info(
+                                f"App instance at port {port} is ready!")
+                            return True
+                    except Exception as e:
+                        logger.debug(f"App at port {port} not ready: {str(e)}")
 
             except Exception as e:
                 logger.debug(f"Error testing app at {socket_file}: {str(e)}")
@@ -1167,8 +1225,8 @@ if __name__ == "__main__":
     command_desc = """Deploy an application on EC2 using CloudFormation.
 Before deploying EC2 app stack, make sure that your environment variables (or .env) include RACE_AWS_ aws access keys."""
     parser = argparse.ArgumentParser(description=command_desc)
-    parser.add_argument("--app-type", type=str, choices=["vllm", "mini-tgi"], default="vllm",
-                        help="Type of application to deploy")
+    parser.add_argument("--app-name", type=str, choices=["vllm", "mini-tgi"], required=True,
+                        help="Name of application to deploy (REQUIRED)")
     parser.add_argument("--model-id", type=str, default="tiiuae/falcon3-10b-instruct",
                         help="Hugging Face model ID to deploy (for vLLM)")
     parser.add_argument("--region", type=str, default=None,
@@ -1194,7 +1252,7 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
     parser.add_argument("--stop", type=str, default=None, nargs='?', const='all', metavar="ID",
                         help="Stop running EC2 app instances. If no ID is provided, stops all instances. If ID is provided, stops only that instance.")
     parser.add_argument("--wait", type=str, default=None, nargs='?', const='all', metavar="ID",
-                        help="Wait for app instances to be ready. If no ID is provided, waits for any instance. If ID is provided, waits only for that instance.")
+                        help="Wait for app deployer to be ready. If no ID is provided, waits for any instance. If Deployer ID is provided, waits only for that deployer.")
     parser.add_argument("--param", action="append", metavar="KEY=VALUE",
                         help="Additional parameters to pass to the application. Can be specified multiple times. Use --param-help for details.")
     parser.add_argument("--param-help", action="store_true",
@@ -1204,14 +1262,15 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
 
     # Handle the --stop argument if provided (if provided but without id, it will be all, if not provided, it will be None)
     if args.stop is not None:
-        instance_id = None if args.stop == 'all' else args.stop
-        stop_instances(instance_id)
+        deployer_id = None if args.stop == 'all' else args.stop
+        stop_instances(deployer_id, app_type=args.app_name)
         sys.exit(0)
 
     # Handle the --wait argument if provided (if provided but without id, it will be all, if not provided, it will be None)
     if args.wait is not None:
-        instance_id = None if args.wait == 'all' else args.wait
-        wait_for_app_instances(instance_id, check_interval=5)
+        deployer_id = None if args.wait == 'all' else args.wait
+        wait_for_app_instances(
+            deployer_id, app_type=args.app_name, check_interval=5)
         sys.exit(0)
 
     # Register signal handlers for various termination signals
@@ -1235,7 +1294,7 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
         print("  --param MODEL_ID=tiiuae/falcon3-10b-instruct  # Hugging Face model ID")
         print("  --param MAX_BATCH_SIZE=64                     # Maximum batch size")
         print("\nExample usage:")
-        print("  python scripts/aws/deploy_ec2_llm.py --app-type vllm --param MODEL_ID=meta-llama/Llama-2-7b-chat-hf --param TENSOR_PARALLEL=2")
+        print("  python scripts/aws/deploy_ec2_llm.py --app-name vllm --param MODEL_ID=meta-llama/Llama-2-7b-chat-hf --param TENSOR_PARALLEL=2")
         sys.exit(0)
 
     # Parse parameters from --param arguments
@@ -1253,13 +1312,13 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
     if args.model_id:
         params['MODEL_ID'] = args.model_id
 
-    # Create the appropriate EC2App based on the app type
-    if args.app_type == "vllm":
+    # Create the appropriate EC2App based on the app name
+    if args.app_name == "vllm":
         app = create_vllm_app(local_port=args.local_port, params=params)
-    elif args.app_type == "mini-tgi":
+    elif args.app_name == "mini-tgi":
         app = create_mini_tgi_app(local_port=args.local_port, params=params)
     else:
-        logger.error(f"Unsupported app type: {args.app_type}")
+        logger.error(f"Unsupported app name: {args.app_name}")
         sys.exit(1)
 
     # Create deployer using context manager pattern
