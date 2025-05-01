@@ -7,7 +7,7 @@ from datetime import datetime
 from utils.logging_utils import get_logger
 from services.indicies import QueryService
 from services.llms.ai71_client import AI71Client
-from services.llms.general_openai_client import GeneralOpenAIClient
+from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface, test_rag_system
 from systems.basic_rag.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE
@@ -25,28 +25,26 @@ class BasicRAGSystem(RAGSystemInterface):
         Initialize the BasicRAGSystem.
 
         Args:
-            llm_client: LLM client to use: ai71_client, general_openai_client
+            llm_client: LLM client to use: ai71_client, ec2_llm
         """
         self.query_service = QueryService()
 
         self.k = k
         model_id = "tiiuae/falcon3-10b-instruct"
 
-        if rag_llm_client == "general_openai_client":
-            self.rag_llm_client = GeneralOpenAIClient(
+        if rag_llm_client == "ec2_llm":
+            self.rag_llm_client = EC2LLMClient(
                 model_id=model_id
             )
-            client_type = "general_openai_client"
         else:
             self.rag_llm_client = AI71Client(
                 model_id=model_id
             )
-            client_type = "ai71_client"
 
         self.log.info("BasicRAGSystem initialized",
                       llm_model=model_id,
                       k=k,
-                      rag_llm_client=client_type)
+                      rag_llm_client=rag_llm_client)
 
     def process_question(self, question: str, qid: str = None) -> RAGResult:
         start_time = time.time()

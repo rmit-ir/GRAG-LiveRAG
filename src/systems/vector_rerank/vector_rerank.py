@@ -11,7 +11,7 @@ from utils.logging_utils import get_logger
 from services.indicies import QueryService
 from rerankers.setwise_reranker import SetwiseReranker
 from services.llms.ai71_client import AI71Client
-from services.llms.general_openai_client import GeneralOpenAIClient
+from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface, test_rag_system
 from systems.vector_rerank.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE
@@ -37,7 +37,7 @@ class VectorRerank(RAGSystemInterface):
         Initialize the VectorRerank.
 
         Args:
-            llm_client: LLM client to use: ai71_client, general_openai_client
+            llm_client: LLM client to use: ai71_client, ec2_llm
             reranker_strategy: Reranking strategy (pointwise, pairwise, listwise, setwise)
             reranker_k: Number of documents to return after reranking
             role_playing: Whether to use role playing in reranker prompts
@@ -53,8 +53,8 @@ class VectorRerank(RAGSystemInterface):
 
         model_id = "tiiuae/falcon3-10b-instruct"
 
-        if rag_llm_client == "general_openai_client":
-            self.rag_llm_client = GeneralOpenAIClient(
+        if rag_llm_client == "ec2_llm":
+            self.rag_llm_client = EC2LLMClient(
                 model_id=model_id
             )
         else:

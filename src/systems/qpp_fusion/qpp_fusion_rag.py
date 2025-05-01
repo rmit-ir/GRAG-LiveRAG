@@ -15,7 +15,7 @@ from utils.fusion_utils import rrf_fusion
 from utils.query_utils import generate_query_id
 from services.indicies import QueryService
 from services.llms.ai71_client import AI71Client
-from services.llms.general_openai_client import GeneralOpenAIClient
+from services.llms.ec2_llm_client import EC2LLMClient
 from services.qpp import QPPService
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface, test_rag_system
@@ -51,8 +51,8 @@ class QPPFusionSystem(RAGSystemInterface):
             max_effective_queries: Maximum number of most effective queries to use
             q_gen_model_id: Model ID for query generation LLM
             rag_model_id: Model ID for RAG generation LLM 
-            q_gen_llm_client: Client type for query generation LLM, ai71_client, general_openai_client, bedrock_client
-            rag_llm_client: Client type for RAG generation LLM, ai71_client, general_openai_client, bedrock_client
+            q_gen_llm_client: Client type for query generation LLM, ai71_client, ec2_llm, bedrock_client
+            rag_llm_client: Client type for RAG generation LLM, ai71_client, ec2_llm, bedrock_client
         """
         self.query_service = QueryService()
         self.qpp_service = QPPService(default_k=qpp_k)
@@ -99,8 +99,8 @@ class QPPFusionSystem(RAGSystemInterface):
                 model_id=q_gen_model_id,
                 temperature=0.5
             )
-        elif q_gen_llm_client == "general_openai_client":
-            self.query_generator = GeneralOpenAIClient(
+        elif q_gen_llm_client == "ec2_llm":
+            self.query_generator = EC2LLMClient(
                 model_id=q_gen_model_id,
                 temperature=0.5
             )
@@ -127,8 +127,8 @@ class QPPFusionSystem(RAGSystemInterface):
                 max_tokens=200,
                 temperature=0.0
             )
-        elif rag_llm_client == "general_openai_client":
-            self.llm_client = GeneralOpenAIClient(
+        elif rag_llm_client == "ec2_llm":
+            self.llm_client = EC2LLMClient(
                 model_id=rag_model_id,
                 max_tokens=200,
                 temperature=0.0

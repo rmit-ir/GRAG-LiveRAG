@@ -12,7 +12,7 @@ from utils.query_utils import generate_query_id
 from services.indicies import QueryService
 from services.llms.ai71_client import AI71Client
 from services.llms.bedrock_client import BedrockClient
-from services.llms.general_openai_client import GeneralOpenAIClient
+from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
 from systems.vector_q_gen.prompts import (
@@ -49,8 +49,8 @@ class VectorQGen(RAGSystemInterface):
             max_queries_per_component: Maximum number of queries to generate for each component
             q_gen_model_id: Model ID for query generation LLM
             rag_model_id: Model ID for RAG generation LLM 
-            q_gen_llm_client: Client type for query generation LLM, ai71_client, general_openai_client, bedrock_client
-            rag_llm_client: Client type for RAG generation LLM, ai71_client, general_openai_client, bedrock_client
+            q_gen_llm_client: Client type for query generation LLM, ai71_client, ec2_llm, bedrock_client
+            rag_llm_client: Client type for RAG generation LLM, ai71_client, ec2_llm, bedrock_client
         """
         self.query_service = QueryService()
         self.max_documents = max_documents
@@ -93,8 +93,8 @@ class VectorQGen(RAGSystemInterface):
                 max_tokens=200,
                 temperature=0.0
             )
-        elif rag_llm_client == "general_openai_client":
-            self.llm_client = GeneralOpenAIClient(
+        elif rag_llm_client == "ec2_llm":
+            self.llm_client = EC2LLMClient(
                 model_id=rag_model_id,
                 max_tokens=200,
                 temperature=0.0

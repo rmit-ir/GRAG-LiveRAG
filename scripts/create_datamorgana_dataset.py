@@ -55,6 +55,9 @@ Examples:
     # Generate 20 questions in JSONL format with longer wait time between polling
     uv run scripts/create_datamorgana_dataset.py --n_questions=20 --format=jsonl --wait_time=10
     
+    # Generate questions with a specific tag in the filename
+    uv run scripts/create_datamorgana_dataset.py --tag=easy
+    
     # Process results from an existing generation ID
     uv run scripts/create_datamorgana_dataset.py --generation-id=your-generation-id
         """,
@@ -74,6 +77,8 @@ Examples:
                         help="Path to config file")
     parser.add_argument("--generation-id", type=str, default=None,
                         help="Generation ID to wait for results instead of creating new generation")
+    parser.add_argument("--tag", type=str, default=None,
+                        help="Tag to include in the output filename")
     return parser.parse_args()
 
 
@@ -161,7 +166,7 @@ def save_dataframe(df: pd.DataFrame, output_path: str, format: str):
         raise ValueError(f"Unsupported format: {format}")
 
 
-def process_generation_results(dm, generation_id, wait_time, output=None, format="tsv"):
+def process_generation_results(dm, generation_id, wait_time, output=None, format="tsv", tag=None):
     """
     Process generation results from a given generation ID.
     
@@ -198,7 +203,8 @@ def process_generation_results(dm, generation_id, wait_time, output=None, format
         # Generate default output path with number of records and datetime
         record_count = len(df)
         current_datetime = datetime.now().strftime("%m%d%H%M")  # Format: MMDDHHMM
-        filename = f"dmds_{record_count}_{current_datetime}.{format}"
+        tag = f".{tag}" if tag else ""
+        filename = f"dmds_{record_count}_{current_datetime}{tag}.{format}"
         output_path = os.path.join(get_data_dir(), "generated_qa_pairs", filename)
         logger.debug("Generated output path", path=output_path)
     
@@ -246,7 +252,8 @@ def main():
             generation_id=args.generation_id,
             wait_time=args.wait_time,
             output=args.output,
-            format=args.format
+            format=args.format,
+            tag=args.tag
         )
 
     # Parse document IDs if provided
@@ -289,7 +296,8 @@ def main():
             generation_id=generation_id,
             wait_time=args.wait_time,
             output=args.output,
-            format=args.format
+            format=args.format,
+            tag=args.tag
         )
     except Exception as e:
         logger.error("Failed to generate QA pairs", error=str(e))

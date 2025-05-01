@@ -1,90 +1,71 @@
 """
-Client for interacting with OpenAI-compatible API using the official OpenAI Python client.
+Fixed client for interacting with AI71 API using OpenAI client.
 """
-import logging
 import os
-import json
-import time
-from typing import Dict, Optional, Tuple, Any, List
-from datetime import datetime
-from services.llms.llm_interface import LLMInterface
-from openai import OpenAI
 from utils.logging_utils import get_logger
+from openai import OpenAI
+from typing import Dict, Optional, Tuple, Any, List
+import time
+from datetime import datetime
+import json
 from utils.path_utils import get_data_dir
+from services.llms.llm_interface import LLMInterface
 
 
-class GeneralOpenAIClient(LLMInterface):
-    """Client for interacting with OpenAI-compatible API."""
+class FixedAI71Client(LLMInterface):
+    """Fixed client for interacting with AI71 API."""
 
     def __init__(
         self,
-        api_key: str,
-        api_base: str,
-        max_retries: int = 5,
-        timeout: float = 30.0,
         model_id: str = "tiiuae/falcon3-10b-instruct",
-        temperature: float = 0.7,
+        temperature: float = 0.0,
         max_tokens: int = 1024,
-        logger: logging.Logger = get_logger("general_openai_client"),
-        llm_name: str = "general_openai_client"
     ):
-        """
-        Initialize the OpenAI-compatible client.
-
-        Args:
-            model_id (str): The model ID to use
-            temperature (float): The temperature parameter for generation
-            max_tokens (int): Maximum number of tokens to generate
-            api_key (str): API key (required)
-            api_base (str): API base URL (required)
-            logger (logging.Logger): Logger instance
-            llm_name (str): Name of the LLM client for file naming
-        """
         # Initialize the parent class
         super().__init__(
             model_id=model_id,
             temperature=temperature,
             max_tokens=max_tokens,
         )
-
-        # Validate required parameters
-        if not api_key:
-            raise ValueError("API key is required")
-
-        if not api_base:
-            raise ValueError("API base URL is required")
-
-        self.logger = logger
-        self.llm_name = llm_name
-
+        
+        # Set up logger
+        self.logger = get_logger("ai71_client")
+        self.llm_name = "ai71"
+        
+        # Set API base and key
+        self.api_base = "https://api.ai71.ai/v1/"
+        self.api_key = os.environ.get("AI71_API_KEY", "")
+        if not self.api_key:
+            raise ValueError("AI71 API key is required")
+            
         # Initialize the OpenAI client with explicit headers
         self.client = OpenAI(
-            api_key=api_key,
-            base_url=api_base,
-            max_retries=max_retries,
-            timeout=timeout,
+            api_key=self.api_key,
+            base_url=self.api_base,
+            max_retries=5,
+            timeout=30.0,
             default_headers={
                 "Content-Type": "application/json",
             }
         )
 
-        # Store model ID for reference
-        self.model_id = model_id
-        self.logger.debug(
-            f"Initialized OpenAI-compatible client with model: {model_id}")
-
     def complete(self, prompt: str) -> str:
         """
         Generate a text completion for the given prompt.
+        
+        Note: We add a newline at the end of the prompt to match the curl behavior.
         """
         # Start timing the API request
         start_time = time.time()
 
         try:
+            # Add newline characters to the end of the prompt
+            formatted_prompt = f"{prompt}\n\n"
+            
             # Send the prompt to the completion model
             response = self.client.completions.create(
                 model=self.model_id,
-                prompt=prompt+"\n\n",
+                prompt=formatted_prompt,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens
             )
@@ -253,24 +234,29 @@ if __name__ == "__main__":
     # Load environment variables from .env file
     load_dotenv()
 
-    # Get API key from environment
-    api_key = os.environ.get("AI71_API_KEY", "")
+    # Check if required environment variables are set
+    if not os.environ.get("AI71_API_KEY"):
+        print("AI71_API_KEY environment variable not set")
+        exit(1)
 
-    # Create a GeneralOpenAIClient instance
-    client = GeneralOpenAIClient(
-        api_key=api_key,
-        api_base="https://api.ai71.ai/v1/",
+    # Create a FixedAI71Client instance
+    client = FixedAI71Client(
         model_id="tiiuae/falcon3-10b-instruct"
     )
 
-    # Send the query and get the response with a custom system message
-    content, raw_response = client.complete_chat_once(
+    # Test the complete method
+    print("\nTesting complete method:")
+    print("-" * 50)
+    result = client.complete("Hello, my name is ")
+    print(result)
+    print("-" * 50)
+
+    # Test the complete_chat_once method
+    print("\nTesting complete_chat_once method:")
+    print("-" * 50)
+    content, _ = client.complete_chat_once(
         "What is retrieval-augmented generation (RAG)?",
         system_message="You are an AI assistant that provides clear, concise explanations."
     )
-
-    # Print the response content
-    print("\nResponse from API:")
-    print("-" * 50)
     print(content)
     print("-" * 50)

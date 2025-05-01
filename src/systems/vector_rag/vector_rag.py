@@ -7,7 +7,7 @@ from datetime import datetime
 from utils.logging_utils import get_logger
 from services.indicies import QueryService
 from services.llms.ai71_client import AI71Client
-from services.llms.general_openai_client import GeneralOpenAIClient
+from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface, test_rag_system
 from systems.vector_rag.prompts import SYSTEM_PROMPT, ANSWER_PROMPT_TEMPLATE
@@ -25,14 +25,14 @@ class VectorRAG(RAGSystemInterface):
         Initialize the VectorRAG.
 
         Args:
-            llm_client: LLM client to use: ai71_client, general_openai_client
+            llm_client: LLM client to use: ai71_client, ec2_llm
         """
         self.query_service = QueryService()
 
         model_id = "tiiuae/falcon3-10b-instruct"
 
-        if llm_client == "general_openai_client":
-            self.llm_client = GeneralOpenAIClient(
+        if llm_client == "ec2_llm":
+            self.llm_client = EC2LLMClient(
                 model_id=model_id,
             )
         else:

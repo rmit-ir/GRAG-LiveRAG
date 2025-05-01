@@ -8,7 +8,7 @@ from typing import List
 from utils.logging_utils import get_logger
 from services.llms.ai71_client import AI71Client
 from services.llms.bedrock_client import BedrockClient
-from services.llms.general_openai_client import GeneralOpenAIClient
+from services.llms.ec2_llm_client import EC2LLMClient
 from systems.vector_q_gen.prompts import (
     QUERY_DECOMPOSITION_PROMPT,
     COMPONENT_QUERY_GENERATION_PROMPT
@@ -36,7 +36,7 @@ class QueryProcessor:
             max_components: Maximum number of components to decompose the question into
             max_queries_per_component: Maximum number of queries to generate for each component
             q_gen_model_id: Model ID for query generation LLM
-            q_gen_llm_client: Client type for query generation LLM
+            q_gen_llm_client: Client type for query generation LLM (ai71_client, ec2_llm, bedrock_client)
         """
         self.max_components = max_components
         self.max_queries_per_component = max_queries_per_component
@@ -71,12 +71,12 @@ class QueryProcessor:
                 model_id=q_gen_model_id,
                 temperature=0.5
             )
-        elif q_gen_llm_client == "general_openai_client":
-            self.query_decomposer = GeneralOpenAIClient(
+        elif q_gen_llm_client == "ec2_llm":
+            self.query_decomposer = EC2LLMClient(
                 model_id=q_gen_model_id,
                 temperature=0.5
             )
-            self.query_generator = GeneralOpenAIClient(
+            self.query_generator = EC2LLMClient(
                 model_id=q_gen_model_id,
                 temperature=0.5
             )
