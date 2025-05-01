@@ -4,13 +4,16 @@ Script to run a specified RAG system on a dataset of questions and save the resu
 
 This script:
 1. Takes a system name and imports the corresponding class
-2. Takes an input TSV file with questions
+2. Takes an input file with questions (TSV or JSONL in LiveRAG format)
 3. Runs all questions through the specified RAG system
 4. Gathers answers
-5. Saves results to a TSV file
+5. Saves results to a TSV file or JSONL file in LiveRAG format
 
 When called with --help, it will dynamically show parameters from the specified system's __init__ method.
 Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
+
+For LiveRAG Challenge format:
+Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input questions.jsonl --live
 """
 import os
 import sys
@@ -19,15 +22,25 @@ import time
 import argparse
 import importlib
 import concurrent.futures
-from typing import List, Dict, Any, Type, Optional, Tuple
+from typing import List, Dict, Any, Type, Optional, Tuple, Union, TypedDict
 import json
+import jsonlines
 
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
 from utils.system_params import extract_system_parameters, get_system_params_from_args
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
+from systems.live_rag_io import LiveRAGQuestion, LiveRAGAnswer
 from utils.time_utils import to_sec
+
+
+class QuestionData(TypedDict):
+    """
+    Common TypedDict for question data from both TSV and LiveRAG formats.
+    """
+    question: str
+    qid: str
 
 
 logger = get_logger("run")
@@ -68,7 +81,7 @@ def load_system_class(system_class_path: str) -> Type[RAGSystemInterface]:
         raise ImportError(f"Could not import system class '{system_class_path}': {e}")
 
 
-def load_questions_from_tsv(input_file: str) -> List[Dict[str, Any]]:
+def load_questions_from_tsv(input_file: str) -> List[QuestionData]:
     """
     Load questions from a TSV file.
     
@@ -84,7 +97,12 @@ def load_questions_from_tsv(input_file: str) -> List[Dict[str, Any]]:
         with open(input_file, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f, delimiter='\t')
             for row in reader:
-                questions.append(row)
+                # Convert to QuestionData format
+                question_data: QuestionData = {
+                    'question': row['question'],
+                    'qid': row.get('qid', '')
+                }
+                questions.append(question_data)
         
         logger.info("Successfully loaded questions from TSV", 
                    file=input_file, 
@@ -93,6 +111,46 @@ def load_questions_from_tsv(input_file: str) -> List[Dict[str, Any]]:
         return questions
     except Exception as e:
         logger.error("Failed to load questions from TSV", 
+                    file=input_file, 
+                    error=str(e))
+        raise
+
+
+def load_live_rag_questions(input_file: str) -> List[QuestionData]:
+    """
+    Load questions from a JSONL file in LiveRAG Challenge format.
+    
+    Args:
+        input_file: Path to the input JSONL file
+        
+    Returns:
+        List of dictionaries containing question data
+    """
+    questions: List[QuestionData] = []
+    
+    try:
+        with jsonlines.open(input_file, 'r') as reader:
+            for obj in reader:
+                # Check if required fields are present
+                if 'question' not in obj or 'id' not in obj:
+                    logger.warning("Skipping invalid question object, missing required fields", 
+                                  obj=obj)
+                    continue
+                
+                # Convert to QuestionData format
+                question_data: QuestionData = {
+                    'question': obj['question'],
+                    'qid': str(obj['id']),
+                }
+                questions.append(question_data)
+        
+        logger.info("Successfully loaded questions from JSONL", 
+                   file=input_file, 
+                   question_count=len(questions))
+        
+        return questions
+    except Exception as e:
+        logger.error("Failed to load questions from JSONL", 
                     file=input_file, 
                     error=str(e))
         raise
@@ -145,6 +203,33 @@ def save_results_to_tsv(results: List[RAGResult], output_file: str) -> None:
         raise
 
 
+def save_live_rag_results(results: List[RAGResult], output_file: str) -> None:
+    """
+    Save RAG results to a JSONL file in LiveRAG Challenge format.
+    
+    Args:
+        results: List of RAGResult objects
+        output_file: Path to the output JSONL file
+    """
+    try:
+        with jsonlines.open(output_file, 'w') as writer:
+            for result in results:
+                # Convert RAGResult to LiveRAGAnswer
+                live_answer = LiveRAGAnswer.from_rag_result(result)
+                # Write the answer as a dictionary
+                writer.write(live_answer.to_dict())
+        
+        logger.info("Successfully saved results to JSONL", 
+                   file=output_file, 
+                   result_count=len(results))
+    
+    except Exception as e:
+        logger.error("Failed to save results to JSONL", 
+                    file=output_file, 
+                    error=str(e))
+        raise
+
+
 def create_trec_run_file(results: List[RAGResult], output_file: str, system_name: str) -> None:
     """
     Create a standard TREC Run file from RAG results.
@@ -182,7 +267,7 @@ def create_trec_run_file(results: List[RAGResult], output_file: str, system_name
         raise
 
 
-def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any], Dict[str, Any], int, int]) -> Optional[RAGResult]:
+def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any], QuestionData, int, int]) -> Optional[RAGResult]:
     """
     Process a single question with the specified system.
     
@@ -231,7 +316,7 @@ def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any]
         return None
 
 
-def run_system(system_class: Type[RAGSystemInterface], questions: List[Dict[str, Any]], 
+def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionData], 
                system_params: Optional[Dict[str, Any]] = None, 
                num_threads: int = 1) -> List[RAGResult]:
     """
@@ -362,13 +447,17 @@ def create_parser_with_system_params(system_class=None):
     
     # Add input and output arguments
     parser.add_argument('--input', type=str, required=True,
-                        help='Path to the input TSV file with questions')
+                        help='Path to the input file with questions (TSV or JSONL in LiveRAG format)')
     
     parser.add_argument('--output-dir', type=str, default=None,
                         help='Directory to save output files (default: data/rag_results)')
     
     parser.add_argument('--output-prefix', type=str, default=None,
                         help='Prefix for output filenames (default: system name)')
+    
+    # Add LiveRAG Challenge mode flag
+    parser.add_argument('--live', action='store_true',
+                        help='Enable LiveRAG Challenge mode (input and output in LiveRAG format) default: False)')
     
     # Add thread count argument for parallel processing
     parser.add_argument('--num-threads', type=int, default=1,
@@ -441,18 +530,29 @@ def main():
     output_prefix = args.output_prefix or args.system.split('.')[-1]
     
     # Define output filenames
+    ds_name = args.input.split('/')[-1].split('.')[0]
+    output_prefix = args.output_prefix or args.system.split('.')[-1]
+    
+    # Standard format uses TSV and TREC
     tsv_filename = f"{ds_name}_{output_prefix}.tsv"
-    trec_filename = f"{ds_name}_{output_prefix}.trec"
+    # trec_filename = f"{ds_name}_{output_prefix}.trec"
     
     tsv_output_path = os.path.join(output_dir, tsv_filename)
-    trec_output_path = os.path.join(output_dir, trec_filename)
+    # trec_output_path = os.path.join(output_dir, trec_filename)
+    if args.live:
+        # LiveRAG Challenge format uses JSONL
+        live_output_filename = f"{ds_name}_{output_prefix}.jsonl"
+        live_output_path = os.path.join(output_dir, live_output_filename)
     
     try:
         # Load the system class
         system_class = load_system_class(args.system)
         
-        # Load questions from TSV
-        questions = load_questions_from_tsv(args.input)
+        # Load questions based on format
+        if args.live:
+            questions = load_live_rag_questions(args.input)
+        else:
+            questions = load_questions_from_tsv(args.input)
         
         # Extract system parameters from args
         system_params = get_system_params_from_args(system_class, args)
@@ -465,18 +565,14 @@ def main():
         # Calculate timing information
         total_time_ms = sum(result.total_time_ms for result in results)
         
-        # Save results to TSV
+        # Save in standard format (TSV and TREC)
         save_results_to_tsv(results, tsv_output_path)
-        
-        # Create TREC Run file
-        create_trec_run_file(results, trec_output_path, args.system)
+        # create_trec_run_file(results, trec_output_path, args.system)
         
         logger.info("Successfully completed the run", 
-                   system=args.system,
-                   input_file=args.input,
-                   tsv_output=tsv_output_path,
-                   trec_output=trec_output_path)
-        
+                    system=args.system,
+                    input_file=args.input,
+                    tsv_output=tsv_output_path)
         print(f"\nProcessing complete!")
         print(f"Total running time: {to_sec(overall_time_ms)}s")
         print(f"Average time per question: {to_sec(overall_time_ms/len(results))}s")
@@ -485,7 +581,12 @@ def main():
         print(f"Questions processed: {len(results)}")
         print(f"\nResults saved to:")
         print(f"  - TSV: {tsv_output_path}")
-        print(f"  - TREC Run: {trec_output_path}")
+        # print(f"  - TREC Run: {trec_output_path}")
+        if args.live:
+            # Save in LiveRAG Challenge format (JSONL)
+            save_live_rag_results(results, live_output_path)
+            print(f"\nLiveRAG Results saved to:")
+            print(f"  - JSONL (LiveRAG format): {live_output_path}")
     
     except Exception as e:
         logger.error("Error in main execution", error=str(e))

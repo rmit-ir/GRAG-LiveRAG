@@ -125,7 +125,8 @@ class VectorRerank(RAGSystemInterface):
                 "evidence_first": self.reranker.evidence_first,
                 "tone_words": self.reranker.tone_words,
                 "rerank_time_ms": rerank_time_ms
-            }
+            },
+            "final_prompt": prompt
         }
 
         result = RAGResult(

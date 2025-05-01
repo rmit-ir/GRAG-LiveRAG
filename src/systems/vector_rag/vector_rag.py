@@ -81,7 +81,8 @@ class VectorRAG(RAGSystemInterface):
             generated_queries=None,
             rewritten_docs=None,
             qid=qid,
-            system_name="VectorRAG"
+            system_name="VectorRAG",
+            metadata={"final_prompt": prompt}
         )
 
         self.log.info("Generated answer",

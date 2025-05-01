@@ -282,7 +282,8 @@ class FusionRAGSystem(RAGSystemInterface):
                 all_generated_queries) > 1 else None,
             rewritten_docs=None,
             qid=qid,
-            system_name="FusionRAGSystem"
+            system_name="FusionRAGSystem",
+            metadata={"final_prompt": prompt}
         )
 
         self.log.info("Generated answer",

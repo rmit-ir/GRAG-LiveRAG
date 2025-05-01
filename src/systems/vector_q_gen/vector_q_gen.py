@@ -240,7 +240,8 @@ class VectorQGen(RAGSystemInterface):
             ],
             "total_components": len(components),
             "total_queries": sum(len(comp["queries"]) for comp in component_data),
-            "total_docs": len(doc_contents)
+            "total_docs": len(doc_contents),
+            "final_prompt": prompt
         }
         
         # Collect all generated queries

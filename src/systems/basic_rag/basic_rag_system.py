@@ -75,6 +75,9 @@ class BasicRAGSystem(RAGSystemInterface):
         # Calculate total processing time
         total_time_ms = (time.time() - start_time) * 1000
 
+        # TODO: change to actual final prompt
+        final_prompt = prompt
+
         result = RAGResult(
             question=question,
             answer=answer,
@@ -85,7 +88,8 @@ class BasicRAGSystem(RAGSystemInterface):
             generated_queries=None,
             rewritten_docs=None,
             qid=qid,
-            system_name="BasicRAGSystem"
+            system_name="BasicRAGSystem",
+            metadata={"final_prompt": final_prompt}
         )
 
         self.log.info("Generated answer",

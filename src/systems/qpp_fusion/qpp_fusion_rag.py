@@ -432,7 +432,7 @@ class QPPFusionSystem(RAGSystemInterface):
         effective_query_list = [q['query'] for q in effective_queries]
 
         # Create QPP metadata for the result
-        qpp_metadata = {
+        metadata = {
             'total_queries': total_queries,
             'selected_queries': len(effective_queries),
             'removed_queries': removed_queries,
@@ -444,7 +444,8 @@ class QPPFusionSystem(RAGSystemInterface):
                     'confidence_score': q['confidence_score'],
                     'qpp_scores': q['qpp_scores']
                 } for q in effective_queries
-            ]
+            ],
+            'final_prompt': prompt
         }
 
         result = RAGResult(
@@ -458,7 +459,7 @@ class QPPFusionSystem(RAGSystemInterface):
             rewritten_docs=None,
             qid=qid,
             system_name="QPPFusionSystem",
-            metadata=qpp_metadata
+            metadata=metadata
         )
 
         self.log.info("Generated answer",

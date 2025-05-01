@@ -121,17 +121,18 @@ With EC2 LLMs (involve starting and stopping EC2 instance), this will take 9min 
 
 ```bash
 # Launch the LLM, it will be available at localhost
-uv run scripts/aws/deploy_ec2_llm.py
+# --app-name is required, choose either "vllm" or "mini-tgi"
+uv run scripts/aws/deploy_ec2_llm.py --app-name vllm
 
 ####################################################
 # In a separate terminal, run these as one command
 # Wait until the LLM is ready,
-uv run scripts/aws/deploy_ec2_llm.py --wait; \
+uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --wait; \
 say 'llm is ready'; \
 # Run the RAG system over the dataset
 uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num-threads 20 --rag_llm_client general_openai_client; \
 # Stop the EC2 LLM instance
-uv run scripts/aws/deploy_ec2_llm.py --stop; \
+uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --stop; \
 # Evaluate the results
 uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num_threads 20; \
 say "evaluation finished"
@@ -191,13 +192,14 @@ This repository includes several scripts and notebooks for working with the Live
 - **EC2 LLMs**: Deploy and use LLMs on AWS EC2 instances
 
   ```bash
-  # By default, it will deploy tiiuae/falcon3-10b-instruct on a g6e.4xlarge instance
+  # The --app-name parameter is required, choose either "vllm" or "mini-tgi"
+  # By default, it will deploy tiiuae/falcon3-10b-instruct on a g6e.8xlarge instance
   # More options are available at `--help`
   # Ctrl-C to stop and destroy all resources created
-  uv run scripts/aws/deploy_ec2_llm.py
+  uv run scripts/aws/deploy_ec2_llm.py --app-name vllm
 
   # Or, put this at the end of your command or run it separately to destroy all resources created
-  uv run scripts/aws/deploy_ec2_llm.py --stop
+  uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --stop
   ```
 
   The script will:

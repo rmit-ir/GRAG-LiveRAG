@@ -29,6 +29,23 @@
       "env": {
         "PYTHONPATH": "${workspaceFolder}"
       }
+    },
+    {
+      "name": "Debug live run",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "scripts.run",
+      "justMyCode": true,
+      "args": [
+        "--system",
+        "systems.basic_rag.basic_rag_system.BasicRAGSystem",
+        "--live",
+        "--input",
+        "data/live_rag_questions/sample_questions.jsonl"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
     }
   ]
 }
