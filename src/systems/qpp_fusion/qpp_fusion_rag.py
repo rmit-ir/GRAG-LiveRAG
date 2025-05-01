@@ -91,77 +91,57 @@ class QPPFusionSystem(RAGSystemInterface):
         # Initialize query generation clients
         # If model contains "sonnet" or "claude", use BedrockClient regardless of q_gen_llm_client setting
         if 'sonnet' in q_gen_model_id.lower() or 'claude' in q_gen_model_id.lower():
-            self.sparse_query_generator = BedrockClient(
+            self.query_generator = BedrockClient(
                 model_id=q_gen_model_id,
-                system_message=sparse_prompt,
                 temperature=0.5
             )
-            self.dense_query_generator = BedrockClient(
+            self.query_generator = BedrockClient(
                 model_id=q_gen_model_id,
-                system_message=dense_prompt,
                 temperature=0.5
             )
         elif q_gen_llm_client == "general_openai_client":
-            self.sparse_query_generator = GeneralOpenAIClient(
+            self.query_generator = GeneralOpenAIClient(
                 model_id=q_gen_model_id,
-                system_message=sparse_prompt,
-                temperature=0.5
-            )
-            self.dense_query_generator = GeneralOpenAIClient(
-                model_id=q_gen_model_id,
-                system_message=dense_prompt,
                 temperature=0.5
             )
         elif q_gen_llm_client == "bedrock_client":
-            self.sparse_query_generator = BedrockClient(
+            self.query_generator = BedrockClient(
                 model_id=q_gen_model_id,
-                system_message=sparse_prompt,
-                temperature=0.5
-            )
-            self.dense_query_generator = BedrockClient(
-                model_id=q_gen_model_id,
-                system_message=dense_prompt,
                 temperature=0.5
             )
         else:  # Default to AI71Client
-            self.sparse_query_generator = AI71Client(
+            self.query_generator = AI71Client(
                 model_id=q_gen_model_id,
-                system_message=sparse_prompt,
                 temperature=0.5
             )
-            self.dense_query_generator = AI71Client(
-                model_id=q_gen_model_id,
-                system_message=dense_prompt,
-                temperature=0.5
-            )
+        
+        # Store system prompts
+        self.sparse_prompt = sparse_prompt
+        self.dense_prompt = dense_prompt
 
         # Initialize RAG answer generation client
         # If model contains "sonnet" or "claude", use BedrockClient regardless of rag_llm_client setting
         if 'sonnet' in rag_model_id.lower() or 'claude' in rag_model_id.lower():
             self.llm_client = BedrockClient(
                 model_id=rag_model_id,
-                system_message=SYSTEM_PROMPT,
                 max_tokens=200,
                 temperature=0.0
             )
         elif rag_llm_client == "general_openai_client":
             self.llm_client = GeneralOpenAIClient(
-                model_id=rag_model_id,  # Fixed: Use rag_model_id instead of q_gen_model_id
-                system_message=SYSTEM_PROMPT,
+                model_id=rag_model_id,
                 max_tokens=200,
                 temperature=0.0
             )
         elif rag_llm_client == "bedrock_client":
             self.llm_client = BedrockClient(
                 model_id=rag_model_id,
-                system_message=SYSTEM_PROMPT,
                 max_tokens=200,
                 temperature=0.0
             )
         else:  # Default to AI71Client
             self.llm_client = AI71Client(
-                model_id=rag_model_id,  # Fixed: Use rag_model_id instead of q_gen_model_id
-                system_message=SYSTEM_PROMPT,
+                model_id=rag_model_id,
                 max_tokens=200,
                 temperature=0.0
             )
@@ -268,13 +248,12 @@ class QPPFusionSystem(RAGSystemInterface):
         Returns:
             List of generated queries
         """
-        client = self.sparse_query_generator if engine_type == 'sparse' else self.dense_query_generator
-
         for attempt in range(max_retries + 1):
             try:
                 # Just pass the question as the query
                 prompt = f"User question: {question}"
-                _, response = client.query(prompt)
+                system_prompt = self.sparse_prompt if engine_type == 'sparse' else self.dense_prompt
+                response, _ = self.query_generator.complete_chat_once(prompt, system_prompt)
 
                 # Extract queries from the response
                 queries = self._extract_queries(response)
@@ -424,7 +403,7 @@ class QPPFusionSystem(RAGSystemInterface):
             context=context, question=question)
 
         # Generate answer using the LLM
-        _, answer = self.llm_client.query(prompt)
+        answer, _ = self.llm_client.complete_chat_once(prompt, SYSTEM_PROMPT)
 
         total_time_ms = (time.time() - start_time) * 1000
 

@@ -33,13 +33,11 @@ class VectorRAG(RAGSystemInterface):
 
         if llm_client == "general_openai_client":
             self.llm_client = GeneralOpenAIClient(
-                model_id='tiiuae/falcon3-10b-instruct',
-                system_message=SYSTEM_PROMPT
+                model_id=model_id,
             )
         else:
             self.llm_client = AI71Client(
                 model_id=model_id,
-                system_message=SYSTEM_PROMPT
             )
 
         self.log.info("VectorRAG initialized",
@@ -66,7 +64,7 @@ class VectorRAG(RAGSystemInterface):
         # Generate answer using the LLM
         prompt = ANSWER_PROMPT_TEMPLATE.format(
             context=context, question=question)
-        _, answer = self.llm_client.query(prompt)
+        answer, _ = self.llm_client.complete_chat_once(prompt, SYSTEM_PROMPT)
 
         # Calculate total processing time
         total_time_ms = (time.time() - start_time) * 1000

@@ -195,10 +195,10 @@ def process_generation_results(dm, generation_id, wait_time, output=None, format
     if output:
         output_path = output
     else:
-        # Generate default output path with number of records
-        short_id = generate_short_id()
+        # Generate default output path with number of records and datetime
         record_count = len(df)
-        filename = f"dmds_{short_id}.n{record_count}.{format}"
+        current_datetime = datetime.now().strftime("%m%d%H%M")  # Format: MMDDHHMM
+        filename = f"dmds_{record_count}_{current_datetime}.{format}"
         output_path = os.path.join(get_data_dir(), "generated_qa_pairs", filename)
         logger.debug("Generated output path", path=output_path)
     

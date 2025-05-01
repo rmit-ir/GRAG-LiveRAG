@@ -4,12 +4,14 @@ Client for interacting with Amazon Bedrock API using LangChain.
 import os
 import json
 import time
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, List, Optional
 from datetime import datetime
 from langchain_aws import ChatBedrock
+from langchain_core.messages import AIMessage
 from botocore.exceptions import BotoCoreError, ClientError
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
+from services.llms.llm_interface import LLMInterface
 
 # Initialize logger
 logger = get_logger("bedrock_client")
@@ -43,13 +45,12 @@ MODEL_PRICING = {
 }
 
 
-class BedrockClient:
+class BedrockClient(LLMInterface):
     """Client for interacting with Amazon Bedrock API."""
 
     def __init__(
         self,
         model_id: str = "anthropic.claude-3-5-haiku-20241022-v1:0",
-        system_message: str = "You are a helpful assistant.",
         temperature: float = 0.7,
         max_tokens: int = 1024,
         region_name: str = None
@@ -59,11 +60,16 @@ class BedrockClient:
 
         Args:
             model_id (str): The model ID to use
-            system_message (str): System message to use for all queries
             temperature (float): The temperature parameter for generation
             max_tokens (int): Maximum number of tokens to generate
             region_name (str, optional): AWS region name. If None, uses RACE_AWS_REGION from env
         """
+        # Initialize the parent class
+        super().__init__(
+            model_id=model_id,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
         # Get AWS credentials from environment variables with RACE_ prefix
         aws_access_key_id = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
         aws_secret_access_key = os.environ.get("RACE_AWS_SECRET_ACCESS_KEY", "")
@@ -88,32 +94,46 @@ class BedrockClient:
             aws_session_token=aws_session_token,
             model_kwargs=model_kwargs
         )
+        
+        # Store model ID for reference
         self.model_id = model_id
-        self.system_message = system_message
         logger.debug(f"Initialized Bedrock client with model: {model_id}")
 
-    def query(self, prompt: str) -> Tuple[Any, str]:
+    def complete(self, prompt: str) -> str:
         """
-        Send a query to the Bedrock API and get the response.
+        Generate a completion for the given prompt.
 
         Args:
-            prompt (str): The prompt to send to the API
+            prompt (str): The text prompt to complete
 
         Returns:
-            Tuple[Any, str]: A tuple containing:
-                - raw_response: The complete API response object
+            str: The generated text content from the model
+            
+        Raises:
+            NotImplementedError: This method is not implemented for Claude v3 models
+        """
+        raise NotImplementedError(
+            "The complete method is not implemented for Claude v3 models. "
+            "Please use complete_chat_once instead."
+        )
+    
+    def complete_chat(self, messages: List[Dict[str, str]]) -> Tuple[str, AIMessage]:
+        """
+        Generate a response for a chat conversation.
+
+        Args:
+            messages (List[Dict[str, str]]): A list of message dictionaries, 
+                each containing 'role' (system, user, or assistant) and 'content' keys
+
+        Returns:
+            Tuple[str, AIMessage]: A tuple containing:
                 - content: The generated text content from the model
+                - raw_response: The complete API response object
         """
         # Start timing the API request
         start_time = time.time()
 
         try:
-            # Format messages with system message and user prompt
-            messages = [
-                {"role": "system", "content": self.system_message},
-                {"role": "user", "content": prompt}
-            ]
-
             # Send the message and get the response
             response = self.chat_model.invoke(messages)
             logger.debug(f"Raw response from Bedrock API", response=response)
@@ -146,7 +166,7 @@ class BedrockClient:
             # Create response metadata for saving
             response_metadata = {
                 "model": self.model_id,
-                "prompt": prompt,
+                "messages": messages,
                 "response": content,
                 "timestamp": datetime.now().isoformat(),
                 "token_usage": token_usage,
@@ -154,14 +174,14 @@ class BedrockClient:
             }
 
             # Save response for reproducibility
-            self._save_raw_response(response_metadata, prompt)
+            self._save_raw_response(response_metadata)
 
             # Add token usage and cost to response object for access by callers
             response.token_usage = token_usage
             response.cost_usd = cost
             
-            return response, content
-
+            return content, response
+            
         except (BotoCoreError, ClientError) as e:
             logger.error(f"AWS error: {str(e)}")
             # Check if this is an expired token exception
@@ -169,8 +189,34 @@ class BedrockClient:
                 logger.warning("AWS token has expired. Please refresh your AWS credentials (environment variables).")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
+            logger.error(f"Unexpected error in complete_chat: {str(e)}")
             raise
+            
+    def complete_chat_once(self, message: str, system_message: Optional[str] = None) -> Tuple[str, AIMessage]:
+        """
+        Generate a response for a chat conversation with a single call.
+
+        Args:
+            message (str): A single prompt message
+            system_message (Optional[str]): System message to use for this conversation.
+                If None, uses a default system message.
+
+        Returns:
+            Tuple[str, AIMessage]: A tuple containing:
+                - content: The generated text content from the model
+                - raw_response: The complete API response object
+        """
+        # Use provided system message or default to a standard assistant message
+        system_message = system_message or "You are an AI assistant that provides clear, concise explanations."
+        
+        # Format messages with system message and user prompt
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": message}
+        ]
+        
+        # Use complete_chat to handle the request
+        return self.complete_chat(messages)
 
     def _extract_token_usage(self, response: Any) -> Dict[str, int]:
         """
@@ -238,13 +284,12 @@ class BedrockClient:
         
         return total_cost
     
-    def _save_raw_response(self, response: Dict[str, Any], prompt: str) -> None:
+    def _save_raw_response(self, response: Dict[str, Any]) -> None:
         """
         Saves the raw API response to a file for reproducibility and backup.
 
         Args:
             response (Dict[str, Any]): The raw API response
-            prompt (str): The prompt that was sent to the API
         """
         try:
             # Create a directory for raw responses if it doesn't exist
@@ -257,10 +302,9 @@ class BedrockClient:
             filename = f"bedrock_response_{model_name}_{timestamp}.json"
             filepath = os.path.join(raw_responses_dir, filename)
 
-            # Save the response with the prompt
+            # Save the response
             with open(filepath, "w") as f:
                 json.dump({
-                    "prompt": prompt,
                     "model": self.model_id,
                     "timestamp": timestamp,
                     "response": response
@@ -289,12 +333,14 @@ if __name__ == "__main__":
 
     # Create a BedrockClient instance
     client = BedrockClient(
-        model_id="anthropic.claude-3-5-haiku-20241022-v1:0",
-        system_message="You are an AI assistant that provides clear, concise explanations."
+        model_id="anthropic.claude-3-5-haiku-20241022-v1:0"
     )
 
-    # Send the query and get the response
-    raw_response, content = client.query("What is retrieval-augmented generation (RAG)?")
+    # Send the query and get the response with a custom system message
+    content, raw_response = client.complete_chat_once(
+        "What is retrieval-augmented generation (RAG)?",
+        system_message="You are an AI assistant that provides clear, concise explanations."
+    )
 
     # Print the response content
     print("\nResponse from Bedrock API:")

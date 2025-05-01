@@ -13,20 +13,21 @@ class BasicRAG2(RAGSystemInterface):
     def __init__(self):
         self.rag_llm_client = AI71Client(
             model_id="tiiuae/falcon3-10b-instruct",
-            system_message="You are a helpful assistant. Answer the question based on the provided documents.",
         )
         # self.qgen_llm_client = BedrockClient(
         #     model_id="meta.llama3-1-8b-instruct-v1:0",
-        #     system_message="Generate a list of 5 search query variants based on the user's question, give me one query variant per line. Do not include any other text.",
         # )
         self.qgen_llm_client = AI71Client(
             model_id="tiiuae/falcon3-10b-instruct",
-            system_message="Generate a list of 5 search query variants based on the user's question, give me one query variant per line. Do not include any other text.",
         )
+        
+        # Store system prompts
+        self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
+        self.qgen_system_prompt = "Generate a list of 5 search query variants based on the user's question, give me one query variant per line. Do not include any other text."
         self.query_service = QueryService()
 
     def _create_query_variants(self, question: str) -> List[str]:
-        _, queries = self.qgen_llm_client.query(question)
+        queries, _ = self.qgen_llm_client.complete_chat_once(question, self.qgen_system_prompt)
         queries = queries.split("\n")
         queries = [query.strip() for query in queries]
         return queries
@@ -55,7 +56,7 @@ class BasicRAG2(RAGSystemInterface):
 
         prompt = context + "\n\nQuestion: " + question + "\n\nAnswer: "
 
-        _, answer = self.rag_llm_client.query(prompt)
+        answer, _ = self.rag_llm_client.complete_chat_once(prompt, self.rag_system_prompt)
 
         return RAGResult(
             qid=qid,

@@ -9,6 +9,7 @@ from typing import List, Optional
 import re
 
 from rerankers.reranker_interface import RerankerInterface
+from services.llms.llm_interface import LLMInterface
 from utils.logging_utils import get_logger
 from services.indicies import SearchHit
 
@@ -27,7 +28,7 @@ class SetwiseReranker(RerankerInterface):
 
     def __init__(
         self,
-        llm_client,
+        llm_client: LLMInterface,
         algorithm: str = "heapsort",
         compare_size: int = 3,
         role_playing: bool = True,
@@ -238,7 +239,7 @@ class SetwiseReranker(RerankerInterface):
         prompt = self._build_prompt(query, doc_texts)
         
         # Get selection from LLM
-        _, response = self.llm_client.query(prompt)
+        response, _ = self.llm_client.complete_chat_once(prompt, None)
         
         # Parse response to get the selected document index
         selected_idx = self._parse_llm_response(response)

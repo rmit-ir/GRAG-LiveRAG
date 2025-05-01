@@ -37,25 +37,19 @@ class FusionRAGSystem(RAGSystemInterface):
 
         # LLM client for answer generation
         self.llm_client = AI71Client(
-            model_id="tiiuae/falcon3-10b-instruct",
-            system_message=SYSTEM_PROMPT
+            model_id="tiiuae/falcon3-10b-instruct"
         )
 
-        # LLM client for sparse query generation (keyword-based search)
-        sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
-        self.sparse_query_generator = AI71Client(
+        # LLM client for query generation (shared for both sparse and dense)
+        self.query_generator = AI71Client(
             model_id="tiiuae/falcon3-10b-instruct",
-            system_message=sparse_prompt,
             temperature=0.5  # Set temperature for diversity in retry scenarios
         )
-
-        # LLM client for dense query generation (semantic search)
-        dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
-        self.dense_query_generator = AI71Client(
-            model_id="tiiuae/falcon3-10b-instruct",
-            system_message=dense_prompt,
-            temperature=0.5  # Set temperature for diversity in retry scenarios
-        )
+        
+        # Store system prompts
+        self.system_prompt = SYSTEM_PROMPT
+        self.sparse_prompt = SPARSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
+        self.dense_prompt = DENSE_QUERY_GENERATION_PROMPT.format(max_queries=max_queries)
 
         self.max_documents = max_documents
         self.max_queries = max_queries
@@ -143,13 +137,12 @@ class FusionRAGSystem(RAGSystemInterface):
         Returns:
             List of generated queries
         """
-        client = self.sparse_query_generator if engine_type == 'sparse' else self.dense_query_generator
-
         for attempt in range(max_retries + 1):
             try:
                 # Just pass the question as the query
                 prompt = f"User question: {question}"
-                _, response = client.query(prompt)
+                system_prompt = self.sparse_prompt if engine_type == 'sparse' else self.dense_prompt
+                response, _ = self.query_generator.complete_chat_once(prompt, system_prompt)
 
                 # Extract queries from the response
                 queries = self._extract_queries(response)
@@ -263,7 +256,7 @@ class FusionRAGSystem(RAGSystemInterface):
             context=context, question=question)
 
         # Generate answer using the LLM
-        _, answer = self.llm_client.query(prompt)
+        answer, _ = self.llm_client.complete_chat_once(prompt, self.system_prompt)
 
         total_time_ms = (time.time() - start_time) * 1000
 

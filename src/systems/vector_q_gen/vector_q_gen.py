@@ -90,28 +90,24 @@ class VectorQGen(RAGSystemInterface):
         if 'sonnet' in rag_model_id.lower() or 'claude' in rag_model_id.lower():
             self.llm_client = BedrockClient(
                 model_id=rag_model_id,
-                system_message=SYSTEM_PROMPT,
                 max_tokens=200,
                 temperature=0.0
             )
         elif rag_llm_client == "general_openai_client":
             self.llm_client = GeneralOpenAIClient(
                 model_id=rag_model_id,
-                system_message=SYSTEM_PROMPT,
                 max_tokens=200,
                 temperature=0.0
             )
         elif rag_llm_client == "bedrock_client":
             self.llm_client = BedrockClient(
                 model_id=rag_model_id,
-                system_message=SYSTEM_PROMPT,
                 max_tokens=200,
                 temperature=0.0
             )
         else:  # Default to AI71Client
             self.llm_client = AI71Client(
                 model_id=rag_model_id,
-                system_message=SYSTEM_PROMPT,
                 max_tokens=200,
                 temperature=0.0
             )
@@ -225,7 +221,7 @@ class VectorQGen(RAGSystemInterface):
             context=context, question=question)
         
         # Generate answer using the LLM
-        _, answer = self.llm_client.query(prompt)
+        answer, _ = self.llm_client.complete_chat_once(prompt, SYSTEM_PROMPT)
         
         total_time_ms = (time.time() - start_time) * 1000
         

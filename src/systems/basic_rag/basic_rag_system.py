@@ -34,14 +34,12 @@ class BasicRAGSystem(RAGSystemInterface):
 
         if rag_llm_client == "general_openai_client":
             self.rag_llm_client = GeneralOpenAIClient(
-                model_id='tiiuae/falcon3-10b-instruct',
-                system_message=SYSTEM_PROMPT
+                model_id=model_id
             )
             client_type = "general_openai_client"
         else:
             self.rag_llm_client = AI71Client(
-                model_id=model_id,
-                system_message=SYSTEM_PROMPT
+                model_id=model_id
             )
             client_type = "ai71_client"
 
@@ -70,7 +68,7 @@ class BasicRAGSystem(RAGSystemInterface):
         # Generate answer using the LLM
         prompt = ANSWER_PROMPT_TEMPLATE.format(
             context=context, question=question)
-        _, answer = self.rag_llm_client.query(prompt)
+        answer, _ = self.rag_llm_client.complete_chat_once(prompt, SYSTEM_PROMPT)
 
         # Calculate total processing time
         total_time_ms = (time.time() - start_time) * 1000

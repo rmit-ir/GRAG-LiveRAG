@@ -58,52 +58,44 @@ class QueryProcessor:
             q_gen_model_id: Model ID for query generation
         """
         # Prepare query decomposition prompt
-        decomposition_prompt = QUERY_DECOMPOSITION_PROMPT.format(max_components=self.max_components)
+        self.decomposition_prompt = QUERY_DECOMPOSITION_PROMPT.format(max_components=self.max_components)
         
         # Initialize query generation clients
         # If model contains "sonnet" or "claude", use BedrockClient regardless of q_gen_llm_client setting
         if 'sonnet' in q_gen_model_id.lower() or 'claude' in q_gen_model_id.lower():
             self.query_decomposer = BedrockClient(
                 model_id=q_gen_model_id,
-                system_message=decomposition_prompt,
                 temperature=0.5
             )
             self.query_generator = BedrockClient(
                 model_id=q_gen_model_id,
-                system_message="",  # Will be set dynamically for each component
                 temperature=0.5
             )
         elif q_gen_llm_client == "general_openai_client":
             self.query_decomposer = GeneralOpenAIClient(
                 model_id=q_gen_model_id,
-                system_message=decomposition_prompt,
                 temperature=0.5
             )
             self.query_generator = GeneralOpenAIClient(
                 model_id=q_gen_model_id,
-                system_message="",  # Will be set dynamically for each component
                 temperature=0.5
             )
         elif q_gen_llm_client == "bedrock_client":
             self.query_decomposer = BedrockClient(
                 model_id=q_gen_model_id,
-                system_message=decomposition_prompt,
                 temperature=0.5
             )
             self.query_generator = BedrockClient(
                 model_id=q_gen_model_id,
-                system_message="",  # Will be set dynamically for each component
                 temperature=0.5
             )
         else:  # Default to AI71Client
             self.query_decomposer = AI71Client(
                 model_id=q_gen_model_id,
-                system_message=decomposition_prompt,
                 temperature=0.5
             )
             self.query_generator = AI71Client(
                 model_id=q_gen_model_id,
-                system_message="",  # Will be set dynamically for each component
                 temperature=0.5
             )
     
@@ -214,7 +206,7 @@ class QueryProcessor:
             try:
                 # Pass the question to the decomposer
                 prompt = f"User question: {question}"
-                _, response = self.query_decomposer.query(prompt)
+                response, _ = self.query_decomposer.complete_chat_once(prompt, self.decomposition_prompt)
                 
                 # Extract components from the response
                 components = self._extract_components(response)
@@ -263,15 +255,11 @@ class QueryProcessor:
             max_queries=self.max_queries_per_component
         )
         
-        # Update the query generator's system message
-        if hasattr(self.query_generator, 'system_message'):
-            self.query_generator.system_message = component_prompt
-        
         for attempt in range(max_retries + 1):
             try:
                 # Pass the component as the query
                 prompt = f"Component: {component}"
-                _, response = self.query_generator.query(prompt)
+                response, _ = self.query_generator.complete_chat_once(prompt, component_prompt)
                 
                 # Extract queries from the response
                 queries = self._extract_queries(response)

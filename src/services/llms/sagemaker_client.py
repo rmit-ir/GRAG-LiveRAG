@@ -4,26 +4,30 @@ Client for deploying and interacting with models on Amazon SageMaker.
 import os
 import time
 import json
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 
 import boto3
 import sagemaker
 from sagemaker.huggingface import HuggingFaceModel
 from sagemaker.serverless import ServerlessInferenceConfig
 from botocore.exceptions import BotoCoreError, ClientError
+from langchain_core.messages import AIMessage
 
 from utils.logging_utils import get_logger
+from services.llms.llm_interface import LLMInterface
 
 # Initialize logger
 logger = get_logger("sagemaker_client")
 
 
-class SageMakerClient:
+class SageMakerClient(LLMInterface):
     """Client for deploying and interacting with models on Amazon SageMaker."""
 
     def __init__(
         self,
         model_id: str = "tiiuae/falcon-3-10b",
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
         region_name: str = None,
         instance_type: str = "ml.g6.12xlarge",
     ):
@@ -32,9 +36,17 @@ class SageMakerClient:
 
         Args:
             model_id (str): The Hugging Face model ID to deploy
+            temperature (float): The temperature parameter for generation
+            max_tokens (int): Maximum number of tokens to generate
             region_name (str, optional): AWS region name. If None, uses RACE_AWS_REGION from env
             instance_type (str): SageMaker instance type for deployment
         """
+        # Initialize the parent class
+        super().__init__(
+            model_id=model_id,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
         # Get AWS credentials from environment variables with RACE_ prefix
         access_key = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
         secret_key = os.environ.get("RACE_AWS_SECRET_ACCESS_KEY", "")
@@ -230,7 +242,112 @@ class SageMakerClient:
             except Exception as e:
                 logger.error("Error deleting model: %s", str(e))
 
-    def query(self, prompt: str, parameters: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], str]:
+    def complete(self, prompt: str) -> str:
+        """
+        Generate a completion for the given prompt.
+
+        Args:
+            prompt (str): The text prompt to complete
+
+        Returns:
+            str: The generated text content from the model
+        """
+        # Default parameters
+        parameters = {
+            "max_new_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "do_sample": True,
+        }
+        
+        # Use the existing query method but extract only the content
+        _, content = self._invoke_endpoint(prompt, parameters)
+        return content
+    
+    def complete_chat(self, messages: List[Dict[str, str]]) -> Tuple[str, AIMessage]:
+        """
+        Generate a response for a chat conversation.
+
+        Args:
+            messages (List[Dict[str, str]]): A list of message dictionaries, 
+                each containing 'role' (system, user, or assistant) and 'content' keys
+
+        Returns:
+            Tuple[str, AIMessage]: A tuple containing:
+                - content: The generated text content from the model
+                - raw_response: The complete API response object as an AIMessage
+        """
+        # Convert messages to a prompt format that SageMaker can understand
+        prompt = self._format_messages_as_prompt(messages)
+        
+        # Default parameters
+        parameters = {
+            "max_new_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "do_sample": True,
+        }
+        
+        # Invoke the endpoint
+        result, content = self._invoke_endpoint(prompt, parameters)
+        
+        # Create an AIMessage from the response
+        ai_message = AIMessage(content=content)
+        
+        return content, ai_message
+    
+    def complete_chat_once(self, message: str, system_message: Optional[str] = None) -> Tuple[str, AIMessage]:
+        """
+        Generate a response for a chat conversation with a single call.
+
+        Args:
+            message (str): A single prompt message
+            system_message (Optional[str]): System message to use for this conversation.
+                If None, uses a default system message.
+
+        Returns:
+            Tuple[str, AIMessage]: A tuple containing:
+                - content: The generated text content from the model
+                - raw_response: The complete API response object as an AIMessage
+        """
+        # Use provided system message or default to a standard assistant message
+        system_message = system_message or "You are an AI assistant that provides clear, concise explanations."
+        
+        # Format messages with system message and user prompt
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": message}
+        ]
+        
+        # Use complete_chat to handle the request
+        return self.complete_chat(messages)
+    
+    def _format_messages_as_prompt(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Format a list of messages as a single prompt string.
+        
+        Args:
+            messages: List of message dictionaries with role and content
+            
+        Returns:
+            Formatted prompt string
+        """
+        formatted_messages = []
+        
+        for message in messages:
+            role = message.get("role", "").lower()
+            content = message.get("content", "")
+            
+            if role == "system":
+                formatted_messages.append(f"System: {content}")
+            elif role == "user":
+                formatted_messages.append(f"User: {content}")
+            elif role == "assistant":
+                formatted_messages.append(f"Assistant: {content}")
+            else:
+                formatted_messages.append(f"{role.capitalize()}: {content}")
+        
+        return "\n".join(formatted_messages) + "\nAssistant:"
+    
+    def _invoke_endpoint(self, prompt: str, parameters: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], str]:
         """
         Send a query to the SageMaker endpoint and get the response.
 
@@ -329,7 +446,10 @@ if __name__ == "__main__":
         
         # Test the endpoint
         prompt = "Hello, my name is"
-        raw_response, content = client.query(prompt)
+        content, raw_response = client.complete_chat_once(
+            prompt,
+            system_message="You are an AI assistant that provides clear, concise explanations."
+        )
         
         print("\nResponse from SageMaker endpoint:")
         print("-" * 50)

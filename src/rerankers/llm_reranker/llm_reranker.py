@@ -7,6 +7,7 @@ the paper "An Investigation of Prompt Variations for Zero-shot LLM-based Rankers
 from typing import List, Optional
 
 from rerankers.reranker_interface import RerankerInterface
+from services.llms.llm_interface import LLMInterface
 from utils.logging_utils import get_logger
 from services.indicies import SearchHit
 
@@ -21,7 +22,7 @@ class LLMReranker(RerankerInterface):
 
     def __init__(
         self,
-        llm_client,
+        llm_client: LLMInterface,
         strategy: str = "setwise",
         role_playing: bool = True,
         tone_words: Optional[str] = "Please",
@@ -223,7 +224,7 @@ class LLMReranker(RerankerInterface):
         scored_hits = []
         for hit in hits:
             prompt = self._build_prompt(query, [hit.metadata.text])
-            _, response = self.llm_client.query(prompt)
+            response, _ = self.llm_client.complete_chat_once(prompt, None)
 
             # Parse response - looking for YES/NO
             response = response.strip().upper()
@@ -269,7 +270,7 @@ class LLMReranker(RerankerInterface):
 
                 prompt = self._build_prompt(
                     query, [doc_a.metadata.text, doc_b.metadata.text], ["A", "B"])
-                _, response = self.llm_client.query(prompt)
+                response, _ = self.llm_client.complete_chat_once(prompt, None)
 
                 # Parse response - looking for A or B
                 response = response.strip().upper()
@@ -321,7 +322,7 @@ class LLMReranker(RerankerInterface):
         prompt = self._build_prompt(query, docs)
 
         # Get ranking from LLM
-        _, response = self.llm_client.query(prompt)
+        response, _ = self.llm_client.complete_chat_once(prompt, None)
 
         # Parse response - expected format: [1] > [2] > [3] ...
         # Extract numbers from response
@@ -405,7 +406,7 @@ class LLMReranker(RerankerInterface):
             prompt = self._build_prompt(query, docs)
 
             # Get selection from LLM
-            _, response = self.llm_client.query(prompt)
+            response, _ = self.llm_client.complete_chat_once(prompt, None)
 
             # Parse response - looking for a number
             import re
