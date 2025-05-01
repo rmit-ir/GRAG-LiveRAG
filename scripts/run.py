@@ -46,39 +46,109 @@ class QuestionData(TypedDict):
 logger = get_logger("run")
 
 
+def find_system_class_paths(class_name: str) -> List[str]:
+    """
+    Search recursively for Python files that contain a class with the given name
+    and return the full module paths.
+    
+    Args:
+        class_name: Name of the class to find
+        
+    Returns:
+        List of module paths in the format 'systems.xxx.xxx.ClassName'
+    """
+    import os
+    import re
+    
+    matches = []
+    systems_dir = "src/systems"
+    
+    # Regular expression to find class definitions
+    class_pattern = re.compile(rf"class\s+{class_name}\s*\(\s*.*RAGSystemInterface")
+    
+    # Walk through all directories under systems
+    for root, _, files in os.walk(systems_dir):
+        for file in files:
+            if file.endswith('.py') and not file.startswith('__'):
+                file_path = os.path.join(root, file)
+                
+                # Read the file content and search for the class definition
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        if class_pattern.search(content):
+                            # Convert file path to module path
+                            rel_path = os.path.relpath(file_path, "src")
+                            module_path = rel_path.replace(os.path.sep, '.').replace('.py', '')
+                            # Create full module path with class name
+                            full_path = f"{module_path}.{class_name}"
+                            matches.append(full_path)
+                except Exception:
+                    # Skip files that can't be read
+                    continue
+    
+    return matches
+
+
 def load_system_class(system_class_path: str) -> Type[RAGSystemInterface]:
     """
     Dynamically import and return the specified system class.
     
     Args:
         system_class_path: Full path to the system class (e.g., 'systems.basic_rag.basic_rag_system.BasicRAGSystem')
+                          or just the class name (e.g., 'VectorRAG')
         
     Returns:
         The system class
     
     Raises:
         ImportError: If the system cannot be imported
+        ValueError: If multiple matching classes are found for a class name
     """
-    try:
-        # Split the path into module path and class name
-        module_path, class_name = system_class_path.rsplit('.', 1)
+    # Check if the path contains dots (indicating a module path)
+    if '.' in system_class_path:
+        try:
+            # Split the path into module path and class name
+            module_path, class_name = system_class_path.rsplit('.', 1)
+            
+            # Import the module
+            module = importlib.import_module(module_path)
+            
+            # Get the class
+            system_class = getattr(module, class_name)
+            
+            logger.info("Successfully loaded system class", 
+                       module_path=module_path, 
+                       class_name=class_name)
+            
+            return system_class
+        except (ImportError, AttributeError) as e:
+            logger.error("Failed to import system class", 
+                        system_class_path=system_class_path, 
+                        error=str(e))
+            raise ImportError(f"Could not import system class '{system_class_path}': {e}")
+    else:
+        # If only a class name is provided, search for it in the systems directory
+        class_name = system_class_path
+        matching_paths = find_system_class_paths(class_name)
         
-        # Import the module
-        module = importlib.import_module(module_path)
-        
-        # Get the class
-        system_class = getattr(module, class_name)
-        
-        logger.info("Successfully loaded system class", 
-                   module_path=module_path, 
-                   class_name=class_name)
-        
-        return system_class
-    except (ImportError, AttributeError) as e:
-        logger.error("Failed to import system class", 
-                    system_class_path=system_class_path, 
-                    error=str(e))
-        raise ImportError(f"Could not import system class '{system_class_path}': {e}")
+        # Check the results of the search
+        if not matching_paths:
+            logger.error("No matching system class found", class_name=class_name)
+            raise ImportError(f"Could not find any system class named '{class_name}'")
+        elif len(matching_paths) == 1:
+            # Get the full module path and recursively call load_system_class with it
+            full_path = matching_paths[0]
+            logger.info("Found matching system class", full_path=full_path)
+            
+            # Recursively call load_system_class with the full path
+            return load_system_class(full_path)
+        else:
+            # Multiple matches found, raise an error with details
+            logger.error("Multiple matching system classes found", 
+                        class_name=class_name, 
+                        matches=matching_paths)
+            raise ValueError(f"Multiple system classes named '{class_name}' found: {', '.join(matching_paths)}")
 
 
 def load_questions_from_tsv(input_file: str) -> List[QuestionData]:
@@ -443,7 +513,8 @@ def create_parser_with_system_params(system_class=None):
     
     # Add the system argument
     parser.add_argument('--system', type=str, required=True,
-                        help='Full path to the system class (e.g., systems.basic_rag.basic_rag_system.BasicRAGSystem)')
+                        help='System class to use. Can be either a full path (e.g., systems.basic_rag.basic_rag_system.BasicRAGSystem) '
+                             'or just the class name (e.g., VectorRAG)')
     
     # Add input and output arguments
     parser.add_argument('--input', type=str, required=True,

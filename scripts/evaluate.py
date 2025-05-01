@@ -124,6 +124,50 @@ def get_evaluator_params_from_args(evaluator_class: Type[EvaluatorInterface], ar
     return evaluator_params
 
 
+def find_evaluator_class_paths(class_name: str) -> List[str]:
+    """
+    Search recursively for Python files that contain a class with the given name
+    and return the full module paths.
+    
+    Args:
+        class_name: Name of the class to find
+        
+    Returns:
+        List of module paths in the format 'evaluators.xxx.xxx.ClassName'
+    """
+    import os
+    import re
+    
+    matches = []
+    evaluators_dir = "src/evaluators"
+    
+    # Regular expression to find class definitions
+    class_pattern = re.compile(rf"class\s+{class_name}\s*\(\s*.*EvaluatorInterface")
+    
+    # Walk through all directories under evaluators
+    for root, _, files in os.walk(evaluators_dir):
+        for file in files:
+            if file.endswith('.py') and not file.startswith('__'):
+                file_path = os.path.join(root, file)
+                
+                # Read the file content and search for the class definition
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        if class_pattern.search(content):
+                            # Convert file path to module path
+                            rel_path = os.path.relpath(file_path, "src")
+                            module_path = rel_path.replace(os.path.sep, '.').replace('.py', '')
+                            # Create full module path with class name
+                            full_path = f"{module_path}.{class_name}"
+                            matches.append(full_path)
+                except Exception:
+                    # Skip files that can't be read
+                    continue
+    
+    return matches
+
+
 def load_evaluator_class(evaluator_class_path: str) -> Type[EvaluatorInterface]:
     """
     Dynamically import and return the specified evaluator class.
@@ -131,33 +175,59 @@ def load_evaluator_class(evaluator_class_path: str) -> Type[EvaluatorInterface]:
     Args:
         evaluator_class_path: Full path to the evaluator class 
                              (e.g., 'evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator')
+                             or just the class name (e.g., 'EditDistanceEvaluator')
         
     Returns:
         The evaluator class
     
     Raises:
         ImportError: If the evaluator cannot be imported
+        ValueError: If multiple matching classes are found for a class name
     """
-    try:
-        # Split the path into module path and class name
-        module_path, class_name = evaluator_class_path.rsplit('.', 1)
+    # Check if the path contains dots (indicating a module path)
+    if '.' in evaluator_class_path:
+        try:
+            # Split the path into module path and class name
+            module_path, class_name = evaluator_class_path.rsplit('.', 1)
+            
+            # Import the module
+            module = importlib.import_module(module_path)
+            
+            # Get the class
+            evaluator_class = getattr(module, class_name)
+            
+            logger.info("Successfully loaded evaluator class", 
+                       module_path=module_path, 
+                       class_name=class_name)
+            
+            return evaluator_class
+        except (ImportError, AttributeError) as e:
+            logger.error("Failed to import evaluator class", 
+                        evaluator_class_path=evaluator_class_path, 
+                        error=str(e))
+            raise ImportError(f"Could not import evaluator class '{evaluator_class_path}': {e}")
+    else:
+        # If only a class name is provided, search for it in the evaluators directory
+        class_name = evaluator_class_path
+        matching_paths = find_evaluator_class_paths(class_name)
         
-        # Import the module
-        module = importlib.import_module(module_path)
-        
-        # Get the class
-        evaluator_class = getattr(module, class_name)
-        
-        logger.info("Successfully loaded evaluator class", 
-                   module_path=module_path, 
-                   class_name=class_name)
-        
-        return evaluator_class
-    except (ImportError, AttributeError) as e:
-        logger.error("Failed to import evaluator class", 
-                    evaluator_class_path=evaluator_class_path, 
-                    error=str(e))
-        raise ImportError(f"Could not import evaluator class '{evaluator_class_path}': {e}")
+        # Check the results of the search
+        if not matching_paths:
+            logger.error("No matching evaluator class found", class_name=class_name)
+            raise ImportError(f"Could not find any evaluator class named '{class_name}'")
+        elif len(matching_paths) == 1:
+            # Get the full module path and recursively call load_evaluator_class with it
+            full_path = matching_paths[0]
+            logger.info("Found matching evaluator class", full_path=full_path)
+            
+            # Recursively call load_evaluator_class with the full path
+            return load_evaluator_class(full_path)
+        else:
+            # Multiple matches found, raise an error with details
+            logger.error("Multiple matching evaluator classes found", 
+                        class_name=class_name, 
+                        matches=matching_paths)
+            raise ValueError(f"Multiple evaluator classes named '{class_name}' found: {', '.join(matching_paths)}")
 
 
 def load_rag_results(results_file: str) -> List[RAGResult]:
@@ -462,7 +532,8 @@ def create_parser_with_evaluator_params(evaluator_class=None):
     
     # Add the evaluator argument
     parser.add_argument('--evaluator', type=str, default='evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator',
-                        help='Full path to the evaluator class (default: evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator)')
+                        help='Evaluator class to use. Can be either a full path (e.g., evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator) '
+                             'or just the class name (e.g., ContextRecall) (default: evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator)')
     
     # Add input and output arguments
     parser.add_argument('--results', type=str, required=True,

@@ -34,14 +34,23 @@ This generates results in `data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.ts
 
 ### Step 2: Evaluate the results
 
+You can evaluate results using either the full path or just the class name:
+
 ```bash
+# Using full path
 uv run scripts/evaluate.py \
   --evaluator evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator \
   --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv \
   --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
+
+# Using just the class name (simpler approach)
+uv run scripts/evaluate.py \
+  --evaluator EditDistanceEvaluator \
+  --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv \
+  --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
 ```
 
-This generates:
+Both commands generate:
 
 - `data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.EditDistanceEvaluator.evaluation.aggregated.tsv`
 - `data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.EditDistanceEvaluator.evaluation.rows.tsv`
@@ -49,7 +58,7 @@ This generates:
 For evaluator-specific parameters:
 
 ```bash
-uv run scripts/evaluate.py --evaluator evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator --help
+uv run scripts/evaluate.py --evaluator EditDistanceEvaluator --help
 ```
 
 As you might've noticed from running `--help`, the `evaluate.py` script automatically extracts parameters from your evaluator's `__init__` method and makes them available as command-line arguments. For example, if your evaluator has parameters like `normalize=True` in its constructor, you can pass `--normalize` or `--no-normalize` directly on the command line. This means you don't need to modify the evaluation script when creating new evaluators with custom parameters.

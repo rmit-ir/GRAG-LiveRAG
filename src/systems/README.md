@@ -23,18 +23,26 @@ To create a new RAG system:
 
 For a complete overview of the end-to-end workflow, see [The LiveRAG Workflow](../../README.md#the-liverag-workflow) in the main README.
 
+You can run a system using either the full path or just the class name:
+
 ```bash
+# Using full path
 uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem \
+  --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv \
+  --num-threads 5
+
+# Using just the class name (simpler approach)
+uv run scripts/run.py --system BasicRAGSystem \
   --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv \
   --num-threads 5
 ```
 
-This generates results in `data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv`
+Both commands generate results in `data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv`
 
 For system-specific parameters:
 
 ```bash
-uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --help
+uv run scripts/run.py --system BasicRAGSystem --help
 ```
 
 Notice that the system's constructor arguments are automatically made available as command line arguments.

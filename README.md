@@ -80,7 +80,8 @@ The LiveRAG project follows a structured workflow for developing, running, and e
 2. **Run RAG System**: Process questions through a RAG system to generate answers
 
    ```bash
-   uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem \
+   # You can use either the full path or just the class name
+   uv run scripts/run.py --system BasicRAGSystem \
      --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv \
      --num-threads 5
    ```
@@ -92,8 +93,9 @@ The LiveRAG project follows a structured workflow for developing, running, and e
 3. **Evaluate Results**: Compare RAG system outputs against reference answers
 
    ```bash
+   # You can use either the full path or just the class name
    uv run scripts/evaluate.py \
-     --evaluator evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator \
+     --evaluator EditDistanceEvaluator \
      --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv \
      --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
    ```
@@ -112,9 +114,9 @@ With default AI71 LLMs:
 
 ```bash
 # Run the RAG system over the dataset
-uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zc20.easy.n20.tsv; \
+uv run scripts/run.py --system BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zc20.easy.n20.tsv; \
 # Evaluate the results
-uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zc20_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zc20.easy.n20.tsv --num_threads 20
+uv run scripts/evaluate.py --evaluator LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zc20_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zc20.easy.n20.tsv --num_threads 20
 ```
 
 With EC2 LLMs (involve starting and stopping EC2 instance), this will take 9min to start the instance:
@@ -130,11 +132,11 @@ uv run scripts/aws/deploy_ec2_llm.py --app-name vllm
 uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --wait; \
 say 'llm is ready'; \
 # Run the RAG system over the dataset
-uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num-threads 20 --rag_llm_client general_openai_client; \
+uv run scripts/run.py --system BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num-threads 20 --rag_llm_client general_openai_client; \
 # Stop the EC2 LLM instance
 uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --stop; \
 # Evaluate the results
-uv run scripts/evaluate.py --evaluator evaluators.llm_evaluator.llm_evaluator.LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num_threads 20; \
+uv run scripts/evaluate.py --evaluator LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num_threads 20; \
 say "evaluation finished"
 ```
 
