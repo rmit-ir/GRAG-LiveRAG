@@ -31,7 +31,7 @@ from utils.path_utils import get_data_dir
 from utils.system_params import extract_system_parameters, get_system_params_from_args
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
-from systems.live_rag_io import LiveRAGQuestion, LiveRAGAnswer
+from systems.live_rag_io import LiveRAGAnswer
 from utils.time_utils import to_sec
 
 
@@ -528,7 +528,7 @@ def create_parser_with_system_params(system_class=None):
     
     # Add LiveRAG Challenge mode flag
     parser.add_argument('--live', action='store_true',
-                        help='Enable LiveRAG Challenge mode (input and output in LiveRAG format) default: False)')
+                        help='LiveRAG format (input and output must be in LiveRAG format) default: False)')
     
     # Add thread count argument for parallel processing
     parser.add_argument('--num-threads', type=int, default=1,
