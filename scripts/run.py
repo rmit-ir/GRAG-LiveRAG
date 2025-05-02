@@ -25,6 +25,7 @@ import concurrent.futures
 from typing import List, Dict, Any, Type, Optional, Tuple, Union, TypedDict
 import json
 import jsonlines
+from dotenv import load_dotenv
 
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
@@ -33,6 +34,9 @@ from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
 from systems.live_rag_io import LiveRAGAnswer
 from utils.time_utils import to_sec
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class QuestionData(TypedDict):
