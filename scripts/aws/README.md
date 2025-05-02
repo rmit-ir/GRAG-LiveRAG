@@ -28,6 +28,7 @@ Setup a requirement:
 
 ```bash
 # Install AWS CLI plugin, used to ssh into the EC2 instance and set up port forwarding
+brew install awscli
 brew install --cask session-manager-plugin
 ```
 
