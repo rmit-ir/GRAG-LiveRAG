@@ -218,9 +218,15 @@ class LLMEvaluator(EvaluatorInterface):
 
             # merge two evaluation fields
             evaluation = {
-                'evaluation_notes': f"{eval_correctness.get('evaluation_notes', '')}\n{eval_support.get('evaluation_notes', '')}",
+                'evaluation_notes': f"{eval_correctness.get('evaluation_notes', '')}\n\n{eval_support.get('evaluation_notes', '')}",
                 'relevance_score': eval_correctness.get("relevance_score", 0),
-                'faithfulness_score': eval_support.get("faithfulness_score", 0)
+                'faithfulness_score': eval_support.get("faithfulness_score", 0),
+                'token_usage': {
+                    'input_tokens': eval_correctness.get("token_usage", {}).get("input_tokens", 0) + eval_support.get("token_usage", {}).get("input_tokens", 0),
+                    'output_tokens': eval_correctness.get("token_usage", {}).get("output_tokens", 0) + eval_support.get("token_usage", {}).get("output_tokens", 0),
+                    'total_tokens': eval_correctness.get("token_usage", {}).get("total_tokens", 0) + eval_support.get("token_usage", {}).get("total_tokens", 0)
+                },
+                'cost_usd': eval_correctness.get("cost_usd", 0) + eval_support.get("cost_usd", 0)
             }
 
             # Log the evaluation
@@ -228,7 +234,9 @@ class LLMEvaluator(EvaluatorInterface):
                 f"Evaluated RAG result",
                 qid=rag_result.qid,
                 relevance_score=evaluation["relevance_score"],
-                faithfulness_score=evaluation["faithfulness_score"]
+                faithfulness_score=evaluation["faithfulness_score"],
+                cost_usd=evaluation.get("cost_usd", None),
+                token_usage=evaluation.get("token_usage", None),
             )
 
             return evaluation
