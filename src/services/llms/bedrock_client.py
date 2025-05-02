@@ -72,8 +72,13 @@ class BedrockClient(LLMInterface):
         )
         # Get AWS credentials from environment variables with RACE_ prefix
         aws_access_key_id = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
-        aws_secret_access_key = os.environ.get("RACE_AWS_SECRET_ACCESS_KEY", "")
+        aws_secret_access_key = os.environ.get(
+            "RACE_AWS_SECRET_ACCESS_KEY", "")
         aws_session_token = os.environ.get("RACE_AWS_SESSION_TOKEN", "")
+
+        if not aws_access_key_id or not aws_secret_access_key:
+            raise ValueError(
+                "AWS credentials (RACE_AWS_ACCESS_KEY_ID and RACE_AWS_SECRET_ACCESS_KEY) are required for Bedrock API access.")
 
         # Use provided region_name or get from environment variable
         if region_name is None:
@@ -94,7 +99,7 @@ class BedrockClient(LLMInterface):
             aws_session_token=aws_session_token,
             model_kwargs=model_kwargs
         )
-        
+
         # Store model ID for reference
         self.model_id = model_id
         logger.debug(f"Initialized Bedrock client with model: {model_id}")
@@ -108,7 +113,7 @@ class BedrockClient(LLMInterface):
 
         Returns:
             str: The generated text content from the model
-            
+
         Raises:
             NotImplementedError: This method is not implemented for Claude v3 models
         """
@@ -116,7 +121,7 @@ class BedrockClient(LLMInterface):
             "The complete method is not implemented for Claude v3 models. "
             "Please use complete_chat_once instead."
         )
-    
+
     def complete_chat(self, messages: List[Dict[str, str]]) -> Tuple[str, AIMessage]:
         """
         Generate a response for a chat conversation.
@@ -137,7 +142,7 @@ class BedrockClient(LLMInterface):
             # Send the message and get the response
             response = self.chat_model.invoke(messages)
             logger.debug(f"Raw response from Bedrock API", response=response)
-            
+
             # Log response time
             response_time = time.time() - start_time
             logger.info(
@@ -147,13 +152,13 @@ class BedrockClient(LLMInterface):
 
             # Extract content from the response
             content = response.content
-            
+
             # Extract token usage from response
             token_usage = self._extract_token_usage(response)
-            
+
             # Calculate cost based on token usage
             cost = self._calculate_cost(token_usage)
-            
+
             # Log token usage and cost
             logger.info(
                 "Token usage and cost",
@@ -179,19 +184,20 @@ class BedrockClient(LLMInterface):
             # Add token usage and cost to response object for access by callers
             response.token_usage = token_usage
             response.cost_usd = cost
-            
+
             return content, response
-            
+
         except (BotoCoreError, ClientError) as e:
             logger.error(f"AWS error: {str(e)}")
             # Check if this is an expired token exception
             if isinstance(e, ClientError) and "ExpiredTokenException" in str(e):
-                logger.warning("AWS token has expired. Please refresh your AWS credentials (environment variables).")
+                logger.warning(
+                    "AWS token has expired. Please refresh your AWS credentials (environment variables).")
             raise
         except Exception as e:
             logger.error(f"Unexpected error in complete_chat: {str(e)}")
             raise
-            
+
     def complete_chat_once(self, message: str, system_message: Optional[str] = None) -> Tuple[str, AIMessage]:
         """
         Generate a response for a chat conversation with a single call.
@@ -208,28 +214,28 @@ class BedrockClient(LLMInterface):
         """
         # Use provided system message or default to a standard assistant message
         system_message = system_message or "You are an AI assistant that provides clear, concise explanations."
-        
+
         # Format messages with system message and user prompt
         messages = [
             {"role": "system", "content": system_message},
             {"role": "user", "content": message}
         ]
-        
+
         # Use complete_chat to handle the request
         return self.complete_chat(messages)
 
     def _extract_token_usage(self, response: Any) -> Dict[str, int]:
         """
         Extract token usage information from the API response.
-        
+
         Args:
             response: The API response object
-            
+
         Returns:
             Dictionary containing token usage information
         """
         token_usage = {}
-        
+
         # Try to extract from response_metadata
         if hasattr(response, "response_metadata") and response.response_metadata:
             usage = response.response_metadata.get("usage", {})
@@ -238,7 +244,7 @@ class BedrockClient(LLMInterface):
                 "output_tokens": usage.get("completion_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0)
             }
-        
+
         # If not found, try additional_kwargs
         elif hasattr(response, "additional_kwargs") and response.additional_kwargs:
             usage = response.additional_kwargs.get("usage", {})
@@ -247,7 +253,7 @@ class BedrockClient(LLMInterface):
                 "output_tokens": usage.get("completion_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0)
             }
-        
+
         # If not found, try usage_metadata
         elif hasattr(response, "usage_metadata") and response.usage_metadata:
             token_usage = {
@@ -255,35 +261,35 @@ class BedrockClient(LLMInterface):
                 "output_tokens": response.usage_metadata.get("output_tokens", 0),
                 "total_tokens": response.usage_metadata.get("total_tokens", 0)
             }
-        
+
         return token_usage
-    
+
     def _calculate_cost(self, token_usage: Dict[str, int]) -> float:
         """
         Calculate the cost of the API call based on token usage.
-        
+
         Args:
             token_usage: Dictionary containing token usage information
-            
+
         Returns:
             Cost in USD
         """
         # Get pricing for the model
         pricing = MODEL_PRICING.get(self.model_id, MODEL_PRICING["default"])
-        
+
         # Extract token counts
         input_tokens = token_usage.get("input_tokens", 0)
         output_tokens = token_usage.get("output_tokens", 0)
-        
+
         # Calculate cost (price per 1M tokens, convert to price per token)
         input_cost = (input_tokens / 1000) * (pricing["input_price"] / 1000)
         output_cost = (output_tokens / 1000) * (pricing["output_price"] / 1000)
-        
+
         # Total cost
         total_cost = input_cost + output_cost
-        
+
         return total_cost
-    
+
     def _save_raw_response(self, response: Dict[str, Any]) -> None:
         """
         Saves the raw API response to a file for reproducibility and backup.
