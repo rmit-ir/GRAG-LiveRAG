@@ -8,6 +8,11 @@ import time
 from typing import Dict, Any, Optional, List, TypedDict, Union
 from pathlib import Path
 from utils.logging_utils import get_logger
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 
 # Initialize logger
 logger = get_logger("ec2_app")
@@ -83,6 +88,16 @@ class EC2App:
         if self.program_file and not os.path.exists(self.program_file):
             raise FileNotFoundError(
                 f"Program file not found: {self.program_file}")
+        logger.info(f"EC2App name: {self.name}")
+        logger.info(f"EC2App setup_script: {self.setup_script}")
+        logger.info(f"EC2App launch_script: {self.launch_script}")
+        logger.info(f"EC2App program_file: {self.program_file}")
+        logger.info(f"EC2App port_mappings: {self.port_mappings}")
+        logger.info(f"EC2App log_command: {self.log_command}")
+        logger.info(f"EC2App default_remote_port: {default_remote_port}")
+        logger.info(f"EC2App default_local_port: {default_local_port}")
+        logger.info(f"EC2App api_key: {self.api_key}")
+        logger.info(f"EC2App params", params=self.params)
 
     @property
     def primary_port_mapping(self) -> PortMapping:
@@ -215,7 +230,7 @@ def test_vllm_request(app: EC2App) -> bool:
 
         # Prepare a friendly welcome message using chat format
         data = {
-            "model": app.name,
+            "model": app.params.get("MODEL_ID", "tiiuae/falcon3-10b-instruct"),
             "messages": [
                 {"role": "system", "content": f"You are a helpful AI assistant deployed on AWS EC2 using {app.name}."},
                 {"role": "user", "content": "Say hello and introduce yourself."}
@@ -275,13 +290,15 @@ def create_vllm_app(local_port: Optional[int] = None, api_key: Optional[str] = N
     if local_port is None:
         local_port = 8987
     if api_key is None:
-        api_key = 'random_key'
+        api_key = os.environ.get("EC2_LLM_API_KEY", "random_key")
     # Define paths to scripts
     setup_script = str(Path(__file__).parent / "apps" /
                        "vllm" / "install_vllm.sh")
     launch_script = str(Path(__file__).parent / "apps" /
                         "vllm" / "setup_vllm_service.sh")
-    if params is not None and 'API_KEY' not in params:
+    if params is None:
+        params = {}
+    if 'API_KEY' not in params:
         params['API_KEY'] = api_key
 
     # Create the EC2App
@@ -379,7 +396,7 @@ def create_mini_tgi_app(local_port: Optional[int] = None, api_key: Optional[str]
     if local_port is None:
         local_port = 8977
     if api_key is None:
-        api_key = 'random_key'
+        api_key = os.environ.get("EC2_LLM_API_KEY", "random_key")
     # Define paths to scripts
     setup_script = str(Path(__file__).parent / "apps" /
                        "mini_tgi" / "install_mini_tgi.sh")

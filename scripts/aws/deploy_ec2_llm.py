@@ -11,7 +11,7 @@ from services.aws_costs import get_ec2_price
 from session_manager import SessionManager
 from utils.query_utils import generate_short_id
 from utils.logging_utils import get_logger
-from ec2_app import EC2App, PortMapping, create_vllm_app, create_mini_tgi_app
+from ec2_app import EC2App, create_vllm_app, create_mini_tgi_app
 import os
 import sys
 import time
@@ -49,7 +49,7 @@ class EC2Deployer:
         self,
         app: EC2App,
         region_name: str = None,
-        instance_type: str = "g6e.8xlarge",
+        instance_type: str = "g6e.4xlarge",
         stack_name: str = None,
         ami_id: str = "ami-04f4302ff68e424cf",
         deployer_id: str = None,
