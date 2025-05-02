@@ -1,5 +1,7 @@
 import numpy as np
 from typing import List, Dict, Optional
+from scipy.stats import kendalltau
+from sklearn.metrics import cohen_kappa_score
 
 from utils.logging_utils import get_logger
 
@@ -20,6 +22,8 @@ class QPPService:
         """
         self.default_k = default_k
         self.log.info("QPP Service initialized", default_k=default_k)
+
+    # Pre Retrieval QPP methods
     
     def calculate_entropy_qpp(self, scores: List[float]) -> float:
         """
@@ -180,3 +184,76 @@ class QPPService:
         shifted_scores = np.array(scores) - np.max(scores)
         exp_scores = np.exp(shifted_scores)
         return exp_scores / np.sum(exp_scores)
+    
+    # Post Retrieval QPP methods
+    # SMARE
+    def calculate_smare_qpp(self, scores: List[float], k: int = 10) -> float:
+        """
+        Calculate SMARE-based QPP score.
+        
+        Args:
+            scores: List of retrieval scores
+            k: Number of top documents to consider for SMARE calculation
+        
+        Returns:
+            SMARE score
+        """
+        # Use only top k scores
+        top_scores = scores[:k] if len(scores) > k else scores
+        
+        if not top_scores or len(top_scores) < 2:
+            self.log.warning("Insufficient scores provided for SMARE calculation")
+            return 0.0
+        
+        # Calculate mean and standard deviation of the top k scores
+        mean_score = np.mean(top_scores)
+        std_dev = np.std(top_scores)
+        
+        # Calculate SMARE score
+        smare_score = (mean_score - std_dev) / mean_score if mean_score != 0 else 0.0
+        
+        return smare_score
+   # Kendall rank correlation coefficient
+    def calculate_kendall_tau_qpp(self, scores1: List[float], scores2: List[float]) -> float:
+        """
+        Calculate Kendall rank correlation coefficient between two score lists.
+        
+        Args:
+            scores1: First list of retrieval scores
+            scores2: Second list of retrieval scores
+        
+        Returns:
+            Kendall tau score
+        """
+        if len(scores1) != len(scores2):
+            self.log.warning("Score lists must be of the same length for Kendall tau calculation")
+            return 0.0
+        
+        # Calculate Kendall tau using scipy
+        tau, _ = kendalltau(scores1, scores2)
+        return tau
+    
+    # Cohen's kappa
+    def calculate_cohen_kappa_qpp(self, labels1: List[int], labels2: List[int]) -> float:
+        """
+        Calculate Cohen's kappa score between two label lists.
+        
+        Args:
+            labels1: First list of categorical labels
+            labels2: Second list of categorical labels
+        
+        Returns:
+            Cohen's kappa score
+        """
+        if len(labels1) != len(labels2):
+            self.log.warning("Label lists must be of the same length for Cohen's kappa calculation")
+            return 0.0
+        
+        # Calculate Cohen's kappa using sklearn
+        kappa = cohen_kappa_score(labels1, labels2)
+        return kappa
+    
+ 
+
+    
+
