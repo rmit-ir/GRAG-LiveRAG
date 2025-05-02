@@ -15,6 +15,7 @@ Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_syste
 For LiveRAG Challenge format:
 Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input questions.jsonl --live
 """
+from datetime import datetime
 import os
 import sys
 import csv
@@ -607,9 +608,10 @@ def main():
     # Define output filenames
     ds_name = args.input.split('/')[-1].split('.')[0]
     output_prefix = args.output_prefix or args.system.split('.')[-1]
+    timestamp = datetime.now().strftime("%m%d%H%M")  # Format: MMDDHHMM
     
     # Standard format uses TSV and TREC
-    tsv_filename = f"{ds_name}_{output_prefix}.tsv"
+    tsv_filename = f"{ds_name}.run{timestamp}.{output_prefix}.tsv"
     # trec_filename = f"{ds_name}_{output_prefix}.trec"
     
     tsv_output_path = os.path.join(output_dir, tsv_filename)

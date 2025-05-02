@@ -353,3 +353,7 @@ if __name__ == "__main__":
     print("-" * 50)
     print(content)
     print("-" * 50)
+    print("Raw response metadata:")
+    print("-" * 50)
+    print(raw_response)
+    print("-" * 50)

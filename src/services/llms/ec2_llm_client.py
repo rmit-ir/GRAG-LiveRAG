@@ -36,6 +36,7 @@ class EC2LLMClient(GeneralOpenAIClient):
             temperature=temperature,
             max_tokens=max_tokens,
             logger=logger,
+            timeout=60.0,
             llm_name="ec2_llm"
         )
     

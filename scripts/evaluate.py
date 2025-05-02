@@ -8,6 +8,7 @@ This script:
 3. Runs the specified evaluators on each result
 4. Saves the evaluation results to a file
 """
+from datetime import datetime
 import os
 import sys
 import json
@@ -634,8 +635,9 @@ def main():
     # Define output filename based on results file name and evaluator
     results_base_name = os.path.basename(args.results)
     results_name_without_ext = os.path.splitext(results_base_name)[0]
+    timestamp = datetime.now().strftime("%m%d%H%M")  # Format: MMDDHHMM
     base_name = os.path.join(
-        output_dir, f"{results_name_without_ext}.{output_prefix}.eval")
+        output_dir, f"{results_name_without_ext}.eval{timestamp}.{output_prefix}")
 
     try:
         # Load the evaluator class

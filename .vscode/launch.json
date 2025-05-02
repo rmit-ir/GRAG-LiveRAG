@@ -2,6 +2,24 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug LLMEvaluator",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "scripts.evaluate",
+      "justMyCode": true,
+      "args": [
+        "--evaluator",
+        "LLMEvaluator",
+        "--results",
+        "data/rag_results/dmds_j4c3U4ZzwIvxc_BasicRAGSystem.tsv",
+        "--reference",
+        "data/generated_qa_pairs/dmds_j4c3U4ZzwIvxc.n2.tsv"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
       "name": "Debug Context Recall Evaluator",
       "type": "debugpy",
       "request": "launch",
