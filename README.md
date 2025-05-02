@@ -122,6 +122,10 @@ uv run scripts/evaluate.py --evaluator LLMEvaluator --results data/rag_results/d
 With EC2 LLMs (involve starting and stopping EC2 instance), this will take 9min to start the instance:
 
 ```bash
+# Install AWS CLI plugin, used to ssh into the EC2 instance and set up port forwarding
+brew install awscli
+brew install --cask session-manager-plugin
+
 # Launch the LLM, it will be available at localhost
 # --app-name is required, choose either "vllm" or "mini-tgi"
 uv run scripts/aws/deploy_ec2_llm.py --app-name vllm
@@ -132,11 +136,11 @@ uv run scripts/aws/deploy_ec2_llm.py --app-name vllm
 uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --wait; \
 say 'llm is ready'; \
 # Run the RAG system over the dataset
-uv run scripts/run.py --system BasicRAGSystem --input data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num-threads 20 --rag_llm_client general_openai_client; \
+uv run scripts/run.py --system VanillaRAG --input data/generated_qa_pairs/dmds_2_05012333.tsv --num-threads 20 --llm_client ec2_llm; \
 # Stop the EC2 LLM instance
 uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --stop; \
 # Evaluate the results
-uv run scripts/evaluate.py --evaluator LLMEvaluator --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv --num_threads 20; \
+uv run scripts/evaluate.py --evaluator LLMEvaluator --results data/rag_results/dmds_2_05012333_VanillaRAG.tsv --reference data/generated_qa_pairs/dmds_2_05012333.tsv --num_threads 20; \
 say "evaluation finished"
 ```
 
