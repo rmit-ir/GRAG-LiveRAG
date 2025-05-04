@@ -9,11 +9,12 @@ from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
 from systems.qpp_post_rag.qpp_metrics import calculate_sare
+from systems.qpp_post_rag.relevance_assessor import RelevanceAssessor
 
 class QPPPostRAG(RAGSystemInterface):
     log = get_logger("qpp_post_rag")
 
-    def __init__(self, llm_client='ai71', k=10):
+    def __init__(self, llm_client='ai71', k=10, relevance_threshold=0.6):
         model_id = "tiiuae/falcon3-10b-instruct"
         if llm_client == 'ai71':
             self.rag_llm_client = AI71Client(model_id=model_id)
@@ -24,6 +25,8 @@ class QPPPostRAG(RAGSystemInterface):
 
         self.k = k
         self.query_service = QueryService()
+        self.relevance_assessor = RelevanceAssessor(llm_client=llm_client)
+        self.relevance_threshold = relevance_threshold
         self.qgen_system_prompt = "Generate a better search query variant. Focus on key concepts and ways to express the main idea. Only output the query text."
         self.rag_system_prompt = "Answer the question based on the provided documents."
 
@@ -37,6 +40,31 @@ class QPPPostRAG(RAGSystemInterface):
         prompt = f"{context}\n\nQuestion: {question}\n\nGenerate better query:"
         query, _ = self.qgen_llm_client.complete_chat_once(prompt, self.qgen_system_prompt)
         return query.strip()
+        
+    def _filter_context_by_relevance(self, question: str, context: List[str]) -> List[str]:
+        """Filter context based on relevance scores."""
+        if not context:
+            return []
+            
+        # Assess relevance of each context passage
+        relevance_scores = self.relevance_assessor.assess_batch(question, context)
+        
+        # Filter context based on relevance threshold
+        filtered_context = []
+        for text, score in zip(context, relevance_scores):
+            if score >= self.relevance_threshold:
+                filtered_context.append(text)
+                self.log.info(f"Keeping context with relevance score: {score:.2f}")
+            else:
+                self.log.info(f"Filtering out context with low relevance score: {score:.2f}")
+        
+        # If nothing passes the threshold, keep the top scoring passage
+        if not filtered_context and context:
+            best_idx = relevance_scores.index(max(relevance_scores))
+            filtered_context.append(context[best_idx])
+            self.log.info(f"No context passed threshold, keeping top passage with score: {relevance_scores[best_idx]:.2f}")
+            
+        return filtered_context
 
     def process_question(self, question: str, qid: Optional[str] = None) -> RAGResult:
         start_time = time.time()
@@ -67,7 +95,7 @@ class QPPPostRAG(RAGSystemInterface):
             if best_sare < 0.2:
                 break
 
-        # Prepare final context
+        # Prepare context
         seen = set()
         context = []
         doc_ids = []
@@ -76,9 +104,18 @@ class QPPPostRAG(RAGSystemInterface):
                 context.append(hit.metadata.text)
                 doc_ids.append(hit.id)
                 seen.add(hit.metadata.text)
+                
+        # Filter context by relevance
+        filtered_context = self._filter_context_by_relevance(question, context)
+        filtered_doc_ids = []
+        
+        # Rebuild doc_ids to match filtered context
+        for hit in best_hits:
+            if hit.metadata.text in filtered_context and hit.id not in filtered_doc_ids:
+                filtered_doc_ids.append(hit.id)
 
-        # Generate answer
-        prompt = f"Documents:\n\n{chr(10).join(context)}\n\nQuestion: {question}\n\nAnswer:"
+        # Generate answer using only relevant context
+        prompt = f"Documents:\n\n{chr(10).join(filtered_context)}\n\nQuestion: {question}\n\nAnswer:"
         answer, _ = self.rag_llm_client.complete_chat_once(prompt, self.rag_system_prompt)
 
         result = RAGResult(
@@ -94,7 +131,11 @@ class QPPPostRAG(RAGSystemInterface):
             metadata={
                 "best_query": current_query,
                 "best_sare": best_sare,
-                "queries_tried": len(tried_queries)
+                "queries_tried": len(tried_queries),
+                "original_context_count": len(context),
+                "filtered_context_count": len(filtered_context),
+                "relevance_threshold": self.relevance_threshold,
+                "filtered_doc_ids": filtered_doc_ids
             }
         )
 
@@ -103,6 +144,8 @@ class QPPPostRAG(RAGSystemInterface):
                      processing_time_ms=result.total_time_ms,
                      best_sare=best_sare,
                      queries_tried=len(tried_queries),
+                     original_context=len(context),
+                     filtered_context=len(filtered_context),
                      qid=qid)
 
         return result
@@ -120,3 +163,5 @@ if __name__ == "__main__":
     print("Document IDs:", result.doc_ids)
     print("Total Time (s):", result.total_time_ms)
     print("Generated Queries:", result.generated_queries)
+    print("Original Context Count:", result.metadata["original_context_count"])
+    print("Filtered Context Count:", result.metadata["filtered_context_count"])
