@@ -2,11 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudFormation template to deploy Hugging Face LLM on EC2 using vLLM with SSM access'
 
 Parameters:
-  ModelId:
-    Description: Hugging Face model ID to deploy
-    Type: String
-    Default: tiiuae/falcon3-10b-instruct
-  
   InstanceType:
     Description: EC2 instance type
     Type: String
@@ -222,7 +217,3 @@ Outputs:
   InstanceId:
     Description: ID of the EC2 instance
     Value: !Ref EC2Instance
-  
-  ModelId:
-    Description: Deployed model ID
-    Value: !Ref ModelId
