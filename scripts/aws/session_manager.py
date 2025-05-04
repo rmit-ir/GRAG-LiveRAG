@@ -518,16 +518,19 @@ class SessionManager:
         self,
         instance_id: str,
         remote_port: int,
-        local_port: int = None
+        local_port: int = None,
+        health_check_fn: callable = None,
     ) -> Dict[str, Any]:
         """
         Set up port forwarding to the EC2 instance using direct AWS SSM command.
         Logs are redirected to a file in /tmp/ instead of being displayed in real-time.
+        If health_check_fn is provided, it will monitor the port forwarding and restart it if needed.
         
         Args:
             instance_id (str): ID of the EC2 instance
             remote_port (int): Port on the remote instance
             local_port (int, optional): Local port to forward to. If None, uses the same as remote_port
+            health_check_fn (callable, optional): Function that returns True if port forwarding is healthy, False otherwise
             
         Returns:
             Dict containing the process information and log file path
@@ -587,11 +590,69 @@ class SessionManager:
             logger.info(f"Port forwarding established: localhost:{local_port} -> {instance_id}:{remote_port}")
             logger.info(f"Port forwarding logs are being written to: {log_file_path}")
             
-            return {
+            result = {
                 'process': process,
                 'log_file': log_file,
                 'log_file_path': log_file_path
             }
+            
+            # Set up health check monitoring if a health check function is provided
+            if health_check_fn:
+                def monitor_port_forwarding():
+                    logger.info(f"Starting health check monitoring for port forwarding: localhost:{local_port} -> {instance_id}:{remote_port}")
+                    while True:
+                        # Check if the process is still running
+                        if process.poll() is not None:
+                            logger.warning(f"Port forwarding process terminated unexpectedly. Restarting...")
+                            break
+                        
+                        # Check health using the provided function
+                        try:
+                            if not health_check_fn():
+                                logger.warning(f"Health check failed for port forwarding: localhost:{local_port} -> {instance_id}:{remote_port}. Restarting...")
+                                break
+                        except Exception as e:
+                            logger.error(f"Error in health check function: {str(e)}")
+                        
+                        # Wait before next check
+                        time.sleep(5)
+                    
+                    # If we're here, either the process died or health check failed
+                    # Try to terminate the process if it's still running
+                    try:
+                        if process.poll() is None:
+                            process.terminate()
+                            process.wait(timeout=5)
+                    except Exception as e:
+                        logger.error(f"Error terminating port forwarding process: {str(e)}")
+                    
+                    # Close the log file
+                    try:
+                        if not log_file.closed:
+                            log_file.close()
+                    except Exception as e:
+                        logger.error(f"Error closing log file: {str(e)}")
+                    
+                    # Restart port forwarding
+                    try:
+                        logger.info(f"Restarting port forwarding: localhost:{local_port} -> {instance_id}:{remote_port}")
+                        new_result = self.setup_port_forwarding(
+                            instance_id=instance_id,
+                            remote_port=remote_port,
+                            local_port=local_port,
+                            health_check_fn=health_check_fn
+                        )
+                        # Update the original result dictionary with new values
+                        result.update(new_result)
+                    except Exception as e:
+                        logger.error(f"Failed to restart port forwarding: {str(e)}")
+                
+                # Start monitoring in a separate thread
+                monitor_thread = threading.Thread(target=monitor_port_forwarding, daemon=True)
+                monitor_thread.start()
+                result['monitor_thread'] = monitor_thread
+            
+            return result
         except Exception as e:
             logger.error(f"Error setting up port forwarding: {str(e)}")
             raise

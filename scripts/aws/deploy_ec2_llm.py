@@ -505,16 +505,29 @@ class EC2Deployer:
             logger.info(f"Setting up {self.app.name} service...")
 
             # Prepare environment variables
-            env_vars = f"PORT={self.app.remote_port} API_KEY=\"{self.api_key}\""
+            env_vars_dict = dict()
+            if self.app.remote_port:
+                env_vars_dict["PORT"] = self.app.remote_port
+            if self.api_key:
+                env_vars_dict["API_KEY"] = self.api_key
+                
 
             # Add program file path if provided
             if self.app.program_file:
-                env_vars += f" PROGRAM_FILE=\"{remote_program_path}\""
+                env_vars_dict["PROGRAM_FILE"] = self.app.program_file
+            
+            # loop over self.app.params and add them to env_vars_dict, if duplicate, don't add and warn
+            for key, value in self.app.params.items():
+                if key in env_vars_dict:
+                    logger.warning(
+                        f"Skipping duplicated env var. Existing ({key}): {env_vars_dict[key]}, New: {value}")
+                else:
+                    env_vars_dict[key] = value
 
             # Add additional parameters from app.params
-            if self.app.params:
-                for key, value in self.app.params.items():
-                    env_vars += f" {key}=\"{value}\""
+            env_vars = " ".join([
+                f"{key}=\"{value}\"" for key, value in env_vars_dict.items()
+            ])
 
             # Prepare final command arguments with environment variables
             command_args = [
@@ -561,11 +574,20 @@ class EC2Deployer:
                 logger.info(
                     f"Setting up port forwarding for {description}: localhost:{local_port} -> {remote_port}")
 
-                # Use the SessionManager's setup_port_forwarding method
+                # Create a health check function for this port mapping
+                health_check_fn = None
+                if isinstance(self.app, EC2App):
+                    # Create a closure that captures the app instance and uses its wait_for_ready method
+                    # with a short timeout and disabled verbose logging
+                    def health_check_fn():
+                        return self.app.wait_for_ready(max_wait_time=10, check_interval=1, verbose=False)
+
+                # Use the SessionManager's setup_port_forwarding method with health check
                 port_forwarding = self.session_manager.setup_port_forwarding(
                     instance_id=self.instance_id,
                     remote_port=remote_port,
-                    local_port=local_port
+                    local_port=local_port,
+                    health_check_fn=health_check_fn
                 )
 
                 # Store in the dictionary with the description as the key
@@ -1231,7 +1253,7 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
                         help="Hugging Face model ID to deploy (for vLLM)")
     parser.add_argument("--region", type=str, default=None,
                         help="AWS region name")
-    parser.add_argument("--instance-type", type=str, default="g6e.8xlarge",
+    parser.add_argument("--instance-type", type=str, default="g6e.4xlarge",
                         help="EC2 instance type, see https://aws.amazon.com/ec2/instance-types/")
     parser.add_argument("--stack-name", type=str, default=None,
                         help="CloudFormation stack name")
