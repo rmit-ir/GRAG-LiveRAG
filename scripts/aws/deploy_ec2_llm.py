@@ -532,7 +532,8 @@ class EC2Deployer:
             # Prepare final command arguments with environment variables
             command_args = [
                 f"chmod +x {remote_launch_path}",
-                f"{env_vars} sudo {remote_launch_path}"
+                f"export {env_vars}",
+                f"sudo {remote_launch_path}"
             ]
 
             result = self.session_manager.execute_command(
