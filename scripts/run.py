@@ -16,6 +16,7 @@ For LiveRAG Challenge format:
 Example: uv run python scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem --input questions.jsonl --live
 """
 from datetime import datetime
+import json
 import os
 import sys
 import csv
@@ -247,32 +248,30 @@ def save_results(results: List[RAGResult], output_file: str, format: str = 'tsv'
             # Convert RAGResult to dict
             result_dict = result.to_dict()
             
-            # # Use existing qid or generate one if not present
-            # if result_dict['qid'] is None:
-            #     result_dict['qid'] = str(i + 1)
-            
-            # # Convert lists and dictionaries to string representation
-            # for field in ['context', 'doc_ids', 'generated_queries', 'rewritten_docs', 'metadata']:
-            #     if result_dict.get(field) is not None:
-            #         result_dict[field] = json.dumps(result_dict[field])
-            
+            # Convert lists and dictionaries to string representation
+            # otherwise trec_tools will have problem reading doc_ids
+            for field, value in result_dict.items():
+                if isinstance(value, (list, dict)):
+                    result_dict[field] = json.dumps(value)
+                    
             result_dicts.append(result_dict)
         
         # Create a DataFrame from the list of dictionaries
         df = pd.DataFrame(result_dicts)
+        df.set_index('qid', inplace=True)
         
         # Save the DataFrame in the specified format
         if format.lower() == 'tsv':
-            df.to_csv(output_file, sep='\t', index=False)
+            df.to_csv(output_file, sep='\t', index=True)
             logger.info("Successfully saved results to TSV", file=output_file, result_count=len(results))
         elif format.lower() == 'csv':
-            df.to_csv(output_file, index=False)
+            df.to_csv(output_file, index=True)
             logger.info("Successfully saved results to CSV", file=output_file, result_count=len(results))
         elif format.lower() == 'jsonl':
             df.to_json(output_file, orient='records', lines=True)
             logger.info("Successfully saved results to JSONL", file=output_file, result_count=len(results))
         elif format.lower() == 'xlsx':
-            df.to_excel(output_file, index=False)
+            df.to_excel(output_file, index=True)
             logger.info("Successfully saved results to Excel", file=output_file, result_count=len(results))
         else:
             raise ValueError(f"Unsupported format: {format}. Supported formats are 'tsv', 'csv', 'jsonl', and 'xlsx'.")
