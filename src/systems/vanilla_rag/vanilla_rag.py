@@ -1,8 +1,10 @@
 """
 uv run scripts/run.py --system systems.basic_rag_2.rag_2.BasicRAG2 --help
 """
+import re
 import time
 from typing import List
+from utils.logging_utils import get_logger
 from evaluators.evaluator_interface import test_evaluator
 from evaluators.llm_evaluator.llm_evaluator import LLMEvaluator
 from services.ds_data_morgana import QAPair
@@ -11,10 +13,11 @@ from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
+from systems.vanilla_rag.prompts import QUERY_GENERATION_SYSTEM_PROMPT, QUERY_GENERATION_USER_PROMPT
 
 
 class VanillaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', module_query_gen='with_number'):
+    def __init__(self, llm_client='ai71', query_len_words=5, num_queries=5, module_query_gen='with_number'):
         """
         Initialize the BasicRAG2.
 
@@ -37,20 +40,56 @@ class VanillaRAG(RAGSystemInterface):
                 model_id="tiiuae/falcon3-10b-instruct",
             )
 
+        self.logger = get_logger('vanilla_rag')
+
         # if module_query_gen == 'with_num':
 
         # Store system prompts
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
-        self.qgen_system_prompt = "Generate a list of 5 search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
+        self.query_len_words = query_len_words
+        self.num_queries = num_queries
+        self.qgen_system_prompt = QUERY_GENERATION_SYSTEM_PROMPT.format(
+            num_queries=self.num_queries, query_len_words=self.query_len_words, list_placeholders="\n".join([f"{i}." for i in range(1, 6)]))
+        # self.qgen_system_prompt = "Generate a list of 5 search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
         self.query_service = QueryService()
 
     def _create_query_variants(self, question: str) -> List[str]:
-        queries, _ = self.qgen_llm_client.complete_chat_once(
-            question, self.qgen_system_prompt)
-        queries = queries.split("\n")
-        queries = [query.strip() for query in queries]
-        # return queries + [question]
-        return queries
+        user_prompt = QUERY_GENERATION_USER_PROMPT.format(question=question)
+        resp_text, _ = self.qgen_llm_client.complete_chat_once(
+            user_prompt, self.qgen_system_prompt)
+        self.logger.debug(f"create query variants", question=question,
+                          system_prompt=self.qgen_system_prompt, user_prompt=user_prompt, resp_text=resp_text)
+
+        # Extract content between <list> tags
+        list_match = re.search(r'<list>(.*?)</list>', resp_text, re.DOTALL)
+        if list_match:
+            list_content = list_match.group(1).strip()
+            
+            # Split by lines and process each line
+            queries = []
+            for line in list_content.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Simple regex to match "##. query text"
+                match = re.match(r'^\d+\.\s*(.*)', line)
+                if match:
+                    query = match.group(1).strip()
+                    if query:
+                        queries.append(query)
+            
+            if queries:
+                return queries
+
+        self.logger.warning(
+            "No valid query variants found in the response.",
+            question=question,
+            system_prompt=self.qgen_system_prompt,
+            user_prompt=user_prompt,
+            resp_text=resp_text
+        )
+        return [question]
 
     def process_question(self, question: str, qid: str = None) -> RAGResult:
         """
