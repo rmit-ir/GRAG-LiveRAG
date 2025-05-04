@@ -2,6 +2,8 @@
 
 Check your deployed CloudFormation stacks at: <https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks>
 
+Check the prices at <https://calculator.aws/#/createCalculator/ec2-enhancement>.
+
 ## Deploy EC2 LLM
 
 The `deploy_ec2_llm.py` script allows you to deploy a HuggingFace compatible model on an EC2 instance using CloudFormation. It now supports two application types:
