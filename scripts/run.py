@@ -23,9 +23,9 @@ import time
 import argparse
 import importlib
 import concurrent.futures
-from typing import List, Dict, Any, Type, Optional, Tuple, Union, TypedDict
-import json
+from typing import List, Dict, Any, Type, Optional, Tuple, TypedDict
 import jsonlines
+import pandas as pd
 from dotenv import load_dotenv
 
 from utils.logging_utils import get_logger
@@ -231,50 +231,54 @@ def load_live_rag_questions(input_file: str) -> List[QuestionData]:
         raise
 
 
-def save_results_to_tsv(results: List[RAGResult], output_file: str) -> None:
+def save_results(results: List[RAGResult], output_file: str, format: str = 'tsv') -> None:
     """
-    Save RAG results to a TSV file.
+    Save RAG results to a file in the specified format.
     
     Args:
         results: List of RAGResult objects
-        output_file: Path to the output TSV file
+        output_file: Path to the output file
+        format: Format to save the file in ('tsv', 'csv', 'jsonl', 'xlsx')
     """
     try:
-        with open(output_file, 'w', encoding='utf-8', newline='') as f:
-            # Define the fieldnames for the TSV
-            fieldnames = [
-                'qid', 'question', 'answer', 'context', 'doc_ids',
-                'question_words_count', 'answer_words_count', 'total_time_ms',
-                'timestamp', 'generated_queries', 'rewritten_docs', 'system_name',
-                'metadata'
-            ]
+        # Convert results to a list of dictionaries
+        result_dicts = []
+        for i, result in enumerate(results):
+            # Convert RAGResult to dict
+            result_dict = result.to_dict()
             
-            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
-            writer.writeheader()
+            # # Use existing qid or generate one if not present
+            # if result_dict['qid'] is None:
+            #     result_dict['qid'] = str(i + 1)
             
-            for i, result in enumerate(results):
-                # Convert RAGResult to dict and write to TSV
-                result_dict = result.to_dict()
-                
-                # Use existing qid or generate one if not present
-                if result_dict['qid'] is None:
-                    result_dict['qid'] = str(i + 1)
-                
-                # Convert lists and dictionaries to string representation
-                for field in ['context', 'doc_ids', 'generated_queries', 'rewritten_docs', 'metadata']:
-                    if result_dict.get(field) is not None:
-                        result_dict[field] = json.dumps(result_dict[field])
-                
-                writer.writerow(result_dict)
+            # # Convert lists and dictionaries to string representation
+            # for field in ['context', 'doc_ids', 'generated_queries', 'rewritten_docs', 'metadata']:
+            #     if result_dict.get(field) is not None:
+            #         result_dict[field] = json.dumps(result_dict[field])
+            
+            result_dicts.append(result_dict)
         
-        logger.info("Successfully saved results to TSV", 
-                   file=output_file, 
-                   result_count=len(results))
+        # Create a DataFrame from the list of dictionaries
+        df = pd.DataFrame(result_dicts)
+        
+        # Save the DataFrame in the specified format
+        if format.lower() == 'tsv':
+            df.to_csv(output_file, sep='\t', index=False)
+            logger.info("Successfully saved results to TSV", file=output_file, result_count=len(results))
+        elif format.lower() == 'csv':
+            df.to_csv(output_file, index=False)
+            logger.info("Successfully saved results to CSV", file=output_file, result_count=len(results))
+        elif format.lower() == 'jsonl':
+            df.to_json(output_file, orient='records', lines=True)
+            logger.info("Successfully saved results to JSONL", file=output_file, result_count=len(results))
+        elif format.lower() == 'xlsx':
+            df.to_excel(output_file, index=False)
+            logger.info("Successfully saved results to Excel", file=output_file, result_count=len(results))
+        else:
+            raise ValueError(f"Unsupported format: {format}. Supported formats are 'tsv', 'csv', 'jsonl', and 'xlsx'.")
     
     except Exception as e:
-        logger.error("Failed to save results to TSV", 
-                    file=output_file, 
-                    error=str(e))
+        logger.error(f"Failed to save results to {format.lower()}", file=output_file, error=str(e))
         raise
 
 
@@ -612,9 +616,11 @@ def main():
     
     # Standard format uses TSV and TREC
     tsv_filename = f"{ds_name}.run{timestamp}.{output_prefix}.tsv"
+    excel_filename = f"{ds_name}.run{timestamp}.{output_prefix}.xlsx"
     # trec_filename = f"{ds_name}_{output_prefix}.trec"
     
     tsv_output_path = os.path.join(output_dir, tsv_filename)
+    excel_output_path = os.path.join(output_dir, excel_filename)
     # trec_output_path = os.path.join(output_dir, trec_filename)
     if args.live:
         # LiveRAG Challenge format uses JSONL
@@ -643,7 +649,8 @@ def main():
         total_time_ms = sum(result.total_time_ms for result in results)
         
         # Save in standard format (TSV and TREC)
-        save_results_to_tsv(results, tsv_output_path)
+        save_results(results, tsv_output_path, format='tsv')
+        save_results(results, excel_output_path, format='xlsx')
         # create_trec_run_file(results, trec_output_path, args.system)
         
         logger.info("Successfully completed the run", 

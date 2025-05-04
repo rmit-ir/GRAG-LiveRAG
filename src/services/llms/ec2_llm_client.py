@@ -25,9 +25,6 @@ class EC2LLMClient(GeneralOpenAIClient):
         if not self.api_key:
             raise ValueError("EC2 LLM API key is required")
         
-        # Check model health before initializing
-        self._check_model_health(self.api_base, self.api_key, logger)
-            
         # Initialize the parent class (GeneralOpenAIClient)
         super().__init__(
             api_key=self.api_key,
