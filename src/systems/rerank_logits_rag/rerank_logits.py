@@ -18,7 +18,7 @@ from systems.rag_system_interface import RAGSystemInterface
 class ReRankLogitsRAG(RAGSystemInterface):
     log = get_logger("rerank_logits_rag")
 
-    def __init__(self, llm_client='ai71', use_rerank=True):
+    def __init__(self, llm_client='ai71', use_rerank=True, k=30):
         """
         Initialize the BasicRAG2.
 
@@ -43,6 +43,7 @@ class ReRankLogitsRAG(RAGSystemInterface):
 
         self.logits_llm = MiniTGIClient()
         self.use_rerank = use_rerank
+        self.k = k
 
         # Store system prompts
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
@@ -57,7 +58,7 @@ class ReRankLogitsRAG(RAGSystemInterface):
         # return queries + [question]
         return queries
 
-    def rerank_by_logits(self, documents: List[SearchHit], question: str, k=30) -> List[SearchHit]:
+    def rerank_by_logits(self, documents: List[SearchHit], question: str, k: int) -> List[SearchHit]:
         if not self.use_rerank:
             return documents[:k]
 
@@ -102,7 +103,7 @@ class ReRankLogitsRAG(RAGSystemInterface):
                     doc_ids.add(doc.id)
 
         # Rerank the documents using logits
-        documents = self.rerank_by_logits(documents, question)
+        documents = self.rerank_by_logits(documents, question, self.k)
 
         context = "Documents: \n\n"
         context += "\n\n".join([doc.metadata.text for doc in documents])

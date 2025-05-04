@@ -2,6 +2,8 @@
 
 Check your deployed CloudFormation stacks at: <https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks>
 
+Check the prices at <https://calculator.aws/#/createCalculator/ec2-enhancement>.
+
 ## Deploy EC2 LLM
 
 The `deploy_ec2_llm.py` script allows you to deploy a HuggingFace compatible model on an EC2 instance using CloudFormation. It now supports two application types:
@@ -64,8 +66,38 @@ uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/falcon3-10b-instruct
 # Deploy with specific app name and parameters
 uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi --param MAX_BATCH_SIZE=64
 
+# Connect to an existing EC2 instance (skips deployment and setup)
+uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --connect i-0123456789abcdef0
+
 # Stop and destroy all resources
 uv run scripts/aws/deploy_ec2_llm.py --stop
+```
+
+### Connecting to Existing Instances
+
+The `--connect` parameter allows you to connect to an already running EC2 instance without deploying a new one or running the setup scripts. This is useful when:
+
+- You want to reconnect to an instance after your tokens are expired and you closed that window
+- You need to share access to a running model with team members
+
+Example:
+
+```bash
+# Connect to an existing instance with ID i-0123456789abcdef0
+uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --connect i-0bba58c18bfaea3de
+```
+
+When using `--connect`:
+
+1. The script will skip the CloudFormation deployment
+2. It will skip the setup and launch script execution
+3. It will directly set up port forwarding, log tailing, and other monitoring
+4. When you exit (Ctrl+C), it will NOT terminate the EC2 instance, you will need to do it manually
+
+To find the instance ID of a running EC2 instance:
+
+```bash
+aws ec2 describe-instances --region us-west-2 --query "Reservations[].Instances[].{ID:InstanceId,Name:Tags[?Key=='Name']|[0].Value,State:State.Name,Type:InstanceType}" --output table
 ```
 
 ### Application Types

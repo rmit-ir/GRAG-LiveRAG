@@ -227,8 +227,6 @@ def test_vllm_request(app: EC2App) -> bool:
         # Add API key if provided
         if app.api_key:
             headers["Authorization"] = f"Bearer {app.api_key}"
-        print(f"test_vllm_request API Key: {app.api_key}")
-        print(f"test headers: {headers}")
 
         # Prepare a friendly welcome message using chat format
         data = {
@@ -237,7 +235,7 @@ def test_vllm_request(app: EC2App) -> bool:
                 {"role": "system", "content": f"You are a helpful AI assistant deployed on AWS EC2 using {app.name}."},
                 {"role": "user", "content": "Say hello and introduce yourself."}
             ],
-            "max_tokens": 100,
+            "max_tokens": 500,
             "temperature": 0.7
         }
 

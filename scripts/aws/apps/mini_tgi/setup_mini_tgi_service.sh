@@ -5,7 +5,7 @@ set -e
 # Read all parameters from environment variables with fallbacks
 PORT=${PORT:-8000}
 API_KEY=${API_KEY:-""}
-PROGRAM_FILE=${PROGRAM_FILE:-"/tmp/llm_server.py"}
+UPLOADED_PROGRAM_FILE=${UPLOADED_PROGRAM_FILE:-"/tmp/llm_server.py"}
 MODEL_ID=${MODEL_ID:-"tiiuae/falcon3-10b-instruct"}
 
 # Additional parameters with defaults
@@ -14,14 +14,14 @@ MAX_BATCH_SIZE=${MAX_BATCH_SIZE:-64}
 echo "Setting up mini-TGI service with the following parameters:"
 echo "  PORT: $PORT"
 echo "  MODEL_ID: $MODEL_ID"
-echo "  PROGRAM_FILE: $PROGRAM_FILE"
+echo "  UPLOADED_PROGRAM_FILE: $UPLOADED_PROGRAM_FILE"
 echo "  MAX_BATCH_SIZE: $MAX_BATCH_SIZE"
 
 # Create directory for mini-TGI service
 sudo mkdir -p /opt/mini-tgi
 
 # Copy the program file
-sudo cp $PROGRAM_FILE /opt/mini-tgi/llm_server.py
+sudo cp $UPLOADED_PROGRAM_FILE /opt/mini-tgi/llm_server.py
 sudo chmod +x /opt/mini-tgi/llm_server.py
 
 # Create a script to run mini-TGI

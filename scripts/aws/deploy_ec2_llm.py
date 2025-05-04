@@ -53,7 +53,6 @@ class EC2Deployer:
         stack_name: str = None,
         ami_id: str = "ami-04f4302ff68e424cf",
         deployer_id: str = None,
-        api_key: str = None,
         print_info: bool = True,
     ):
         """
@@ -66,7 +65,6 @@ class EC2Deployer:
             stack_name: CloudFormation stack name. If None, generates one
             ami_id: AMI ID to use for the EC2 instance
             deployer_id: Custom ID for this deployer. If None, generates one
-            api_key: API key for the application
             print_info: Whether to print stack information
         """
         # Initialize timing tracking
@@ -101,10 +99,6 @@ class EC2Deployer:
 
         # Store other parameters
         self.ami_id = ami_id
-
-        # Use API_KEY from environment or parameter
-        self.api_key = api_key or os.environ.get(
-            f"{app.name.upper()}_API_KEY", "")
 
         # Track deployed resources
         self.instance_id = None
@@ -311,21 +305,11 @@ class EC2Deployer:
 
             # Define parameters
             parameters = [
-                {
-                    'ParameterKey': 'ModelId',
-                    'ParameterValue': self.app.name  # Using app name as ModelId for compatibility
-                },
-                {
-                    'ParameterKey': 'InstanceType',
-                    'ParameterValue': self.instance_type
-                },
-                {
-                    'ParameterKey': 'AmiId',
-                    'ParameterValue': self.ami_id
-                }
+                {'ParameterKey': 'InstanceType', 'ParameterValue': self.instance_type},
+                {'ParameterKey': 'AmiId', 'ParameterValue': self.ami_id}
             ]
 
-            response = self.cf_client.create_stack(
+            self.cf_client.create_stack(
                 StackName=self.stack_name,
                 TemplateBody=template_body,
                 Parameters=parameters,
@@ -352,12 +336,12 @@ class EC2Deployer:
 
             logger.info(f"Stack creation complete: {self.stack_name}")
             logger.info(f"Instance ID: {self.instance_id}")
-            logger.info(f"API Key: {self.api_key}")
+            logger.info(f"API Key: {self.app.api_key}")
 
             return {
                 'stack_name': self.stack_name,
                 'instance_id': self.instance_id,
-                'api_key': self.api_key,
+                'api_key': self.app.api_key,
                 'app_name': self.app.name
             }
 
@@ -505,11 +489,9 @@ class EC2Deployer:
             logger.info(f"Setting up {self.app.name} service...")
 
             # Prepare environment variables
-            env_vars_dict = dict()
+            env_vars_dict = {'UPLOADED_PROGRAM_FILE': remote_launch_path}
             if self.app.remote_port:
                 env_vars_dict["PORT"] = self.app.remote_port
-            if self.api_key:
-                env_vars_dict["API_KEY"] = self.api_key
                 
 
             # Add program file path if provided
@@ -1114,7 +1096,8 @@ class EC2Deployer:
                     f"If cleanup failed due to session issues, please manually delete the stack '{self.stack_name}'")
                 logger.error(
                     f"Visit: https://{self.region_name}.console.aws.amazon.com/cloudformation/home?region={self.region_name}#/stacks")
-
+        else:
+            logger.info(f"IMPORTANT: Please manually delete the stack at: https://{self.region_name}.console.aws.amazon.com/cloudformation/home?region={self.region_name}#/stacks")
 
 # Global variable to store the deployer instance
 deployer = None
@@ -1429,6 +1412,8 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
                         help="Additional parameters to pass to the application. Can be specified multiple times. Use --param-help for details.")
     parser.add_argument("--param-help", action="store_true",
                         help="Show detailed help for available parameters for each app type")
+    parser.add_argument("--connect", type=str, default=None,
+                        help="Connect to an existing EC2 instance with the specified instance ID, skipping deployment and setup steps")
 
     args = parser.parse_args()
 
@@ -1506,24 +1491,46 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
         # Register the socket to listen for kill-stack commands
         deployer.register_socket()
         try:
-            # Deploy the stack
-            deployment = deployer.deploy()
+            # Check if we're connecting to an existing instance
+            if args.connect:
+                logger.info(f"Connecting to existing instance: {args.connect}")
+                # Set the instance ID directly
+                deployer.instance_id = args.connect
+                
+                # Record the start time for cost calculation
+                deployer.start_time = datetime.datetime.now()
+                
+                # Wait for the instance to be ready for SSM connections
+                if not deployer.wait_for_instance_ssm_ready():
+                    logger.error(
+                        "Instance not ready for SSM connections. Exiting.")
+                    raise Exception("Instance not ready for SSM connections")
 
-            # Wait for the instance to be ready for SSM connections
-            if not deployer.wait_for_instance_ssm_ready():
-                logger.error(
-                    "Instance not ready for SSM connections. Exiting.")
-                raise Exception("Instance not ready for SSM connections")
+                # Connect to the instance
+                if not deployer.connect_to_instance():
+                    logger.error("Failed to connect to instance. Exiting.")
+                    raise Exception("Failed to connect to instance")
+                
+                logger.info(f"Successfully connected to existing instance: {args.connect}")
+            else:
+                # Deploy a new stack
+                deployment = deployer.deploy()
 
-            # Connect to the instance
-            if not deployer.connect_to_instance():
-                logger.error("Failed to connect to instance. Exiting.")
-                raise Exception("Failed to connect to instance")
+                # Wait for the instance to be ready for SSM connections
+                if not deployer.wait_for_instance_ssm_ready():
+                    logger.error(
+                        "Instance not ready for SSM connections. Exiting.")
+                    raise Exception("Instance not ready for SSM connections")
 
-            # Install and run app service
-            if not deployer.run_app_service():
-                logger.error(f"Failed to run {app.name} service. Exiting.")
-                raise Exception(f"Failed to run {app.name} service")
+                # Connect to the instance
+                if not deployer.connect_to_instance():
+                    logger.error("Failed to connect to instance. Exiting.")
+                    raise Exception("Failed to connect to instance")
+
+                # Install and run app service
+                if not deployer.run_app_service():
+                    logger.error(f"Failed to run {app.name} service. Exiting.")
+                    raise Exception(f"Failed to run {app.name} service")
 
             # Start log tailing in a separate thread
             log_thread = deployer.tail_service_logs(in_thread=True)
