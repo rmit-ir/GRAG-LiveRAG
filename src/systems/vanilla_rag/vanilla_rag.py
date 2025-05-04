@@ -1,5 +1,5 @@
 """
-uv run scripts/run.py --system systems.basic_rag_2.rag_2.BasicRAG2 --help
+uv run scripts/run.py --system systems.basic_rag_2.rag_2.VanillaRAG --help
 """
 import re
 import time
@@ -19,7 +19,7 @@ from systems.vanilla_rag.prompts import QUERY_GENERATION_SYSTEM_PROMPT, QUERY_GE
 class VanillaRAG(RAGSystemInterface):
     def __init__(self, llm_client='ai71', query_len_words=5, num_queries=5, module_query_gen='with_number'):
         """
-        Initialize the BasicRAG2.
+        Initialize the VanillaRAG.
 
         Args:
             llm_client: Client for the LLM. Options are 'ai71' or 'ec2_llm', default is 'ai71'.
@@ -126,12 +126,12 @@ class VanillaRAG(RAGSystemInterface):
             doc_ids=list(doc_ids),
             generated_queries=queries,
             total_time_ms=(time.time() - start_time) * 1000,
-            system_name="BasicRAG2",
+            system_name="VanillaRAG",
         )
 
 
 if __name__ == "__main__":
-    # Test the BasicRAG2 system
+    # Test the VanillaRAG system
     rag_system = VanillaRAG()
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
