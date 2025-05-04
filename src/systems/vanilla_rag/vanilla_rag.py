@@ -60,8 +60,12 @@ class VanillaRAG(RAGSystemInterface):
         self.logger.debug(f"create query variants", question=question,
                           system_prompt=self.qgen_system_prompt, user_prompt=user_prompt, resp_text=resp_text)
 
-        # Extract content between <list> tags
+        # Extract content between <list> tags, making the closing tag optional
         list_match = re.search(r'<list>(.*?)</list>', resp_text, re.DOTALL)
+        if not list_match:
+            # sometimes the </list> tag is missing, so we try to match only the opening tag
+            list_match = re.search(r'<list>(.*)', resp_text, re.DOTALL)
+
         if list_match:
             list_content = list_match.group(1).strip()
             
