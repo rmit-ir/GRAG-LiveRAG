@@ -53,7 +53,6 @@ class EC2Deployer:
         stack_name: str = None,
         ami_id: str = "ami-04f4302ff68e424cf",
         deployer_id: str = None,
-        api_key: str = None,
         print_info: bool = True,
     ):
         """
@@ -66,7 +65,6 @@ class EC2Deployer:
             stack_name: CloudFormation stack name. If None, generates one
             ami_id: AMI ID to use for the EC2 instance
             deployer_id: Custom ID for this deployer. If None, generates one
-            api_key: API key for the application
             print_info: Whether to print stack information
         """
         # Initialize timing tracking
@@ -494,8 +492,6 @@ class EC2Deployer:
             env_vars_dict = dict()
             if self.app.remote_port:
                 env_vars_dict["PORT"] = self.app.remote_port
-            if self.api_key:
-                env_vars_dict["API_KEY"] = self.api_key
                 
 
             # Add program file path if provided

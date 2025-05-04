@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'CloudFormation template to deploy Hugging Face LLM on EC2 using vLLM with SSM access'
+Description: 'CloudFormation template to deploy LLMs on EC2 with SSM access'
 
 Parameters:
   InstanceType:
