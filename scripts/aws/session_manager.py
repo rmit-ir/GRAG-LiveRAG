@@ -327,9 +327,12 @@ class SessionManager:
                 )
                 
                 status = result['Status']
-                
                 if status in ['Success', 'Failed', 'Cancelled', 'TimedOut']:
                     logger.info(f"Command execution completed with status: {status}")
+                    if result['StandardOutputContent']:
+                        print("Output:\n", result['StandardOutputContent'])
+                    if result['StandardErrorContent']:
+                        print("Error:\n", result['StandardErrorContent'])
                     return result
         
         except ClientError as e:
@@ -339,55 +342,56 @@ class SessionManager:
             logger.error(f"Error executing command: {str(e)}")
             raise
 
-    def execute_script(
-        self,
-        instance_id: str,
-        script_content: str,
-        working_directory: str = None,
-        execution_timeout: int = 3600,
-        save_output_path: str = None
-    ) -> Dict[str, Any]:
-        """
-        Execute a script on an EC2 instance.
+    # def execute_script(
+    #     self,
+    #     instance_id: str,
+    #     script_content: str,
+    #     working_directory: str = None,
+    #     execution_timeout: int = 3600,
+    #     save_output_path: str = None
+    # ) -> Dict[str, Any]:
+    #     """
+    #     Execute a script on an EC2 instance.
         
-        Args:
-            instance_id (str): ID of the EC2 instance
-            script_content (str): Content of the script to execute
-            working_directory (str, optional): Working directory for script execution
-            execution_timeout (int, optional): Timeout in seconds
-            save_output_path (str, optional): Path to save command output locally
+    #     Args:
+    #         instance_id (str): ID of the EC2 instance
+    #         script_content (str): Content of the script to execute
+    #         working_directory (str, optional): Working directory for script execution
+    #         execution_timeout (int, optional): Timeout in seconds
+    #         save_output_path (str, optional): Path to save command output locally
             
-        Returns:
-            Dict[str, Any]: Script execution results
-        """
-        try:
-            # Execute the script
-            result = self.execute_command(
-                instance_id=instance_id,
-                commands=[script_content],
-                working_directory=working_directory,
-                execution_timeout=execution_timeout
-            )
+    #     Returns:
+    #         Dict[str, Any]: Script execution results
+    #     """
+    #     try:
+    #         # Execute the script
+    #         result = self.execute_command(
+    #             instance_id=instance_id,
+    #             commands=[script_content],
+    #             working_directory=working_directory,
+    #             execution_timeout=execution_timeout
+    #         )
+    #         logger.debug(f"execute_script() Command response: {result}")
             
-            # Save output if requested
-            if save_output_path and 'StandardOutputContent' in result:
-                output_dir = os.path.dirname(save_output_path)
-                if output_dir and not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
+    #         # Save output if requested
+    #         if save_output_path and 'StandardOutputContent' in result:
+    #             output_dir = os.path.dirname(save_output_path)
+    #             if output_dir and not os.path.exists(output_dir):
+    #                 os.makedirs(output_dir)
                 
-                with open(save_output_path, 'w') as f:
-                    f.write(result.get('StandardOutputContent', ''))
-                    if result.get('StandardErrorContent'):
-                        f.write('\n--- STDERR ---\n')
-                        f.write(result.get('StandardErrorContent', ''))
+    #             with open(save_output_path, 'w') as f:
+    #                 f.write(result.get('StandardOutputContent', ''))
+    #                 if result.get('StandardErrorContent'):
+    #                     f.write('\n--- STDERR ---\n')
+    #                     f.write(result.get('StandardErrorContent', ''))
                 
-                logger.info(f"Command output saved to {save_output_path}")
+    #             logger.info(f"Command output saved to {save_output_path}")
             
-            return result
+    #         return result
         
-        except Exception as e:
-            logger.error(f"Error executing script: {str(e)}")
-            raise
+    #     except Exception as e:
+    #         logger.error(f"Error executing script: {str(e)}")
+    #         raise
 
     def upload_file(
         self,
@@ -519,18 +523,15 @@ class SessionManager:
         instance_id: str,
         remote_port: int,
         local_port: int = None,
-        health_check_fn: callable = None,
     ) -> Dict[str, Any]:
         """
         Set up port forwarding to the EC2 instance using direct AWS SSM command.
         Logs are redirected to a file in /tmp/ instead of being displayed in real-time.
-        If health_check_fn is provided, it will monitor the port forwarding and restart it if needed.
         
         Args:
             instance_id (str): ID of the EC2 instance
             remote_port (int): Port on the remote instance
             local_port (int, optional): Local port to forward to. If None, uses the same as remote_port
-            health_check_fn (callable, optional): Function that returns True if port forwarding is healthy, False otherwise
             
         Returns:
             Dict containing the process information and log file path
@@ -590,69 +591,11 @@ class SessionManager:
             logger.info(f"Port forwarding established: localhost:{local_port} -> {instance_id}:{remote_port}")
             logger.info(f"Port forwarding logs are being written to: {log_file_path}")
             
-            result = {
+            return {
                 'process': process,
                 'log_file': log_file,
                 'log_file_path': log_file_path
             }
-            
-            # Set up health check monitoring if a health check function is provided
-            if health_check_fn:
-                def monitor_port_forwarding():
-                    logger.info(f"Starting health check monitoring for port forwarding: localhost:{local_port} -> {instance_id}:{remote_port}")
-                    while True:
-                        # Check if the process is still running
-                        if process.poll() is not None:
-                            logger.warning(f"Port forwarding process terminated unexpectedly. Restarting...")
-                            break
-                        
-                        # Check health using the provided function
-                        try:
-                            if not health_check_fn():
-                                logger.warning(f"Health check failed for port forwarding: localhost:{local_port} -> {instance_id}:{remote_port}. Restarting...")
-                                break
-                        except Exception as e:
-                            logger.error(f"Error in health check function: {str(e)}")
-                        
-                        # Wait before next check
-                        time.sleep(5)
-                    
-                    # If we're here, either the process died or health check failed
-                    # Try to terminate the process if it's still running
-                    try:
-                        if process.poll() is None:
-                            process.terminate()
-                            process.wait(timeout=5)
-                    except Exception as e:
-                        logger.error(f"Error terminating port forwarding process: {str(e)}")
-                    
-                    # Close the log file
-                    try:
-                        if not log_file.closed:
-                            log_file.close()
-                    except Exception as e:
-                        logger.error(f"Error closing log file: {str(e)}")
-                    
-                    # Restart port forwarding
-                    try:
-                        logger.info(f"Restarting port forwarding: localhost:{local_port} -> {instance_id}:{remote_port}")
-                        new_result = self.setup_port_forwarding(
-                            instance_id=instance_id,
-                            remote_port=remote_port,
-                            local_port=local_port,
-                            health_check_fn=health_check_fn
-                        )
-                        # Update the original result dictionary with new values
-                        result.update(new_result)
-                    except Exception as e:
-                        logger.error(f"Failed to restart port forwarding: {str(e)}")
-                
-                # Start monitoring in a separate thread
-                monitor_thread = threading.Thread(target=monitor_port_forwarding, daemon=True)
-                monitor_thread.start()
-                result['monitor_thread'] = monitor_thread
-            
-            return result
         except Exception as e:
             logger.error(f"Error setting up port forwarding: {str(e)}")
             raise
