@@ -649,7 +649,7 @@ def main():
         
         # Save in standard format (TSV and TREC)
         save_results(results, tsv_output_path, format='tsv')
-        save_results(results, excel_output_path, format='xlsx')
+        # save_results(results, excel_output_path, format='xlsx')
         # create_trec_run_file(results, trec_output_path, args.system)
         
         logger.info("Successfully completed the run", 
