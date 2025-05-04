@@ -1,90 +1,122 @@
-"""
-QPP Post-retrieval RAG system that uses correlation coefficients and sARE for query selection.
-"""
-from typing import List, Dict, Tuple
+"""QPP Post-retrieval RAG system that uses sARE metrics to select the best query variant."""
+from typing import List, Dict, Tuple, Optional
 import time
-from systems.vanilla_rag.vanilla_rag import VanillaRAG
+from datetime import datetime
+from utils.logging_utils import get_logger
+from services.indicies import QueryService, SearchHit 
+from services.llms.ai71_client import AI71Client
+from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
-from services.indicies import SearchHit
-from .qpp_metrics import (
-    calculate_pearson, calculate_spearman,
-    calculate_kendall, calculate_sare,
-    calculate_qpp_scores
-)
-from .relevance_assessor import RelevanceAssessor
+from systems.rag_system_interface import RAGSystemInterface
+from systems.qpp_post_rag.qpp_metrics import calculate_sare
 
-class QPPPostRAG(VanillaRAG):
-    def __init__(self, llm_client='ai71', module_query_gen='with_number'):
-        super().__init__(llm_client, module_query_gen)
-        self.relevance_assessor = RelevanceAssessor(llm_client)
+class QPPPostRAG(RAGSystemInterface):
+    log = get_logger("qpp_post_rag")
 
-    def _calculate_query_metrics(self, query: str, documents: List[SearchHit]) -> Tuple[Dict[str, float], List[float]]:
-        """Calculate QPP metrics for a query and its retrieved documents."""
-        passages = [doc.metadata.text for doc in documents]
-        relevance_scores, oracle_scores = calculate_qpp_scores(query, passages, self.relevance_assessor)
-        
-        metrics = {
-            'pearson': calculate_pearson(relevance_scores, oracle_scores),
-            'spearman': calculate_spearman(relevance_scores, oracle_scores),
-            'kendall': calculate_kendall(relevance_scores, oracle_scores),
-            'sare': calculate_sare(relevance_scores, oracle_scores)
-        }
-        
-        return metrics, relevance_scores
+    def __init__(self, llm_client='ai71', k=10):
+        model_id = "tiiuae/falcon3-10b-instruct"
+        if llm_client == 'ai71':
+            self.rag_llm_client = AI71Client(model_id=model_id)
+            self.qgen_llm_client = AI71Client(model_id=model_id)
+        elif llm_client == 'ec2_llm':
+            self.rag_llm_client = EC2LLMClient(model_id=model_id)
+            self.qgen_llm_client = EC2LLMClient(model_id=model_id)
 
-    def process_question(self, question: str, qid: str = None) -> RAGResult:
-        """Process question with QPP-based post-retrieval filtering."""
+        self.k = k
+        self.query_service = QueryService()
+        self.qgen_system_prompt = "Generate a better search query variant. Focus on key concepts and ways to express the main idea. Only output the query text."
+        self.rag_system_prompt = "Answer the question based on the provided documents."
+
+    def _evaluate_query(self, query: str, original_hits: List[SearchHit]) -> Tuple[List[SearchHit], float]:
+        hits = self.query_service.query_embedding(query, k=self.k) + self.query_service.query_keywords(query, k=self.k)
+        sare = calculate_sare([h.score for h in hits], [h.score for h in original_hits], k=self.k)
+        return hits, sare
+
+    def _generate_improved_query(self, question: str, prev_queries: List[str]) -> str:
+        context = "Previous queries:\n" + "\n".join(prev_queries) if prev_queries else ""
+        prompt = f"{context}\n\nQuestion: {question}\n\nGenerate better query:"
+        query, _ = self.qgen_llm_client.complete_chat_once(prompt, self.qgen_system_prompt)
+        return query.strip()
+
+    def process_question(self, question: str, qid: Optional[str] = None) -> RAGResult:
         start_time = time.time()
         
-        # Get query variants like vanilla RAG
-        queries = self._create_query_variants(question)
+        # Get baseline results
+        original_hits = self.query_service.query_embedding(question, k=self.k) + self.query_service.query_keywords(question, k=self.k)
+        
+        # Iteratively improve query
+        current_query = question
+        tried_queries = [current_query]
+        best_hits = original_hits
+        best_sare = 1.0
+        
+        # Try up to 5 query rewrites
+        for _ in range(4):
+            new_query = self._generate_improved_query(question, tried_queries)
+            if new_query in tried_queries:
+                continue
+                
+            tried_queries.append(new_query)
+            hits, sare = self._evaluate_query(new_query, original_hits)
+            
+            if sare < best_sare:
+                best_hits = hits
+                best_sare = sare
+                current_query = new_query
+            
+            if best_sare < 0.2:
+                break
 
-        # Retrieve initial documents
-        documents: List[SearchHit] = []
-        doc_ids = set()
-        for query in queries:
-            embed_results = self.query_service.query_embedding(query, k=3)
-            keyword_results = self.query_service.query_keywords(query, k=3)
-            results = embed_results + keyword_results
-            for doc in results:
-                if doc.id not in doc_ids:
-                    documents.append(doc)
-                    doc_ids.add(doc.id)
+        # Prepare final context
+        seen = set()
+        context = []
+        doc_ids = []
+        for hit in best_hits:
+            if hit.metadata.text not in seen:
+                context.append(hit.metadata.text)
+                doc_ids.append(hit.id)
+                seen.add(hit.metadata.text)
 
-        # Filter documents using QPP
-        filtered_documents = []
-        filtered_doc_ids = set()
-        for doc in documents:
-            if self.relevance_assessor.assess_relevance(question, doc.metadata.text):
-                filtered_documents.append(doc)
-                filtered_doc_ids.add(doc.id)
-
-        # If no documents pass QPP, fall back to original documents
-        if not filtered_documents:
-            filtered_documents = documents
-            filtered_doc_ids = doc_ids
-
-        # Create context from filtered documents
-        context = "Documents: \n\n"
-        context += "\n\n".join([doc.metadata.text for doc in filtered_documents])
-
-        # Generate answer using filtered context
-        prompt = context + "\n\nQuestion: " + question + "\n\nAnswer: "
+        # Generate answer
+        prompt = f"Documents:\n\n{chr(10).join(context)}\n\nQuestion: {question}\n\nAnswer:"
         answer, _ = self.rag_llm_client.complete_chat_once(prompt, self.rag_system_prompt)
 
-        return RAGResult(
+        result = RAGResult(
             qid=qid,
             question=question,
             answer=answer,
-            context=[doc.metadata.text for doc in filtered_documents],
-            doc_ids=list(filtered_doc_ids),
-            generated_queries=queries,
+            context=context,
+            doc_ids=doc_ids,
+            generated_queries=tried_queries,
             total_time_ms=(time.time() - start_time) * 1000,
+            timestamp=datetime.now(),
             system_name="QPPPostRAG",
+            metadata={
+                "best_query": current_query,
+                "best_sare": best_sare,
+                "queries_tried": len(tried_queries)
+            }
         )
 
+        self.log.info("Generated answer",
+                     answer_length=result.answer_words_count,
+                     processing_time_ms=result.total_time_ms,
+                     best_sare=best_sare,
+                     queries_tried=len(tried_queries),
+                     qid=qid)
+
+        return result
+
 if __name__ == "__main__":
-    # Test the QPPPostRAG system
     rag_system = QPPPostRAG()
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
+        qid=1
+    )
+
+    print("Question:", result.question)
+    print("Answer:", result.answer)
+    print("Context:", result.context)
+    print("Document IDs:", result.doc_ids)
+    print("Total Time (s):", result.total_time_ms)
+    print("Generated Queries:", result.generated_queries)
