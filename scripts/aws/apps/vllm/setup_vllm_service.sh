@@ -18,6 +18,7 @@ ENABLE_CHUNKED_PREFILL=${ENABLE_CHUNKED_PREFILL:-"true"}
 echo "Setting up vLLM service with model: $MODEL_ID"
 echo "Additional parameters:"
 echo "  PORT: $PORT"
+echo "  API_KEY: $API_KEY"
 echo "  TENSOR_PARALLEL: $TENSOR_PARALLEL"
 echo "  MAX_NUM_BATCHED_TOKENS: $MAX_NUM_BATCHED_TOKENS"
 echo "  GPU_MEMORY_UTILIZATION: $GPU_MEMORY_UTILIZATION"

@@ -149,23 +149,22 @@ class EC2App:
 
         logger.info("=" * 60)
 
-    def wait_for_ready(self, max_wait_time: int = 900, check_interval: int = 5) -> bool:
+    def wait_for_ready(self, max_wait_time: int = 900, check_interval: int = 5, verbose: bool = True) -> bool:
         """
         Poll the application health endpoint until it returns a successful response or times out.
 
         Args:
             max_wait_time (int): Maximum time to wait in seconds
             check_interval (int): Time between health checks in seconds
+            verbose (bool): Whether to log info messages (default: True)
 
         Returns:
             bool: True if the application is ready, False otherwise
-
-        Raises:
-            TimeoutError: If the application does not become ready within max_wait_time
         """
         health_url = f"http://localhost:{self.local_port}/health"
-        logger.info(
-            f"Waiting for {self.name} to be ready (polling {health_url} )...")
+        if verbose:
+            logger.info(
+                f"Waiting for {self.name} to be ready (polling {health_url} )...")
 
         # Prepare headers with API key if provided
         headers = {}
@@ -177,7 +176,8 @@ class EC2App:
             try:
                 response = requests.get(health_url, headers=headers, timeout=5)
                 if response.status_code == 200:
-                    logger.info(f"{self.name} is ready!")
+                    if verbose:
+                        logger.info(f"{self.name} is ready!")
                     return True
                 else:
                     logger.debug(
@@ -188,10 +188,10 @@ class EC2App:
             # Wait before checking again
             time.sleep(check_interval)
 
-        logger.error(
-            f"Timed out waiting for {self.name} to be ready after {max_wait_time} seconds")
-        raise TimeoutError(
-            f"{self.name} did not become ready in ({max_wait_time} seconds)")
+        if verbose:
+            logger.error(
+                f"Timed out waiting for {self.name} to be ready after {max_wait_time} seconds")
+        return False
 
     def test_request(self) -> bool:
         """
@@ -227,6 +227,8 @@ def test_vllm_request(app: EC2App) -> bool:
         # Add API key if provided
         if app.api_key:
             headers["Authorization"] = f"Bearer {app.api_key}"
+        print(f"test_vllm_request API Key: {app.api_key}")
+        print(f"test headers: {headers}")
 
         # Prepare a friendly welcome message using chat format
         data = {

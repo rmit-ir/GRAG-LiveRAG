@@ -505,21 +505,36 @@ class EC2Deployer:
             logger.info(f"Setting up {self.app.name} service...")
 
             # Prepare environment variables
-            env_vars = f"PORT={self.app.remote_port} API_KEY=\"{self.api_key}\""
+            env_vars_dict = dict()
+            if self.app.remote_port:
+                env_vars_dict["PORT"] = self.app.remote_port
+            if self.api_key:
+                env_vars_dict["API_KEY"] = self.api_key
+                
 
             # Add program file path if provided
             if self.app.program_file:
-                env_vars += f" PROGRAM_FILE=\"{remote_program_path}\""
+                env_vars_dict["PROGRAM_FILE"] = self.app.program_file
+            
+            # loop over self.app.params and add them to env_vars_dict, if duplicate, don't add and warn
+            for key, value in self.app.params.items():
+                if key in env_vars_dict:
+                    logger.warning(
+                        f"Skipping duplicated env var. Existing ({key}): {env_vars_dict[key]}, New: {value}")
+                else:
+                    env_vars_dict[key] = value
 
             # Add additional parameters from app.params
-            if self.app.params:
-                for key, value in self.app.params.items():
-                    env_vars += f" {key}=\"{value}\""
+            env_vars = " ".join([
+                f"{key}=\"{value}\"" for key, value in env_vars_dict.items()
+            ])
 
             # Prepare final command arguments with environment variables
+            # Use sudo -E to preserve environment variables or pass them directly to sudo
             command_args = [
                 f"chmod +x {remote_launch_path}",
-                f"{env_vars} sudo {remote_launch_path}"
+                f"export {env_vars}",
+                f"sudo -E {remote_launch_path}"
             ]
 
             result = self.session_manager.execute_command(
@@ -538,12 +553,165 @@ class EC2Deployer:
             logger.error(f"Error setting up {self.app.name} service: {str(e)}")
             return False
 
+    def start_port_forwarding_monitoring(self, check_interval: int = 5, max_retries: int = 10) -> None:
+        """
+        Start monitoring threads for each port forwarding. Each thread will periodically check
+        if the port forwarding is working by attempting to establish a socket connection to the
+        forwarded port, and restart it if needed.
+
+        Args:
+            check_interval (int): Time between connection checks in seconds
+            max_retries (int): Maximum number of consecutive retries before giving up
+        """
+        if not self.port_forwardings:
+            logger.warning("No port forwardings to monitor")
+            return
+
+        logger.info(f"Starting port forwarding monitoring for {len(self.port_forwardings)} ports")
+
+        for description, port_forwarding in self.port_forwardings.items():
+            # Find the corresponding port mapping to get the local port
+            port_mapping = next(
+                (pm for pm in self.app.port_mappings if pm.get("description") == description),
+                self.app.port_mappings[0]  # Default to first mapping if not found
+            )
+            local_port = port_mapping["local_port"]
+            
+            # Start a monitoring thread for each port forwarding
+            thread = threading.Thread(
+                target=self._monitor_port_forwarding,
+                args=(description, port_forwarding, local_port, check_interval, max_retries),
+                daemon=True
+            )
+            thread.start()
+            logger.info(f"Started monitoring thread for {description} (port {local_port})")
+
+    def _check_port_connection(self, port: int, timeout: int = 5) -> bool:
+        """
+        Check if a connection can be established to the given port.
+
+        Args:
+            port (int): Port to check
+            timeout (int): Connection timeout in seconds
+
+        Returns:
+            bool: True if connection was successful, False otherwise
+        """
+        try:
+            # Create a socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            
+            # Try to connect to localhost:port
+            result = sock.connect_ex(('localhost', port))
+            
+            # Close the socket
+            sock.close()
+            
+            # If result is 0, the connection was successful
+            return result == 0
+        except Exception as e:
+            logger.debug(f"Error checking port {port} connection: {str(e)}")
+            return False
+
+    def _monitor_port_forwarding(self, description: str, port_forwarding: Dict[str, Any], 
+                                local_port: int, check_interval: int, max_retries: int) -> None:
+        """
+        Monitor a port forwarding and restart it if needed.
+
+        Args:
+            description (str): Description of the port forwarding
+            port_forwarding (Dict[str, Any]): Port forwarding information
+            local_port (int): Local port to check
+            check_interval (int): Time between connection checks in seconds
+            max_retries (int): Maximum number of consecutive retries before giving up
+        """
+        consecutive_failures = 0
+        
+        while not self._should_stop:
+            try:
+                # Sleep first to avoid immediate checking after setup
+                time.sleep(check_interval)
+                
+                # Check if the port is accessible by attempting to establish a connection
+                is_connected = self._check_port_connection(local_port)
+                
+                if is_connected:
+                    # Reset failure counter on success
+                    if consecutive_failures > 0:
+                        logger.info(f"Port forwarding for {description} (port {local_port}) is working again after {consecutive_failures} failures")
+                        consecutive_failures = 0
+                    continue
+                
+                # If we get here, the connection check failed
+                consecutive_failures += 1
+                logger.warning(f"Connection check failed for {description} (port {local_port}) (failure {consecutive_failures}/{max_retries})")
+                
+                # Check if the port forwarding process is already closed
+                process_closed = False
+                if 'process' in port_forwarding:
+                    try:
+                        # Check if process has terminated
+                        if port_forwarding['process'].poll() is not None:
+                            logger.warning(f"Port forwarding process for {description} (port {local_port}) has already terminated")
+                            process_closed = True
+                    except Exception as e:
+                        logger.error(f"Error checking port forwarding process status: {str(e)}")
+                
+                # If process is already closed or we've reached max retries, reconnect
+                if process_closed or consecutive_failures >= max_retries:
+                    logger.error(f"Port forwarding for {description} (port {local_port}) failed {consecutive_failures} times, restarting...")
+                    
+                    # Terminate the existing port forwarding process
+                    if 'process' in port_forwarding:
+                        try:
+                            port_forwarding['process'].terminate()
+                            logger.info(f"Terminated existing port forwarding process for {description}")
+                        except Exception as e:
+                            logger.error(f"Error terminating port forwarding process: {str(e)}")
+                    
+                    # Close the log file if it exists
+                    if 'log_file' in port_forwarding and port_forwarding['log_file']:
+                        try:
+                            port_forwarding['log_file'].close()
+                        except Exception as e:
+                            logger.error(f"Error closing log file: {str(e)}")
+                    
+                    # Extract port information from the port mapping
+                    port_mapping = next(
+                        (pm for pm in self.app.port_mappings if pm.get("description") == description),
+                        self.app.port_mappings[0]  # Default to first mapping if not found
+                    )
+                    remote_port = port_mapping["remote_port"]
+                    
+                    # Restart port forwarding
+                    try:
+                        new_port_forwarding = self.session_manager.setup_port_forwarding(
+                            instance_id=self.instance_id,
+                            remote_port=remote_port,
+                            local_port=local_port
+                        )
+                        
+                        # Update the port_forwardings dictionary with the new process and log file
+                        self.port_forwardings[description] = new_port_forwarding
+                        logger.info(f"Restarted port forwarding for {description} (port {local_port})")
+                        
+                        # Reset failure counter
+                        consecutive_failures = 0
+                    except Exception as e:
+                        logger.error(f"Error restarting port forwarding for {description}: {str(e)}")
+            
+            except Exception as e:
+                logger.error(f"Error in port forwarding monitoring for {description}: {str(e)}")
+                # Sleep a bit to avoid tight loop in case of persistent errors
+                time.sleep(5)
+
     def setup_port_forwarding(self) -> Dict[str, Any]:
         """
         Set up port forwarding to the EC2 instance using SessionManager for all port mappings in the app.
 
         Returns:
-            Dict containing the process and monitoring thread information for all port mappings
+            Dict containing the process and log file information for all port mappings
         """
         if not self.instance_id:
             logger.error("No instance ID available. Deploy the stack first.")
@@ -573,6 +741,7 @@ class EC2Deployer:
 
             logger.info(
                 f"Set up port forwarding for {len(port_forwardings)} ports")
+            self.port_forwardings = port_forwardings
             return port_forwardings
         except Exception as e:
             logger.error(f"Error setting up port forwarding: {str(e)}")
@@ -830,6 +999,9 @@ class EC2Deployer:
         """
         Clean up all resources.
         """
+        # Signal all monitoring threads to stop
+        self._should_stop = True
+        
         # Record the stop time
         self.stop_time = datetime.datetime.now()
 
@@ -1231,7 +1403,7 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
                         help="Hugging Face model ID to deploy (for vLLM)")
     parser.add_argument("--region", type=str, default=None,
                         help="AWS region name")
-    parser.add_argument("--instance-type", type=str, default="g6e.8xlarge",
+    parser.add_argument("--instance-type", type=str, default="g6e.4xlarge",
                         help="EC2 instance type, see https://aws.amazon.com/ec2/instance-types/")
     parser.add_argument("--stack-name", type=str, default=None,
                         help="CloudFormation stack name")
@@ -1360,13 +1532,14 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
             port_forwardings = None
             if args.port_forward:
                 port_forwardings = deployer.setup_port_forwarding()
-                # Store the port forwardings in the deployer for cleanup
-                if isinstance(port_forwardings, dict) and len(port_forwardings) > 1:
-                    deployer.port_forwardings = port_forwardings
 
                 # Send a test request to the app if requested
                 if args.test:
                     deployer.wait_for_app_ready(max_wait_time=args.wait_time)
+                    # Start monitoring port forwarding after the app is ready
+                    deployer.start_port_forwarding_monitoring()
+                    
+                    # Send a test request to the app
                     deployer.test_app()
 
             # Keep the main thread running until interrupted
