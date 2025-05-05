@@ -102,6 +102,8 @@ The LiveRAG project follows a structured workflow for developing, running, and e
 
    This generates evaluation results in [data/evaluation_results/](data/evaluation_results/) (git ignored).
 
+   Record your results in [RMIT LiveRAG Systems Test Log.xlsx](https://rmiteduau.sharepoint.com/:x:/r/sites/ComplexQuestionAnswering-LiveRAGSIGIR2025/_layouts/15/Doc2.aspx?action=editNew&sourcedoc=%7B73ac296d-d3cb-461a-be97-469f2252ee1a%7D&wdOrigin=TEAMS-MAGLEV.teamsSdk_ns.rwc&wdExp=TEAMS-TREATMENT&wdhostclicktime=1745570795224&web=1).
+
    For detailed usage of evaluators, refer to [evaluators/README.md](src/evaluators/README.md).
 
 4. **Analyze & Iterate**: Review evaluation metrics, identify areas for improvement, and refine your RAG system
