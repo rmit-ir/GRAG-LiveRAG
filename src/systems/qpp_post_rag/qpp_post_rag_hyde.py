@@ -27,9 +27,8 @@ class QPPPostRAG(RAGSystemInterface):
         self.query_service = QueryService()
         self.relevance_assessor = RelevanceAssessor(llm_client=llm_client)
         self.relevance_threshold = relevance_threshold
-        self.qgen_system_prompt_bm25 = "Generate a better search query variant. Focus on key concepts and ways to express the main idea. Only output the query text. search queries optimized for keyword-based search engines (e.g., Elasticsearch BM25). There are no spelling mistakes in the original question. Do not include any other text."
-        self.qgen_system_prompt_vector = "Generate a better search query variant. Focus on key concepts and ways to express the main idea. Only output the query text. search queries optimized for vector-based search engines (e.g., OpenAI). There are no spelling mistakes in the original question. Do not include any other text."
         self.rag_system_prompt = "Answer the question based on the provided documents."
+        self.hyde_system_prompt = "Given the question, write a short hypothetical answer that could be true. Be brief and concise."
 
     def _evaluate_query(self, query: str, original_hits: List[SearchHit], query_type: str) -> Tuple[List[SearchHit], float]:
         if query_type == 'bm25':
@@ -38,18 +37,21 @@ class QPPPostRAG(RAGSystemInterface):
             hits = self.query_service.query_embedding(query, k=self.k)
         sare = calculate_sare([h.score for h in hits], [h.score for h in original_hits], k=self.k)
         return hits, sare
+    def _generate_hyde_answer(self, question: str) -> str:
+        """Generate a hypothetical answer for HyDE."""
+        prompt = f"Question: {question}\n\nHypothetical answer:"
+        hyde_answer, _ = self.qgen_llm_client.complete_chat_once(prompt, self.hyde_system_prompt)
+        return hyde_answer.strip()
 
-    def _generate_improved_query_bm25(self, question: str, prev_queries: List[str]) -> str:
-        context = "Previous queries:\n" + "\n".join(prev_queries) if prev_queries else ""
-        prompt = f"{context}\n\nQuestion: {question}\n\nGenerate better query:"
-        query, _ = self.qgen_llm_client.complete_chat_once(prompt, self.qgen_system_prompt_bm25)
-        return query.strip()
-    
-    def _generate_improved_query_vector(self, question: str, prev_queries: List[str]) -> str:
-        context = "Previous queries:\n" + "\n".join(prev_queries) if prev_queries else ""
-        prompt = f"{context}\n\nQuestion: {question}\n\nGenerate better query:"
-        query, _ = self.qgen_llm_client.complete_chat_once(prompt, self.qgen_system_prompt_vector)
-        return query.strip()
+    def _evaluate_query_hyde(self, question: str, hyde_answer: str, original_hits: List[SearchHit], query_type: str) -> Tuple[List[SearchHit], float]:
+        """Evaluate query using HyDE method."""
+        combined_query = f"Question: {question}\nAnswer: {hyde_answer}"
+        if query_type == 'bm25':
+            hits = self.query_service.query_keywords(combined_query, k=self.k)
+        else:  # vector
+            hits = self.query_service.query_embedding(combined_query, k=self.k)
+        sare = calculate_sare([h.score for h in hits], [h.score for h in original_hits], k=self.k)
+        return hits, sare
         
     def _filter_context_by_relevance(self, question: str, context: List[str]) -> List[str]:
         """Filter context based on relevance scores."""
@@ -83,34 +85,38 @@ class QPPPostRAG(RAGSystemInterface):
         original_bm25_hits = self.query_service.query_keywords(question, k=self.k)
         original_vector_hits = self.query_service.query_embedding(question, k=self.k)
         
-        # Track queries for both methods
+        # Generate hypothetical answer for HyDE
+        hyde_answer = self._generate_hyde_answer(question)
+        
+        # Track queries and HyDE results
         tried_queries_bm25 = [question]
         tried_queries_vector = [question]
         best_hits = original_bm25_hits + original_vector_hits
         best_sare_bm25 = 1.0
         best_sare_vector = 1.0
         
-        # Try up to 5 query rewrites for each method
+        # Try HyDE and query rewrites
         for _ in range(5):
-            # BM25 query improvement
-            new_bm25_query = self._generate_improved_query_bm25(question, tried_queries_bm25)
-            if new_bm25_query not in tried_queries_bm25:
-                tried_queries_bm25.append(new_bm25_query)
-                hits_bm25, sare_bm25 = self._evaluate_query(new_bm25_query, original_bm25_hits, 'bm25')
-                if sare_bm25 < best_sare_bm25:
-                    best_hits = hits_bm25 + best_hits[self.k:]
-                    best_sare_bm25 = sare_bm25
+            # BM25 with HyDE
+            # Evaluate both BM25 and Vector with HyDE
+            for query_type, original_hits, best_sare, tried_queries in [
+                ('bm25', original_bm25_hits, best_sare_bm25, tried_queries_bm25),
+                ('vector', original_vector_hits, best_sare_vector, tried_queries_vector)
+            ]:
+                hits, sare = self._evaluate_query_hyde(question, hyde_answer, original_hits, query_type)
+                if sare < best_sare:
+                    if query_type == 'bm25':
+                        best_hits = hits + best_hits[self.k:]
+                        best_sare_bm25 = sare
+                    else:  # vector
+                        best_hits = best_hits[:self.k] + hits
+                        best_sare_vector = sare
+                    tried_queries.append(f"HyDE:{hyde_answer}")
 
-            # Vector query improvement
-            new_vector_query = self._generate_improved_query_vector(question, tried_queries_vector)
-            if new_vector_query not in tried_queries_vector:
-                tried_queries_vector.append(new_vector_query)
-                hits_vector, sare_vector = self._evaluate_query(new_vector_query, original_vector_hits, 'vector')
-                if sare_vector < best_sare_vector:
-                    best_hits = best_hits[:self.k] + hits_vector
-                    best_sare_vector = sare_vector
-
-            if best_sare_bm25 < 0.2 and best_sare_vector < 0.2:
+            # Generate new hypothetical answer if needed
+            if best_sare_bm25 >= 0.2 or best_sare_vector >= 0.2:
+                hyde_answer = self._generate_hyde_answer(question)
+            else:
                 break
 
         # Prepare context
