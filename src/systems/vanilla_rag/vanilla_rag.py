@@ -108,10 +108,16 @@ class VanillaRAG(RAGSystemInterface):
         answer, _ = self.rag_llm_client.complete_chat_once(
             prompt, self.rag_system_prompt)
 
+        final_prompt = str([
+            {"role": "system", "content": self.rag_system_prompt},
+            {"role": "user", "content": prompt}
+        ])
+
         return RAGResult(
             qid=qid,
             question=question,
             answer=answer,
+            metadata={"final_prompt": final_prompt},
             context=[doc.metadata.text for doc in documents],
             doc_ids=list(doc_ids),
             generated_queries=queries,
@@ -122,8 +128,7 @@ class VanillaRAG(RAGSystemInterface):
 
 if __name__ == "__main__":
     # Test the BasicRAG2 system
-    rag_system = VanillaRAG(
-        llm_client='ec2_llm', qgen_api_base='http://localhost:8988/v1/', qgen_model_id='qwen/qwen3-8b')
+    rag_system = VanillaRAG()
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
         qid=1
