@@ -16,7 +16,7 @@ from utils.logging_utils import get_logger
 
 
 class VanillaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None):
+    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5):
         """
         Initialize the BasicRAG2.
 
@@ -29,20 +29,22 @@ class VanillaRAG(RAGSystemInterface):
             self.qgen_llm_client = AI71Client()
         elif llm_client == 'ec2_llm':
             self.rag_llm_client = EC2LLMClient()
-            self.qgen_llm_client = EC2LLMClient(model_id=qgen_model_id, api_base=qgen_api_base)
+            self.qgen_llm_client = EC2LLMClient(
+                model_id=qgen_model_id, api_base=qgen_api_base)
 
         # if module_query_gen == 'with_num':
         self.logger = get_logger('vanilla_rag')
+        self.k_queries = int(k_queries)
 
         # Store system prompts
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
-        self.qgen_system_prompt = "Generate a list of 5 search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
+        self.qgen_system_prompt = f"Generate a list of {k_queries} search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
         self.query_service = QueryService()
 
     def _create_query_variants(self, question: str) -> List[str]:
         resp_text, _ = self.qgen_llm_client.complete_chat_once(
             question, self.qgen_system_prompt)
-        
+
         think = re.search(r'<think>(.*?)</think>(.*)', resp_text, re.DOTALL)
         if think:
             self.logger.info(f"Think: {think.group(1)}")
@@ -51,9 +53,13 @@ class VanillaRAG(RAGSystemInterface):
         else:
             # If no <think> block, use the entire response
             query_text = resp_text
-        
+
         queries = query_text.split("\n")
         queries = [self._sanitize_query(query) for query in queries]
+        if len(queries) > self.k_queries:
+            self.logger.warning(
+                f"Number of generated queries ({len(queries)}) exceeds the limit ({self.k_queries}). Truncating.")
+            queries = queries[:self.k_queries]
         # return queries + [question]
         return queries
 
@@ -116,7 +122,8 @@ class VanillaRAG(RAGSystemInterface):
 
 if __name__ == "__main__":
     # Test the BasicRAG2 system
-    rag_system = VanillaRAG(llm_client='ec2_llm', qgen_api_base='http://localhost:8988/v1/', qgen_model_id='qwen/qwen3-8b')
+    rag_system = VanillaRAG(
+        llm_client='ec2_llm', qgen_api_base='http://localhost:8988/v1/', qgen_model_id='qwen/qwen3-8b')
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
         qid=1
