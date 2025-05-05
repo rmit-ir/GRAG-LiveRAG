@@ -17,7 +17,7 @@ from systems.vanilla_rag.prompts import QUERY_GENERATION_SYSTEM_PROMPT, QUERY_GE
 
 
 class VanillaRAGKunPrompt(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', query_len_words=5, num_queries=5, module_query_gen='with_number'):
+    def __init__(self, llm_client='ai71', query_len_words=5, num_queries=5, qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None):
         """
         Initialize the VanillaRAGKunPrompt.
 
@@ -26,21 +26,13 @@ class VanillaRAGKunPrompt(RAGSystemInterface):
             module_query_gen: Select this module for query generation. Options are 'with_number'|'without_number', default is 'with_number'.
         """
         if llm_client == 'ai71':
-            self.rag_llm_client = AI71Client(
-                model_id="tiiuae/falcon3-10b-instruct",
-            )
-            self.qgen_llm_client = AI71Client(
-                model_id="tiiuae/falcon3-10b-instruct",
-            )
+            self.rag_llm_client = AI71Client()
+            self.qgen_llm_client = AI71Client()
         elif llm_client == 'ec2_llm':
-            self.rag_llm_client = EC2LLMClient(
-                model_id="tiiuae/falcon3-10b-instruct",
-            )
-            self.qgen_llm_client = EC2LLMClient(
-                model_id="tiiuae/falcon3-10b-instruct",
-            )
+            self.rag_llm_client = EC2LLMClient()
+            self.qgen_llm_client = EC2LLMClient(model_id=qgen_model_id, api_base=qgen_api_base)
 
-        self.logger = get_logger('vanilla_rag')
+        self.logger = get_logger('vanilla_rag_kun')
 
         # if module_query_gen == 'with_num':
 
@@ -60,6 +52,10 @@ class VanillaRAGKunPrompt(RAGSystemInterface):
         self.logger.debug(f"create query variants", question=question,
                           system_prompt=self.qgen_system_prompt, user_prompt=user_prompt, resp_text=resp_text)
 
+        think = re.search(r'<think>(.*?)</think>', resp_text, re.DOTALL)
+        if think:
+            self.logger.info(f"Think: {think.group(1)}")
+
         # Extract content between <list> tags, making the closing tag optional
         list_match = re.search(r'<list>(.*?)</list>', resp_text, re.DOTALL)
         if not list_match:
@@ -68,21 +64,21 @@ class VanillaRAGKunPrompt(RAGSystemInterface):
 
         if list_match:
             list_content = list_match.group(1).strip()
-            
+
             # Split by lines and process each line
             queries = []
             for line in list_content.split('\n'):
                 line = line.strip()
                 if not line:
                     continue
-                
+
                 # Simple regex to match "##. query text"
                 match = re.match(r'^\d+\.\s*(.*)', line)
                 if match:
                     query = match.group(1).strip()
                     if query:
                         queries.append(query)
-            
+
             if queries:
                 return queries
 

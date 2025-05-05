@@ -14,17 +14,21 @@ class EC2LLMClient(GeneralOpenAIClient):
         self,
         model_id: str = "tiiuae/falcon3-10b-instruct",
         temperature: float = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: int = 2048,
+        api_base="http://localhost:8987/v1/",
     ):
         # Set up logger
         logger = get_logger("ec2_llm_client")
-        
+
         # Set API base and key
-        self.api_base = "http://localhost:8987/v1/"
+        if api_base:
+            self.api_base = api_base
+        else:
+            self.api_base = "http://localhost:8987/v1/"
         self.api_key = os.environ.get("EC2_LLM_API_KEY", "")
         if not self.api_key:
             raise ValueError("EC2 LLM API key is required")
-        
+
         # Initialize the parent class (GeneralOpenAIClient)
         super().__init__(
             api_key=self.api_key,
@@ -34,9 +38,10 @@ class EC2LLMClient(GeneralOpenAIClient):
             max_tokens=max_tokens,
             logger=logger,
             timeout=120.0,
+            max_retries=10,
             llm_name="ec2_llm"
         )
-    
+
     def _check_model_health(self, api_base: str, api_key: str, logger) -> None:
         """
         Check if the model is available by querying the health endpoint.
@@ -59,11 +64,11 @@ class EC2LLMClient(GeneralOpenAIClient):
             response = requests.get(health_url, headers=headers, timeout=5)
             if response.status_code != 200:
                 raise ValueError(f"Model health check failed with status code {response.status_code}. "
-                                "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py'")
+                                 "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py'")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to connect to model: {str(e)}")
             raise ValueError("Failed to connect to the model. "
-                            "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py'") from e
+                             "Please launch the model using 'uv run scripts/aws/deploy_ec2_llm.py'") from e
 
 
 if __name__ == "__main__":

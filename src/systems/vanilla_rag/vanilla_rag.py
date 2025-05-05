@@ -1,6 +1,7 @@
 """
 uv run scripts/run.py --system systems.basic_rag_2.rag_2.BasicRAG2 --help
 """
+import re
 import time
 from typing import List
 from evaluators.evaluator_interface import test_evaluator
@@ -11,10 +12,11 @@ from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
+from utils.logging_utils import get_logger
 
 
 class VanillaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', module_query_gen='with_number'):
+    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None):
         """
         Initialize the BasicRAG2.
 
@@ -23,21 +25,14 @@ class VanillaRAG(RAGSystemInterface):
             module_query_gen: Select this module for query generation. Options are 'with_number'|'without_number', default is 'with_number'.
         """
         if llm_client == 'ai71':
-            self.rag_llm_client = AI71Client(
-                model_id="tiiuae/falcon3-10b-instruct",
-            )
-            self.qgen_llm_client = AI71Client(
-                model_id="tiiuae/falcon3-10b-instruct",
-            )
+            self.rag_llm_client = AI71Client()
+            self.qgen_llm_client = AI71Client()
         elif llm_client == 'ec2_llm':
-            self.rag_llm_client = EC2LLMClient(
-                model_id="tiiuae/falcon3-10b-instruct",
-            )
-            self.qgen_llm_client = EC2LLMClient(
-                model_id="tiiuae/falcon3-10b-instruct",
-            )
+            self.rag_llm_client = EC2LLMClient()
+            self.qgen_llm_client = EC2LLMClient(model_id=qgen_model_id, api_base=qgen_api_base)
 
         # if module_query_gen == 'with_num':
+        self.logger = get_logger('vanilla_rag')
 
         # Store system prompts
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
@@ -45,29 +40,39 @@ class VanillaRAG(RAGSystemInterface):
         self.query_service = QueryService()
 
     def _create_query_variants(self, question: str) -> List[str]:
-        queries, _ = self.qgen_llm_client.complete_chat_once(
+        resp_text, _ = self.qgen_llm_client.complete_chat_once(
             question, self.qgen_system_prompt)
-        queries = queries.split("\n")
+        
+        think = re.search(r'<think>(.*?)</think>(.*)', resp_text, re.DOTALL)
+        if think:
+            self.logger.info(f"Think: {think.group(1)}")
+            # Use the second matched group (content after </think>)
+            query_text = think.group(2).strip()
+        else:
+            # If no <think> block, use the entire response
+            query_text = resp_text
+        
+        queries = query_text.split("\n")
         queries = [self._sanitize_query(query) for query in queries]
         # return queries + [question]
         return queries
-    
+
     def _sanitize_query(self, query: str) -> str:
         query = query.strip()
-        
+
         # Check for numbered list format (e.g., "1. query" or "11. query")
         import re
         numbered_pattern = re.match(r'^\d+\.\s+(.*)', query)
         if numbered_pattern:
             query = numbered_pattern.group(1)
-        
+
         # Remove surrounding quotes if present
         if (query.startswith('"') and query.endswith('"')) or (query.startswith("'") and query.endswith("'")):
             query = query[1:-1]
-        
+
         # Replace escaped quotes with regular quotes
         query = query.replace("\\'", "'").replace('\\"', '"')
-        
+
         return query
 
     def process_question(self, question: str, qid: str = None) -> RAGResult:
@@ -111,7 +116,7 @@ class VanillaRAG(RAGSystemInterface):
 
 if __name__ == "__main__":
     # Test the BasicRAG2 system
-    rag_system = VanillaRAG()
+    rag_system = VanillaRAG(llm_client='ec2_llm', qgen_api_base='http://localhost:8988/v1/', qgen_model_id='qwen/qwen3-8b')
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
         qid=1
