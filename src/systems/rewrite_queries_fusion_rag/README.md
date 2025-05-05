@@ -5,7 +5,7 @@ An advanced RAG implementation that rewrites the original question to generate m
 ## How to Run
 
 ```bash
-uv run scripts/run.py --system systems.rewrite_queries_fusion_rag.rag.FusionRAGSystem --input data/generated_qa_pairs/datamorgana_dataset_20250414_181830.n2.tsv
+uv run scripts/run.py --system QPPPostRAG --input data/generated_qa_pairs/dmds_1GMhaG2S7ONAd.multi.n50.tsv
 ```
 
 For help with command-line options:

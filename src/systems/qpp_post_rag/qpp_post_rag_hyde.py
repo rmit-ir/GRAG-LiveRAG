@@ -11,7 +11,7 @@ from systems.rag_system_interface import RAGSystemInterface
 from systems.qpp_post_rag.qpp_metrics import calculate_sare
 from systems.qpp_post_rag.relevance_assessor import RelevanceAssessor
 
-class QPPPostRAG(RAGSystemInterface):
+class QPPPostRAGHYDE(RAGSystemInterface):
     log = get_logger("qpp_post_rag")
 
     def __init__(self, llm_client='ai71', k=10, relevance_threshold=0.6):
