@@ -615,6 +615,11 @@ class EC2Deployer:
                 # Sleep first to avoid immediate checking after setup
                 time.sleep(check_interval)
                 
+                # Early exit if cleanup has been initiated
+                if self._should_stop:
+                    logger.info(f"Stopping port forwarding monitor for {description} (port {local_port})")
+                    break
+                
                 # Check if the port is accessible by attempting to establish a connection
                 is_connected = self._check_port_connection(local_port)
                 
@@ -629,6 +634,11 @@ class EC2Deployer:
                 consecutive_failures += 1
                 logger.warning(f"Connection check failed for {description} (port {local_port}) (failure {consecutive_failures}/{max_retries})")
                 
+                # Early exit if cleanup has been initiated
+                if self._should_stop:
+                    logger.info(f"Stopping port forwarding monitor for {description} (port {local_port}) after connection check")
+                    break
+                
                 # Check if the port forwarding process is already closed
                 process_closed = False
                 if 'process' in port_forwarding:
@@ -639,6 +649,11 @@ class EC2Deployer:
                             process_closed = True
                     except Exception as e:
                         logger.error(f"Error checking port forwarding process status: {str(e)}")
+                
+                # Early exit if cleanup has been initiated
+                if self._should_stop:
+                    logger.info(f"Stopping port forwarding monitor for {description} (port {local_port}) after process check")
+                    break
                 
                 # If process is already closed or we've reached max retries, reconnect
                 if process_closed or consecutive_failures >= max_retries:
@@ -658,6 +673,11 @@ class EC2Deployer:
                             port_forwarding['log_file'].close()
                         except Exception as e:
                             logger.error(f"Error closing log file: {str(e)}")
+                    
+                    # One last check before restarting
+                    if self._should_stop:
+                        logger.info(f"Stopping port forwarding monitor for {description} (port {local_port}) after cleanup")
+                        break
                     
                     # Extract port information from the port mapping
                     port_mapping = next(
@@ -687,6 +707,8 @@ class EC2Deployer:
                 logger.error(f"Error in port forwarding monitoring for {description}: {str(e)}")
                 # Sleep a bit to avoid tight loop in case of persistent errors
                 time.sleep(5)
+        
+        logger.info(f"Port forwarding monitor for {description} (port {local_port}) has stopped")
 
     def setup_port_forwarding(self) -> Dict[str, Any]:
         """
