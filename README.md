@@ -61,22 +61,6 @@ And edit the `.env` file with your own values.
 
 Note, the access details can be found at <https://linear.app/rmit-liverag-2025/document/access-to-platforms-eb73586791f5>
 
-## Live Day Procedure
-
-1. Download the jsonl LiveRAG questions, save to [data/live_rag_questions/](data/live_rag_questions/)
-2. Run the system over questions, results will be saved to [data/rag_results/](data/rag_results/)
-
-  ```bash
-  uv run scripts/run.py --system VanillaRAG \
-    --live \
-    --num-threads 20 \
-    --llm_client ec2_llm \
-    --output-prefix dry_run \
-    --input data/live_rag_questions/questions.jsonl
-  ```
-
-3. Collect the results under [data/rag_results/](data/rag_results/) and send it to the organizers
-
 ## The LiveRAG Workflow
 
 The LiveRAG project follows a structured workflow for developing, running, and evaluating RAG systems:
@@ -161,6 +145,22 @@ uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --stop; \
 uv run scripts/evaluate.py --evaluator LLMEvaluator --results data/rag_results/dmds_2_05012333_VanillaRAG.tsv --reference data/generated_qa_pairs/dmds_2_05012333.tsv --num_threads 20; \
 say "evaluation finished"
 ```
+
+## Live Day Procedure
+
+1. Download the jsonl LiveRAG questions, save to [data/live_rag_questions/](data/live_rag_questions/)
+2. Run the system over questions, results will be saved to [data/rag_results/](data/rag_results/)
+
+  ```bash
+  uv run scripts/run.py --system VanillaRAG \
+    --live \
+    --num-threads 20 \
+    --llm_client ec2_llm \
+    --output-prefix dry_run \
+    --input data/live_rag_questions/questions.jsonl
+  ```
+
+3. Collect the results under [data/rag_results/](data/rag_results/) and send it to the organizers
 
 ## Usage
 
