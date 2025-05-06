@@ -109,6 +109,8 @@ BEDROCK_MODEL_PRICING = {
         "input_price": 0.72,  # $0.72 per 1M input tokens ($0.00072 per 1K)
         "output_price": 0.72   # $0.72 per 1M output tokens ($0.00072 per 1K)
     },
+    # Use cross-regional inference model id: us.meta.llama3-3-70b-instruct-v1:0
+    # see https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/inference-profiles
     "meta.llama3-3-70b-instruct-v1:0": {
         "input_price": 0.72,  # $0.72 per 1M input tokens ($0.00072 per 1K)
         "output_price": 0.72   # $0.72 per 1M output tokens ($0.00072 per 1K)
