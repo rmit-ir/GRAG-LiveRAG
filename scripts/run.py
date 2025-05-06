@@ -24,7 +24,7 @@ import time
 import argparse
 import importlib
 import concurrent.futures
-from typing import List, Dict, Any, Type, Optional, Tuple, TypedDict, NamedTuple
+from typing import List, Dict, Any, Type, Optional, TypedDict, NamedTuple
 import jsonlines
 import pandas as pd
 from dotenv import load_dotenv

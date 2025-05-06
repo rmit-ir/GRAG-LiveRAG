@@ -147,7 +147,7 @@ class BedrockClient(LLMInterface):
             response_time = time.time() - start_time
             logger.info(
                 "Bedrock API request completed",
-                response_time_ms=round(response_time * 1000)
+                response_time=round(response_time, 3)
             )
 
             # Extract content from the response

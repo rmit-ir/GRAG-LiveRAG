@@ -96,7 +96,7 @@ class GeneralOpenAIClient(LLMInterface):
             response_time = time.time() - start_time
             self.logger.info(
                 "Completion API request completed",
-                response_time_ms=round(response_time * 1000)
+                response_time=round(response_time, 3)
             )
 
             # Try to log token usage if available
