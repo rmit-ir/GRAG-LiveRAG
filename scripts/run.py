@@ -24,7 +24,7 @@ import time
 import argparse
 import importlib
 import concurrent.futures
-from typing import List, Dict, Any, Type, Optional, Tuple, TypedDict
+from typing import List, Dict, Any, Type, Optional, Tuple, TypedDict, NamedTuple
 import jsonlines
 import pandas as pd
 from dotenv import load_dotenv
@@ -345,12 +345,22 @@ def create_trec_run_file(results: List[RAGResult], output_file: str, system_name
         raise
 
 
-def process_single_question(args: Tuple[RAGSystemInterface, QuestionData, int, int]) -> Optional[RAGResult]:
+class QuestionProcessingArgs(NamedTuple):
+    """
+    Named tuple for question processing arguments.
+    """
+    system: RAGSystemInterface
+    question_data: QuestionData
+    index: int
+    total_questions: int
+
+
+def process_single_question(args: QuestionProcessingArgs) -> Optional[RAGResult]:
     """
     Process a single question with the specified system.
     
     Args:
-        args: Tuple containing:
+        args: Named tuple containing:
             - system: The RAGSystem instance to use
             - question_data: Dictionary containing question data
             - index: Index of the question in the original list
@@ -359,7 +369,10 @@ def process_single_question(args: Tuple[RAGSystemInterface, QuestionData, int, i
     Returns:
         RAGResult object or None if an error occurred
     """
-    system, question_data, i, total_questions = args
+    system = args.system
+    question_data = args.question_data
+    i = args.index
+    total_questions = args.total_questions
     
     try:
         # Extract the question text
@@ -425,7 +438,7 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionD
     
     # Prepare arguments for each question, passing the same system instance to all
     question_args = [
-        (system, question_data, i, total_questions)
+        QuestionProcessingArgs(system=system, question_data=question_data, index=i, total_questions=total_questions)
         for i, question_data in enumerate(questions)
     ]
     
@@ -437,7 +450,7 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionD
             result = process_single_question(args)
             if result is None:
                 logger.error("Error processing question, skipping to next", 
-                            question=args[1]['question'])
+                            question=args.question_data['question'])
                 continue
             results.append(result)
     else:
