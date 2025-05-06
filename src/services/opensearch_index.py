@@ -4,6 +4,7 @@ Manages OpenSearch index connections and queries.
 Provides functionality for querying OpenSearch vector databases,
 handling authentication, and processing results.
 """
+
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ from services.live_rag_metadata import LiveRAGMetadata
 @dataclass
 class OpenSearchHit:
     """Represents a single hit from an OpenSearch query."""
+
     index: str
     id: str
     score: float
@@ -35,6 +37,7 @@ class OpenSearchHit:
 @dataclass
 class OpenSearchShardInfo:
     """Information about shards in an OpenSearch query."""
+
     total: int
     successful: int
     skipped: int
@@ -44,6 +47,7 @@ class OpenSearchShardInfo:
 @dataclass
 class OpenSearchTotalHits:
     """Information about total hits in an OpenSearch query."""
+
     value: int
     relation: str
 
@@ -55,6 +59,7 @@ class OpenSearchResult:
 
     Provides convenient access to hits and metadata.
     """
+
     took: int
     timed_out: bool
     shards: OpenSearchShardInfo
@@ -78,7 +83,7 @@ class OpenSearchResult:
             total=data.get("_shards", {}).get("total", 0),
             successful=data.get("_shards", {}).get("successful", 0),
             skipped=data.get("_shards", {}).get("skipped", 0),
-            failed=data.get("_shards", {}).get("failed", 0)
+            failed=data.get("_shards", {}).get("failed", 0),
         )
 
         # Extract hits information
@@ -88,24 +93,25 @@ class OpenSearchResult:
             if isinstance(hits_data["total"], dict):
                 total_hits = OpenSearchTotalHits(
                     value=hits_data["total"].get("value", 0),
-                    relation=hits_data["total"].get("relation", "eq")
+                    relation=hits_data["total"].get("relation", "eq"),
                 )
             else:
                 # Handle case where total is just a number
                 total_hits = OpenSearchTotalHits(
-                    value=hits_data["total"],
-                    relation="eq"
+                    value=hits_data["total"], relation="eq"
                 )
 
         # Extract individual hits
         hits = []
         for hit in hits_data.get("hits", []):
-            hits.append(OpenSearchHit(
-                index=hit.get("_index", ""),
-                id=hit.get("_id", ""),
-                score=hit.get("_score", 0.0),
-                source=LiveRAGMetadata.from_dict(hit.get("_source", {}))
-            ))
+            hits.append(
+                OpenSearchHit(
+                    index=hit.get("_index", ""),
+                    id=hit.get("_id", ""),
+                    score=hit.get("_score", 0.0),
+                    source=LiveRAGMetadata.from_dict(hit.get("_source", {})),
+                )
+            )
 
         return cls(
             took=data.get("took", 0),
@@ -113,7 +119,7 @@ class OpenSearchResult:
             shards=shards,
             hits=hits,
             total_hits=total_hits,
-            max_score=hits_data.get("max_score")
+            max_score=hits_data.get("max_score"),
         )
 
 
@@ -130,10 +136,7 @@ class OpenSearchService:
     # Class logger
     log = get_logger("OpenSearchService")
 
-    def __init__(
-        self,
-        index_name: str = "fineweb10bt-512-0w-e5-base-v2"
-    ):
+    def __init__(self, index_name: str = "fineweb10bt-512-0w-e5-base-v2"):
         """
         Initialize the OpenSearchService with configuration parameters.
 
@@ -143,19 +146,18 @@ class OpenSearchService:
         self.live_rag_aws_utils = LiveRAGAWSUtils()
         self.index_name = index_name
         self._opensearch_client = None
-        self.log.info("OpenSearchService initialized",
-                      index_name=index_name)
+        self.log.info("OpenSearchService initialized", index_name=index_name)
 
     def get_opensearch_client(self):
         """Get the OpenSearch client."""
         if self._opensearch_client is None:
-            self.log.debug("Connecting to OpenSearch",
-                           index_name=self.index_name)
+            self.log.debug("Connecting to OpenSearch", index_name=self.index_name)
             # Create credentials manually
             session = self.live_rag_aws_utils.get_session()
             credentials = session.get_credentials()
             auth = AWSV4SignerAuth(
-                credentials, region=self.live_rag_aws_utils.aws_region_name)
+                credentials, region=self.live_rag_aws_utils.aws_region_name
+            )
             host_name = self.live_rag_aws_utils.get_ssm_value("/opensearch/endpoint")
 
             self._opensearch_client = OpenSearch(
@@ -165,8 +167,7 @@ class OpenSearchService:
                 verify_certs=True,
                 connection_class=RequestsHttpConnection,
             )
-            self.log.debug("Connected to OpenSearch",
-                           index_name=self.index_name)
+            self.log.debug("Connected to OpenSearch", index_name=self.index_name)
 
         return self._opensearch_client
 
@@ -186,20 +187,16 @@ class OpenSearchService:
         client = self.get_opensearch_client()
         results = client.search(
             index=self.index_name,
-            body={"query": {"match": {"text": query}}, "size": top_k}
+            body={"query": {"match": {"text": query}}, "size": top_k},
         )
 
         match_count = len(results.get("hits", {}).get("hits", []))
-        self.log.debug("Query completed",
-                       matches_found=match_count, results=results)
+        self.log.debug("Query completed", matches_found=match_count, results=results)
 
         return OpenSearchResult.from_dict(results)
 
     def batch_query_opensearch(
-        self,
-        queries: List[str],
-        top_k: int = 10,
-        n_parallel: int = 10
+        self, queries: List[str], top_k: int = 10, n_parallel: int = 10
     ) -> List[OpenSearchResult]:
         """
         Query the OpenSearch index with multiple queries.
@@ -212,10 +209,12 @@ class OpenSearchService:
         Returns:
             List of structured OpenSearchResult objects
         """
-        self.log.debug("Batch querying OpenSearch",
-                       query_count=len(queries),
-                       top_k=top_k,
-                       n_parallel=n_parallel)
+        self.log.debug(
+            "Batch querying OpenSearch",
+            query_count=len(queries),
+            top_k=top_k,
+            n_parallel=n_parallel,
+        )
 
         client = self.get_opensearch_client()
         request = []
@@ -234,9 +233,11 @@ class OpenSearchService:
             request.extend([req_head, req_body])
 
         results = client.msearch(body=request)
-        self.log.debug("Batch query completed",
-                       result_count=len(results.get("responses", [])),
-                       results=results)
+        self.log.debug(
+            "Batch query completed",
+            result_count=len(results.get("responses", [])),
+            results=results,
+        )
 
         # Process the responses into structured objects
         structured_results = []
@@ -246,9 +247,12 @@ class OpenSearchService:
 
         return structured_results
 
-    def show_opensearch_results(self, result: OpenSearchResult,
-                                max_text_length: Optional[int] = 100,
-                                show_metadata_fields: Optional[List[str]] = None) -> None:
+    def show_opensearch_results(
+        self,
+        result: OpenSearchResult,
+        max_text_length: Optional[int] = 100,
+        show_metadata_fields: Optional[List[str]] = None,
+    ) -> None:
         """
         Helper method to display a single OpenSearch result.
 
@@ -269,12 +273,11 @@ class OpenSearchService:
             score_percent = hit.score_percentage()
 
             # Create a header with result number, ID and score
-            print(
-                f"🔍 RESULT #{i} | ID: {hit.id} | RELEVANCE: {score_percent}%")
+            print(f"🔍 RESULT #{i} | ID: {hit.id} | RELEVANCE: {score_percent}%")
 
             # Handle text content with optional truncation
-            if hit.text:
-                text = hit.text
+            if hasattr(hit.source, "text"):
+                text = hit.source.text
                 if max_text_length and len(text) > max_text_length:
                     display_text = text[:max_text_length] + "..."
                 else:
@@ -315,14 +318,18 @@ if __name__ == "__main__":
     print("\n=== Example 3: Showing Additional Metadata Fields ===")
     results = service.query_opensearch("What is a second brain?", top_k=2)
     service.show_opensearch_results(
-        results, max_text_length=100, show_metadata_fields=["source", "url", "title"])
+        results, max_text_length=100, show_metadata_fields=["source", "url", "title"]
+    )
 
     # Example 4: Batch query with multiple prompts
     print("\n=== Example 4: Batch Query Example ===")
     batch_results = service.batch_query_opensearch(
-        ["How does a brain work?", "Where is Paris?",
-            "What is artificial intelligence?"],
-        top_k=1
+        [
+            "How does a brain work?",
+            "Where is Paris?",
+            "What is artificial intelligence?",
+        ],
+        top_k=1,
     )
     for batch in batch_results:
         service.show_opensearch_results(batch, max_text_length=150)
