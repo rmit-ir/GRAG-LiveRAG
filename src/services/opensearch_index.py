@@ -422,7 +422,7 @@ if __name__ == "__main__":
     # Example: Get chunks for multiple documents
     print("\n=== Getting chunks by multiple doc IDs ===")
     # id got from https://huggingface.co/datasets/HuggingFaceFW/fineweb/viewer
-    doc_ids = ["<urn:uuid:e5829f7d-b944-4468-9573-61b7cb3078cc>"]
+    doc_ids = ["doc-<urn:uuid:3ac370c9-8a66-43d1-beae-0f7d3c23f78d>::chunk-0", "doc-<urn:uuid:58254756-1664-4f28-82cc-456768d65852>::chunk-3"]
     result = service.get_docs(doc_ids)
     for hit in result.hits:
         print(f"Document ID: {hit.id}")
