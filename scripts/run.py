@@ -345,14 +345,13 @@ def create_trec_run_file(results: List[RAGResult], output_file: str, system_name
         raise
 
 
-def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any], QuestionData, int, int]) -> Optional[RAGResult]:
+def process_single_question(args: Tuple[RAGSystemInterface, QuestionData, int, int]) -> Optional[RAGResult]:
     """
     Process a single question with the specified system.
     
     Args:
         args: Tuple containing:
-            - system_class: The system class to instantiate
-            - system_params: Parameters to pass to the system constructor
+            - system: The RAGSystem instance to use
             - question_data: Dictionary containing question data
             - index: Index of the question in the original list
             - total_questions: Total number of questions
@@ -360,12 +359,9 @@ def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any]
     Returns:
         RAGResult object or None if an error occurred
     """
-    system_class, system_params, question_data, i, total_questions = args
+    system, question_data, i, total_questions = args
     
     try:
-        # Initialize a new system instance for each question when in parallel mode
-        system = system_class(**system_params)
-        
         # Extract the question text
         question = question_data['question']
         
@@ -424,47 +420,29 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionD
                parallel=parallel,
                num_threads=num_threads)
     
+    # Create a single system instance to be reused across all questions
+    system = system_class(**system_params)
+    
+    # Prepare arguments for each question, passing the same system instance to all
+    question_args = [
+        (system, question_data, i, total_questions)
+        for i, question_data in enumerate(questions)
+    ]
+    
     results = []
     
     if num_threads <= 1:
         # Sequential processing
-        system = system_class(**system_params)
-        
-        for i, question_data in enumerate(questions):
-            try:
-                # Extract the question text
-                question = question_data['question']
-                
-                # Get qid from question data or generate one
-                qid = question_data.get('qid', str(i + 1))
-                
-                # Process the question
-                logger.info(f"Processing question {i+1}/{total_questions}", 
-                           question=question,
-                           qid=qid)
-                
-                result = system.process_question(question, qid=qid)
-                results.append(result)
-                
-                logger.info(f"Completed question {i+1}/{total_questions}", 
-                           question=question,
-                           answer_length=result.answer_words_count,
-                           processing_time_sec=to_sec(result.total_time_ms))
-            
-            except Exception as e:
-                logger.error(f"Error processing question {i+1}/{total_questions}", 
-                            question=question_data.get('question', 'Unknown'),
-                            error=str(e))
-                # Continue with the next question
+        for args in question_args:
+            result = process_single_question(args)
+            if result is None:
+                logger.error("Error processing question, skipping to next", 
+                            question=args[1]['question'])
+                continue
+            results.append(result)
     else:
         # Parallel processing
         logger.info(f"Using ThreadPoolExecutor with {num_threads} threads")
-        
-        # Prepare arguments for each question
-        question_args = [
-            (system_class, system_params, question_data, i, total_questions)
-            for i, question_data in enumerate(questions)
-        ]
         
         # Process questions in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
