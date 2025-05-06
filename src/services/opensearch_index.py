@@ -151,14 +151,16 @@ class OpenSearchService:
     def get_opensearch_client(self):
         """Get the OpenSearch client."""
         if self._opensearch_client is None:
-            self.log.debug("Connecting to OpenSearch", index_name=self.index_name)
+            self.log.debug("Connecting to OpenSearch",
+                           index_name=self.index_name)
             # Create credentials manually
             session = self.live_rag_aws_utils.get_session()
             credentials = session.get_credentials()
             auth = AWSV4SignerAuth(
                 credentials, region=self.live_rag_aws_utils.aws_region_name
             )
-            host_name = self.live_rag_aws_utils.get_ssm_value("/opensearch/endpoint")
+            host_name = self.live_rag_aws_utils.get_ssm_value(
+                "/opensearch/endpoint")
 
             self._opensearch_client = OpenSearch(
                 hosts=[{"host": host_name, "port": 443}],
@@ -167,7 +169,8 @@ class OpenSearchService:
                 verify_certs=True,
                 connection_class=RequestsHttpConnection,
             )
-            self.log.debug("Connected to OpenSearch", index_name=self.index_name)
+            self.log.debug("Connected to OpenSearch",
+                           index_name=self.index_name)
 
         return self._opensearch_client
 
@@ -191,7 +194,8 @@ class OpenSearchService:
         )
 
         match_count = len(results.get("hits", {}).get("hits", []))
-        self.log.debug("Query completed", matches_found=match_count, results=results)
+        self.log.debug("Query completed",
+                       matches_found=match_count, results=results)
 
         return OpenSearchResult.from_dict(results)
 
@@ -247,6 +251,116 @@ class OpenSearchService:
 
         return structured_results
 
+    def get_docs(self, doc_ids: List[str], size_per_doc: int = 20) -> OpenSearchResult:
+        """
+        Retrieve all chunks belonging to multiple documents by their doc_ids in a single request.
+
+        This method queries OpenSearch for chunks that match any of the provided document IDs,
+        allowing efficient retrieval of multiple documents and their chunks in one request.
+
+        Args:
+            doc_ids: List of document IDs to search for
+            size_per_doc: Maximum number of chunks to return per document (default: 100)
+
+        Returns:
+            Structured OpenSearchResult object containing all chunks for the requested documents
+        """
+        if not doc_ids:
+            self.log.warning("No document IDs provided")
+            return OpenSearchResult(took=0, timed_out=False,
+                                    shards=OpenSearchShardInfo(0, 0, 0, 0))
+
+        self.log.debug("Retrieving chunks for multiple documents",
+                       doc_count=len(doc_ids),
+                       doc_ids=doc_ids)
+
+        client = self.get_opensearch_client()
+
+        _doc_id_set = set()
+        doc_id_list = []
+        for doc_id in doc_ids:
+            if doc_id.startswith("doc-"):
+                # Transform doc-<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>::chunk-1
+                # to <urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>
+                doc_id = doc_id.split("::")[0][4:]
+            if doc_id not in _doc_id_set:
+                _doc_id_set.add(doc_id)
+                doc_id_list.append(doc_id)
+
+        # Calculate total size based on number of documents and size per document
+        total_size = len(_doc_id_set) * size_per_doc
+
+        # Use terms query to match multiple document IDs
+        results = client.search(
+            index=self.index_name,
+            body={
+                "query": {
+                    "terms": {
+                        "doc_id": doc_id_list
+                    }
+                },
+                "size": total_size
+            }
+        )
+
+        # Store combined hits in a dictionary keyed by doc_id
+        doc_hits_dict: Dict[str, OpenSearchHit] = {}
+
+        # Process all hits from OpenSearch
+        for hit in results.get("hits", {}).get("hits", []):
+            # Extract the document ID from the hit
+            source = hit.get("_source", {})
+            doc_id = source.get("doc_id", "")
+
+            if doc_id not in doc_hits_dict:
+                # Create a new hit with default metadata values that make sense for combined chunks
+                source_data = hit.get("_source", {})
+                doc_hits_dict[doc_id] = OpenSearchHit(
+                    index=hit.get("_index", ""),
+                    id=doc_id,
+                    score=hit.get("_score", 0.0),
+                    source=LiveRAGMetadata(
+                        chunk_order=0.0,  # Combined chunk, so default to 0.0
+                        doc_id=doc_id,
+                        is_first_chunk=True,
+                        is_last_chunk=True,
+                        text=source_data.get("text", ""),
+                        total_doc_chunks=1.0
+                    )
+                )
+            else:
+                # Append the chunk's text to the existing document's text
+                existing_hit = doc_hits_dict[doc_id]
+                chunk_text = source.get('text', None)
+                if chunk_text:
+                    existing_hit.source.text += f"\n\n{chunk_text.strip()}"
+
+        # Create the final list of hits in the same order as the input doc_ids
+        doc_hits_merged: List[OpenSearchHit] = []
+        for doc_id in doc_id_list:
+            if doc_id in doc_hits_dict:
+                doc_hits_merged.append(doc_hits_dict[doc_id])
+
+        return OpenSearchResult(
+            took=results.get("took", 0),
+            timed_out=results.get("timed_out", False),
+            shards=OpenSearchShardInfo(
+                total=results.get("_shards", {}).get("total", 0),
+                successful=results.get("_shards", {}).get("successful", 0),
+                skipped=results.get("_shards", {}).get("skipped", 0),
+                failed=results.get("_shards", {}).get("failed", 0)
+            ),
+            hits=doc_hits_merged,
+            total_hits=OpenSearchTotalHits(
+                value=results.get("hits", {}).get(
+                    "total", {}).get("value", 0),
+                relation=results.get("hits", {}).get(
+                    "total", {}).get("relation", "eq")
+            ),
+            # doesn't make sense, we are getting docs by id
+            max_score=0.0
+        )
+
     def show_opensearch_results(
         self,
         result: OpenSearchResult,
@@ -273,7 +387,8 @@ class OpenSearchService:
             score_percent = hit.score_percentage()
 
             # Create a header with result number, ID and score
-            print(f"🔍 RESULT #{i} | ID: {hit.id} | RELEVANCE: {score_percent}%")
+            print(
+                f"🔍 RESULT #{i} | ID: {hit.id} | RELEVANCE: {score_percent}%")
 
             # Handle text content with optional truncation
             if hasattr(hit.source, "text"):
@@ -304,32 +419,21 @@ if __name__ == "__main__":
     # Initialize the service
     service = OpenSearchService()
 
-    # Example 1: Basic usage with default parameters
-    print("=== Example 1: Basic OpenSearch Query Results ===")
-    results = service.query_opensearch("What is a second brain?", top_k=3)
-    service.show_opensearch_results(results)
+    # Example: Get chunks for multiple documents
+    print("\n=== Getting chunks by multiple doc IDs ===")
+    # id got from https://huggingface.co/datasets/HuggingFaceFW/fineweb/viewer
+    doc_ids = ["<urn:uuid:e5829f7d-b944-4468-9573-61b7cb3078cc>"]
+    result = service.get_docs(doc_ids)
+    for hit in result.hits:
+        print(f"Document ID: {hit.id}")
+        print("-" * 80)
+    # we can't find it in Opensearch index
 
-    # Example 2: With text truncation
-    print("\n=== Example 2: Truncated Text (100 characters) ===")
-    results = service.query_opensearch("What is a second brain?", top_k=2)
-    service.show_opensearch_results(results, max_text_length=100)
-
-    # Example 3: Display additional metadata fields if they exist
-    print("\n=== Example 3: Showing Additional Metadata Fields ===")
-    results = service.query_opensearch("What is a second brain?", top_k=2)
-    service.show_opensearch_results(
-        results, max_text_length=100, show_metadata_fields=["source", "url", "title"]
-    )
-
-    # Example 4: Batch query with multiple prompts
-    print("\n=== Example 4: Batch Query Example ===")
-    batch_results = service.batch_query_opensearch(
-        [
-            "How does a brain work?",
-            "Where is Paris?",
-            "What is artificial intelligence?",
-        ],
-        top_k=1,
-    )
-    for batch in batch_results:
-        service.show_opensearch_results(batch, max_text_length=150)
+    # Example: Get chunks for multiple documents
+    print("\n=== Getting chunks by multiple doc IDs ===")
+    doc_ids = ["<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>", "<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>", "<urn:uuid:32d4d757-52c6-4a26-a038-9eb45f29389a>", "<urn:uuid:4cb3fec5-366c-4f66-a78e-3390c4b8fcc2>", "<urn:uuid:56a0db0c-f984-4f4b-bad4-36e317725375>", "<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>",
+               "<urn:uuid:75931ce4-3825-4ef9-9673-b07dfc319d66>", "<urn:uuid:fc1fd791-7a5c-4d05-a1be-0e1bc92fd342>", "<urn:uuid:75931ce4-3825-4ef9-9673-b07dfc319d66>", "<urn:uuid:164b81ba-7a4b-449c-8232-41c809ef65db>", "<urn:uuid:57031123-cef2-4f51-adbe-4b6070379a8d>", "<urn:uuid:54236e11-cfe0-4870-8679-dcca522c66bc>", "<urn:uuid:380337c6-3957-4c63-9583-ba486d4994c1>"]
+    result = service.get_docs(doc_ids)
+    for hit in result.hits:
+        print(f"Document ID: {hit.id}")
+        print("-" * 80)

@@ -16,7 +16,7 @@ import pandas as pd
 from trectools import TrecRun, fusion
 from services.live_rag_metadata import LiveRAGMetadata
 from services.pinecone_index import PineconeMatch, PineconeService
-from services.opensearch_index import OpenSearchHit, OpenSearchService
+from services.opensearch_index import OpenSearchHit, OpenSearchResult, OpenSearchService
 
 # Load environment variables from .env file
 load_dotenv()
@@ -209,6 +209,10 @@ class QueryService:
                        original_hits_count=len(embedding_hits) + len(keyword_hits))
         return fused_hits
 
+    def get_docs(self, doc_ids: List[str], size_per_doc: int = 20) -> List[SearchHit]:
+        result = self.opensearch_service.get_docs(doc_ids, size_per_doc)
+        return [SearchHit.from_opensearch(hit) for hit in result.hits]
+
     def _hits_to_trecrun(self, query_id: str, hits: List[SearchHit], tag: str) -> TrecRun:
         """
         Helper function to convert SearchHit objects to trectools TrecRun object.
@@ -264,3 +268,15 @@ if __name__ == "__main__":
     # Print first row as a dictionary
     log.info("First row as dict:")
     log.info(fusion_df.iloc[0].to_dict())
+
+    # Example 5: Get documents by IDs
+    log.info("\n=== Example 5: Get Documents by IDs ===")
+    doc_ids = ["<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>", "<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>", "<urn:uuid:32d4d757-52c6-4a26-a038-9eb45f29389a>", "<urn:uuid:4cb3fec5-366c-4f66-a78e-3390c4b8fcc2>", "<urn:uuid:56a0db0c-f984-4f4b-bad4-36e317725375>", "<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>",
+               "<urn:uuid:75931ce4-3825-4ef9-9673-b07dfc319d66>", "<urn:uuid:fc1fd791-7a5c-4d05-a1be-0e1bc92fd342>", "<urn:uuid:75931ce4-3825-4ef9-9673-b07dfc319d66>", "<urn:uuid:164b81ba-7a4b-449c-8232-41c809ef65db>", "<urn:uuid:57031123-cef2-4f51-adbe-4b6070379a8d>", "<urn:uuid:54236e11-cfe0-4870-8679-dcca522c66bc>", "<urn:uuid:380337c6-3957-4c63-9583-ba486d4994c1>"]
+    log.info(f"Getting documents by IDs: {doc_ids}")
+    docs = service.get_docs(doc_ids, size_per_doc=5)
+    log.info(f"Found {len(docs)} documents by IDs")
+    for doc in docs:
+        log.info(f"Document ID: {doc.id}, Score: {doc.score}")
+        log.info(f"Document Full Text: \n{'-'*10}\n{doc.metadata.text}")
+    
