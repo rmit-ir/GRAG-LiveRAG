@@ -75,7 +75,7 @@ class GeneralOpenAIClient(LLMInterface):
             f"Initialized OpenAI-compatible client with model: {model_id}")
 
     # another level of retry, this wait time is increased exponentially
-    @retry(max_retries=5, retry_on=(APIError, APIConnectionError, RateLimitError))
+    @retry(max_retries=8, retry_on=(APIError, APIConnectionError, RateLimitError))
     def complete(self, prompt: str) -> str:
         """
         Generate a text completion for the given prompt.
@@ -130,7 +130,7 @@ class GeneralOpenAIClient(LLMInterface):
             raise
 
     # another level of retry, this wait time is increased exponentially
-    @retry(max_retries=5, retry_on=(APIError, APIConnectionError, RateLimitError))
+    @retry(max_retries=8, retry_on=(APIError, APIConnectionError, RateLimitError))
     def complete_chat(self, messages: List[Dict[str, str]]) -> Tuple[str, Any]:
         """
         Generate a response for a chat conversation.
