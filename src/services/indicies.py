@@ -262,6 +262,49 @@ class QueryService:
         return query_run
 
 
+def truncate_docs(docs: List[SearchHit], words_threshold: int = 20000) -> List[SearchHit]:
+    """
+    Truncate a list of SearchHit documents based on a word count threshold.
+    
+    Args:
+        docs: List of SearchHit objects
+        words_threshold: Maximum number of words to include (default: 20000)
+        
+    Returns:
+        Truncated list of SearchHit objects
+    """
+    if not docs:
+        return []
+    
+    logger = get_logger("truncate_documents")
+    truncated_docs = []
+    total_words = 0
+    
+    for doc in docs:
+        # Count words in the document text
+        doc_text = doc.metadata.text if hasattr(doc.metadata, "text") else ""
+        word_count = len(doc_text.split())
+        
+        # Check if adding this document would exceed the threshold
+        if total_words + word_count > words_threshold:
+            logger.debug("Word threshold reached", 
+                         total_words=total_words, 
+                         threshold=words_threshold,
+                         docs_included=len(truncated_docs),
+                         docs_total=len(docs))
+            break
+        
+        # Add document and update word count
+        truncated_docs.append(doc)
+        total_words += word_count
+    
+    logger.debug("Documents truncated", 
+                 original_count=len(docs), 
+                 truncated_count=len(truncated_docs),
+                 total_words=total_words)
+    return truncated_docs
+
+
 # Example usage
 if __name__ == "__main__":
     # Initialize the service
