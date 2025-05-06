@@ -70,6 +70,11 @@ class DevboxApp(EC2App):
 
     def post_deploy(self):
         logger.info(f"Devbox file browser: \nhttp://localhost:{self.local_port}/\n")
+        
+        # Log information about port mappings
+        logger.info("Port mappings:")
+        for mapping in self.port_mappings:
+            logger.info(f"\tlocalhost:{mapping['local_port']} -> remote:{mapping['remote_port']}")
 
 
 def create_devbox_app(local_port: Optional[int] = None, api_key: Optional[str] = None, params: Dict[str, str] = None) -> DevboxApp:
@@ -92,14 +97,29 @@ def create_devbox_app(local_port: Optional[int] = None, api_key: Optional[str] =
     setup_script = str(Path(__file__).parent / "setup_devbox.sh")
     launch_script = str(Path(__file__).parent / "launch_devbox.sh")
 
-    # Create the DevboxApp
+    # Create port mappings
+    port_mappings = [
+        {
+            "remote_port": 8000,  # FileBrowser port in Docker
+            "local_port": local_port,
+            "description": "Main application port"
+        }
+    ]
+    
+    # Add port mappings for 18000 to 18005
+    for port in range(18000, 18006):
+        port_mappings.append({
+            "remote_port": port,
+            "local_port": port,
+            "description": f"Port {port}"
+        })
+    
     app = DevboxApp(
         name="devbox",
         setup_script=setup_script,
         launch_script=launch_script,
         program_file=None,  # devbox doesn't need a program file
-        default_remote_port=8000,  # FileBrowser port in Docker
-        default_local_port=local_port,
+        port_mappings=port_mappings,
         log_command="sudo docker logs -f filebrowser",
         api_key=None,  # No API key needed for nginx
         test_request_function=None,  # No test request function as specified
