@@ -4,9 +4,6 @@ uv run scripts/run.py --system systems.basic_rag_2.rag_2.BasicRAG2 --help
 import re
 import time
 from typing import List
-from evaluators.evaluator_interface import test_evaluator
-from evaluators.llm_evaluator.llm_evaluator import LLMEvaluator
-from services.ds_data_morgana import QAPair
 from services.indicies import QueryService, SearchHit
 from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
@@ -16,13 +13,14 @@ from utils.logging_utils import get_logger
 
 
 class VanillaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5):
+    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5, expand_doc=False, expand_k=5):
         """
         Initialize the BasicRAG2.
 
         Args:
             llm_client: Client for the LLM. Options are 'ai71' or 'ec2_llm', default is 'ai71'.
             module_query_gen: Select this module for query generation. Options are 'with_number'|'without_number', default is 'with_number'.
+            expand_doc: If True, expand the chunks into full docs and preserve ranking. Default is False.
         """
         if llm_client == 'ai71':
             self.rag_llm_client = AI71Client()
@@ -40,6 +38,8 @@ class VanillaRAG(RAGSystemInterface):
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
         self.qgen_system_prompt = f"Generate a list of {k_queries} search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
         self.query_service = QueryService()
+        self.expand_doc = expand_doc
+        self.expand_k = int(expand_k)
 
     def _create_query_variants(self, question: str) -> List[str]:
         resp_text, _ = self.qgen_llm_client.complete_chat_once(
@@ -99,6 +99,16 @@ class VanillaRAG(RAGSystemInterface):
                 if doc.id not in doc_ids:
                     documents.append(doc)
                     doc_ids.add(doc.id)
+
+        # If expand_doc is True, expand the chunks using get_doc while preserving original ranking
+        if self.expand_doc:
+            ordered_doc_ids = [doc.id for doc in documents]
+            full_docs = self.query_service.get_docs(ordered_doc_ids)
+            documents = full_docs[:self.expand_k]  # temporary limit to k docs
+            self.logger.info(f"Expanded documents", question=question,
+                             taken_docs=len(documents),
+                             original_docs=len(full_docs),
+                             original_chunks=len(ordered_doc_ids))
 
         context = "Documents: \n\n"
         context += "\n\n".join([doc.metadata.text for doc in documents])

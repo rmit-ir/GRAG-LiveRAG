@@ -597,17 +597,14 @@ def main():
     
     # Set output prefix
     ds_name = args.input.split('/')[-1].split('.')[0]
-    output_prefix = args.output_prefix or args.system.split('.')[-1]
-    
-    # Define output filenames
-    ds_name = args.input.split('/')[-1].split('.')[0]
-    output_prefix = args.output_prefix or args.system.split('.')[-1]
     timestamp = datetime.now().strftime("%m%d%H%M")  # Format: MMDDHHMM
-    
-    # Standard format uses TSV and TREC
-    tsv_filename = f"{ds_name}.run{timestamp}.{output_prefix}.tsv"
-    excel_filename = f"{ds_name}.run{timestamp}.{output_prefix}.xlsx"
-    # trec_filename = f"{ds_name}_{output_prefix}.trec"
+    if args.output_prefix:
+        tsv_filename = f"{ds_name}.{args.output_prefix}.tsv"
+        excel_filename = f"{ds_name}.{args.output_prefix}.xlsx"
+    else:
+        sys_name = args.system.split('.')[-1]
+        tsv_filename = f"{ds_name}.run{timestamp}.{sys_name}.tsv"
+        excel_filename = f"{ds_name}.run{timestamp}.{sys_name}.xlsx"
     
     tsv_output_path = os.path.join(output_dir, tsv_filename)
     excel_output_path = os.path.join(output_dir, excel_filename)
