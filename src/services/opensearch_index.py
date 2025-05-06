@@ -5,122 +5,121 @@ Provides functionality for querying OpenSearch vector databases,
 handling authentication, and processing results.
 """
 
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional, NamedTuple
 from dotenv import load_dotenv
 from opensearchpy import OpenSearch, AWSV4SignerAuth, RequestsHttpConnection
 
 # Import local utilities
 from utils.logging_utils import get_logger
 from services.live_rag_aws_utils import LiveRAGAWSUtils
-from services.live_rag_metadata import LiveRAGMetadata
+from services.live_rag_metadata import LiveRAGMetadata, live_rag_metadata_from_dict
+from utils.namedtuple_utils import update_tuple
 
-# Dataclasses for structured OpenSearch results
 
-
-@dataclass
-class OpenSearchHit:
+class OpenSearchHit(NamedTuple):
     """Represents a single hit from an OpenSearch query."""
-
     index: str
     id: str
     score: float
     source: LiveRAGMetadata
 
-    def score_percentage(self) -> float:
-        """Return the score as a percentage (normalized for display)."""
-        # OpenSearch scores can vary widely, this is a simple normalization
-        # that may need adjustment based on your specific use case
-        return round(min(self.score * 5, 100), 2)
+
+def calculate_score_percentage(hit: OpenSearchHit) -> float:
+    """
+    Return the score as a percentage (normalized for display).
+    
+    Args:
+        hit: The OpenSearchHit to calculate score percentage for
+        
+    Returns:
+        float: Score as a percentage
+    """
+    # OpenSearch scores can vary widely, this is a simple normalization
+    # that may need adjustment based on your specific use case
+    return round(min(hit.score * 5, 100), 2)
 
 
-@dataclass
-class OpenSearchShardInfo:
+class OpenSearchShardInfo(NamedTuple):
     """Information about shards in an OpenSearch query."""
-
     total: int
     successful: int
     skipped: int
     failed: int
 
 
-@dataclass
-class OpenSearchTotalHits:
+class OpenSearchTotalHits(NamedTuple):
     """Information about total hits in an OpenSearch query."""
-
     value: int
     relation: str
 
 
-@dataclass
-class OpenSearchResult:
+class OpenSearchResult(NamedTuple):
     """
     Structured representation of an OpenSearch query result.
-
+    
     Provides convenient access to hits and metadata.
     """
-
     took: int
     timed_out: bool
     shards: OpenSearchShardInfo
-    hits: List[OpenSearchHit] = field(default_factory=list)
+    hits: List[OpenSearchHit] = []
     total_hits: Optional[OpenSearchTotalHits] = None
     max_score: Optional[float] = None
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "OpenSearchResult":
-        """
-        Create an OpenSearchResult instance from a raw OpenSearch response dictionary.
 
-        Args:
-            data: Raw OpenSearch response dictionary
-
-        Returns:
-            Structured OpenSearchResult object
-        """
-        # Extract shard information
-        shards = OpenSearchShardInfo(
-            total=data.get("_shards", {}).get("total", 0),
-            successful=data.get("_shards", {}).get("successful", 0),
-            skipped=data.get("_shards", {}).get("skipped", 0),
-            failed=data.get("_shards", {}).get("failed", 0),
-        )
-
-        # Extract hits information
-        hits_data = data.get("hits", {})
-        total_hits = None
-        if "total" in hits_data:
-            if isinstance(hits_data["total"], dict):
-                total_hits = OpenSearchTotalHits(
-                    value=hits_data["total"].get("value", 0),
-                    relation=hits_data["total"].get("relation", "eq"),
-                )
-            else:
-                # Handle case where total is just a number
-                total_hits = OpenSearchTotalHits(
-                    value=hits_data["total"], relation="eq"
-                )
-
-        # Extract individual hits
-        hits = []
-        for hit in hits_data.get("hits", []):
-            hits.append(
-                OpenSearchHit(
-                    index=hit.get("_index", ""),
-                    id=hit.get("_id", ""),
-                    score=hit.get("_score", 0.0),
-                    source=LiveRAGMetadata.from_dict(hit.get("_source", {})),
-                )
+def opensearch_result_from_dict(data: Dict[str, Any]) -> OpenSearchResult:
+    """
+    Create an OpenSearchResult instance from a raw OpenSearch response dictionary.
+    
+    Args:
+        data: Raw OpenSearch response dictionary
+        
+    Returns:
+        Structured OpenSearchResult object
+    """
+    # Extract shard information
+    shards = OpenSearchShardInfo(
+        total=data.get("_shards", {}).get("total", 0),
+        successful=data.get("_shards", {}).get("successful", 0),
+        skipped=data.get("_shards", {}).get("skipped", 0),
+        failed=data.get("_shards", {}).get("failed", 0),
+    )
+    
+    # Extract hits information
+    hits_data = data.get("hits", {})
+    total_hits = None
+    if "total" in hits_data:
+        if isinstance(hits_data["total"], dict):
+            total_hits = OpenSearchTotalHits(
+                value=hits_data["total"].get("value", 0),
+                relation=hits_data["total"].get("relation", "eq"),
             )
-
-        return cls(
-            took=data.get("took", 0),
-            timed_out=data.get("timed_out", False),
-            shards=shards,
-            hits=hits,
-            total_hits=total_hits,
-            max_score=hits_data.get("max_score"),
+        else:
+            # Handle case where total is just a number
+            total_hits = OpenSearchTotalHits(
+                value=hits_data["total"], relation="eq"
+            )
+    
+    # Extract individual hits
+    hits = []
+    for hit in hits_data.get("hits", []):
+        hits.append(
+            OpenSearchHit(
+                index=hit.get("_index", ""),
+                id=hit.get("_id", ""),
+                score=hit.get("_score", 0.0),
+                source=live_rag_metadata_from_dict(hit.get("_source", {})),
+            )
         )
+    
+    return OpenSearchResult(
+        took=data.get("took", 0),
+        timed_out=data.get("timed_out", False),
+        shards=shards,
+        hits=hits,
+        total_hits=total_hits,
+        max_score=hits_data.get("max_score"),
+    )
 
 
 # Load environment variables from .env file
@@ -197,7 +196,7 @@ class OpenSearchService:
         self.log.debug("Query completed",
                        matches_found=match_count, results=results)
 
-        return OpenSearchResult.from_dict(results)
+        return opensearch_result_from_dict(results)
 
     def batch_query_opensearch(
         self, queries: List[str], top_k: int = 10, n_parallel: int = 10
@@ -247,7 +246,7 @@ class OpenSearchService:
         structured_results = []
         if "responses" in results:
             for response in results["responses"]:
-                structured_results.append(OpenSearchResult.from_dict(response))
+                structured_results.append(opensearch_result_from_dict(response))
 
         return structured_results
 
@@ -268,7 +267,8 @@ class OpenSearchService:
         if not doc_ids:
             self.log.warning("No document IDs provided")
             return OpenSearchResult(took=0, timed_out=False,
-                                    shards=OpenSearchShardInfo(0, 0, 0, 0))
+                                    shards=OpenSearchShardInfo(0, 0, 0, 0),
+                                    hits=[])
 
         self.log.debug("Retrieving chunks for multiple documents",
                        doc_count=len(doc_ids),
@@ -329,11 +329,16 @@ class OpenSearchService:
                     )
                 )
             else:
-                # Append the chunk's text to the existing document's text
+                # Create a new hit with the combined text
                 existing_hit = doc_hits_dict[doc_id]
                 chunk_text = source.get('text', None)
                 if chunk_text:
-                    existing_hit.source.text += f"\n\n{chunk_text.strip()}"
+                    # Create a new metadata instance with the combined text
+                    new_text = existing_hit.source.text + f"\n\n{chunk_text.strip()}"
+                    old_src = existing_hit.source
+                    new_metadata = update_tuple(old_src, text=new_text)
+                    # Create a new hit with the updated metadata
+                    doc_hits_dict[doc_id] = update_tuple(existing_hit, source=new_metadata)
 
         # Create the final list of hits in the same order as the input doc_ids
         doc_hits_merged: List[OpenSearchHit] = []
@@ -384,7 +389,7 @@ class OpenSearchService:
         self.log.info(f"Show {len(hits)} results")
         for i, hit in enumerate(hits, 1):
             # Format the score as percentage
-            score_percent = hit.score_percentage()
+            score_percent = calculate_score_percentage(hit)
 
             # Create a header with result number, ID and score
             print(

@@ -4,8 +4,7 @@ Vector index service module for vector operations.
 This module imports specialized services for AWS utilities, embedding utilities,
 and specific vector database implementations (Pinecone and OpenSearch).
 """
-from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Dict, NamedTuple
 from dotenv import load_dotenv
 
 # Import utilities
@@ -16,44 +15,72 @@ import pandas as pd
 from trectools import TrecRun, fusion
 from services.live_rag_metadata import LiveRAGMetadata
 from services.pinecone_index import PineconeMatch, PineconeService
-from services.opensearch_index import OpenSearchHit, OpenSearchResult, OpenSearchService
+from services.opensearch_index import OpenSearchHit, OpenSearchService
 
 # Load environment variables from .env file
 load_dotenv()
 
 
-@dataclass
-class SearchHit:
+class SearchHit(NamedTuple):
+    """Represents a search hit from any search backend."""
     id: str
     score: float
     metadata: LiveRAGMetadata
     retrieval_model: str
 
-    @classmethod
-    def from_pinecone(cls, record: PineconeMatch) -> "SearchHit":
-        return cls(
-            id=record.id,
-            score=record.score,
-            metadata=record.metadata,
-            retrieval_model="embedding"
-        )
 
-    @classmethod
-    def from_opensearch(cls, record: OpenSearchHit) -> "SearchHit":
-        return cls(
-            id=record.id,
-            score=record.score,
-            metadata=record.source,
-            retrieval_model="BM25"
-        )
+def search_hit_from_pinecone(record: PineconeMatch) -> SearchHit:
+    """
+    Create a SearchHit from a PineconeMatch.
+    
+    Args:
+        record: PineconeMatch object
+        
+    Returns:
+        SearchHit object
+    """
+    return SearchHit(
+        id=record.id,
+        score=record.score,
+        metadata=record.metadata,
+        retrieval_model="embedding"
+    )
 
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "score": self.score,
-            "metadata": self.metadata.to_dict(),
-            "retrieval_model": self.retrieval_model
-        }
+
+def search_hit_from_opensearch(record: OpenSearchHit) -> SearchHit:
+    """
+    Create a SearchHit from an OpenSearchHit.
+    
+    Args:
+        record: OpenSearchHit object
+        
+    Returns:
+        SearchHit object
+    """
+    return SearchHit(
+        id=record.id,
+        score=record.score,
+        metadata=record.source,
+        retrieval_model="BM25"
+    )
+
+
+def search_hit_to_dict(hit: SearchHit) -> Dict:
+    """
+    Convert a SearchHit to a dictionary.
+    
+    Args:
+        hit: SearchHit object
+        
+    Returns:
+        Dictionary representation of the SearchHit
+    """
+    return {
+        "id": hit.id,
+        "score": hit.score,
+        "metadata": hit.metadata.to_dict(),
+        "retrieval_model": hit.retrieval_model
+    }
 
 
 class QueryService:
@@ -103,7 +130,7 @@ class QueryService:
                        query=query, k=k, namespace=namespace)
         results = self.pinecone_service.query_pinecone(
             query, top_k=k, namespace=namespace, **kwargs)
-        hits = [SearchHit.from_pinecone(match) for match in results.matches]
+        hits = [search_hit_from_pinecone(match) for match in results.matches]
         self.log.debug("Embedding query completed", hits_count=len(hits))
         return hits
 
@@ -126,7 +153,7 @@ class QueryService:
         self.log.debug("Starting keyword query", query=query, k=k)
         results = self.opensearch_service.query_opensearch(
             query, top_k=k, **kwargs)
-        hits = [SearchHit.from_opensearch(hit) for hit in results.hits]
+        hits = [search_hit_from_opensearch(hit) for hit in results.hits]
         self.log.debug("Keyword query completed", hits_count=len(hits))
         return hits
 
@@ -211,7 +238,7 @@ class QueryService:
 
     def get_docs(self, doc_ids: List[str], size_per_doc: int = 20) -> List[SearchHit]:
         result = self.opensearch_service.get_docs(doc_ids, size_per_doc)
-        return [SearchHit.from_opensearch(hit) for hit in result.hits]
+        return [search_hit_from_opensearch(hit) for hit in result.hits]
 
     def _hits_to_trecrun(self, query_id: str, hits: List[SearchHit], tag: str) -> TrecRun:
         """
@@ -279,4 +306,3 @@ if __name__ == "__main__":
     for doc in docs:
         log.info(f"Document ID: {doc.id}, Score: {doc.score}")
         log.info(f"Document Full Text: \n{'-'*10}\n{doc.metadata.text}")
-    
