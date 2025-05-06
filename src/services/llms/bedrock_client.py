@@ -4,12 +4,9 @@ Client for interacting with Amazon Bedrock API using LangChain.
 import os
 import json
 import time
-import math
-import random
 import boto3
-from typing import Dict, Tuple, Any, List, Optional, Callable
+from typing import Dict, Tuple, Any, List, Optional
 from datetime import datetime
-from functools import wraps
 from langchain_aws import ChatBedrock
 from langchain_core.messages import AIMessage
 from botocore.exceptions import BotoCoreError, ClientError
@@ -17,76 +14,10 @@ from services.llms.bedrock_pricing import BEDROCK_MODEL_PRICING
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
 from services.llms.llm_interface import LLMInterface
+from utils.retry_utils import retry
 
 # Initialize logger
 logger = get_logger("bedrock_client")
-
-
-def retry(
-    max_retries: int = 5,
-    base_delay: float = 1.0,
-    max_delay: float = 300.0,
-    jitter: bool = True
-):
-    """
-    Decorator that retries a function with exponential backoff when specific exceptions occur.
-    
-    Args:
-        max_retries (int): Maximum number of retry attempts
-        base_delay (float): Initial delay in seconds
-        max_delay (float): Maximum delay in seconds
-        jitter (bool): Whether to add random jitter to the delay
-        
-    Returns:
-        Callable: Decorated function with retry logic
-    """
-    def decorator(func: Callable):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            retries = 0
-            while True:
-                try:
-                    return func(*args, **kwargs)
-                except (BotoCoreError, ClientError) as e:
-                    # Don't retry if we've reached max retries
-                    if retries >= max_retries:
-                        logger.error(f"Max retries ({max_retries}) reached. Giving up.", error=str(e))
-                        raise
-                    
-                    # Don't retry for certain error types
-                    if isinstance(e, ClientError):
-                        error_code = e.response.get('Error', {}).get('Code', '')
-                        # Don't retry for authentication/authorization errors
-                        if error_code in ['AccessDeniedException', 'UnauthorizedException', 'ExpiredTokenException', 'ValidationException']:
-                            logger.error(f"Authentication error ({error_code}). Not retrying.", error=str(e))
-                            raise
-                    
-                    # Calculate delay using logarithmic curve: base_delay * log(2^(retries+1))
-                    # This gives a gentler curve than pure exponential backoff
-                    delay = min(base_delay * math.log(2 ** (retries + 1)), max_delay)
-                    
-                    # Add jitter if enabled (±20% randomness)
-                    if jitter:
-                        delay = delay * (0.8 + 0.4 * random.random())
-                    
-                    # Round to 2 decimal places for cleaner logs
-                    delay = round(delay, 2)
-                    
-                    retries += 1
-                    logger.warning(
-                        f"API call failed. Retrying in {delay}s (attempt {retries}/{max_retries})",
-                        error=str(e),
-                        retry_attempt=retries,
-                        max_retries=max_retries,
-                        delay_seconds=delay
-                    )
-                    time.sleep(delay)
-                except Exception as e:
-                    # Don't retry for other exceptions
-                    logger.error(f"Unexpected error: {str(e)}")
-                    raise
-        return wrapper
-    return decorator
 
 
 class BedrockClient(LLMInterface):
@@ -166,7 +97,7 @@ class BedrockClient(LLMInterface):
             "Please use complete_chat_once instead."
         )
 
-    @retry(max_retries=8, base_delay=1.0, max_delay=300.0)
+    @retry(max_retries=8, base_delay=1.0, max_delay=300.0, retry_on=(BotoCoreError, ClientError))
     def complete_chat(self, messages: List[Dict[str, str]]) -> Tuple[str, AIMessage]:
         """
         Generate a response for a chat conversation.
