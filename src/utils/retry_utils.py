@@ -59,13 +59,13 @@ def retry(
                         "unauthorized" in error_str or 
                         "permission" in error_str or
                         "access denied" in error_str or
+                        "expiredtoken" in error_str or
                         "validation" in error_str):
                         func_logger.error(f"Authentication/validation error. Not retrying.", error=str(e))
                         raise
                     
-                    # Calculate delay using logarithmic curve: base_delay * log(2^(retries+1))
-                    # This gives a gentler curve than pure exponential backoff
-                    delay = min(base_delay * math.log(2 ** (retries + 1)), max_delay)
+                    # Calculate delay using exponential backoff: base_delay * (2^retries)
+                    delay = min(base_delay * (2 ** retries), max_delay)
                     
                     # Add jitter if enabled (±20% randomness)
                     if jitter:

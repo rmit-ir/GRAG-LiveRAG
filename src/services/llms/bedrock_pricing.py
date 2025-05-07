@@ -207,3 +207,11 @@ BEDROCK_MODEL_PRICING = {
         "output_price": 15.00
     }
 }
+
+# Use cross-regional inference model id: us.meta.llama3-3-70b-instruct-v1:0
+# see https://us-west-2.console.aws.amazon.com/bedrock/home?region=us-west-2#/inference-profiles
+# add us. to all model ids as new models
+for model_id in list(BEDROCK_MODEL_PRICING.keys()):
+    if not model_id.startswith("us."):
+        new_model_id = "us." + model_id
+        BEDROCK_MODEL_PRICING[new_model_id] = BEDROCK_MODEL_PRICING[model_id]
