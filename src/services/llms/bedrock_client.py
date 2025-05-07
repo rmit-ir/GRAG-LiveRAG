@@ -77,7 +77,7 @@ class BedrockClient(LLMInterface):
 
         # Store model ID for reference
         self.model_id = model_id
-        logger.debug(f"Initialized Bedrock client with model: {model_id}")
+        logger.info(f"Initialized Bedrock client with model: {model_id}")
 
     def complete(self, prompt: str) -> str:
         """
@@ -246,8 +246,14 @@ class BedrockClient(LLMInterface):
             Cost in USD
         """
         # Get pricing for the model
-        pricing = BEDROCK_MODEL_PRICING.get(
-            self.model_id, BEDROCK_MODEL_PRICING["default"])
+        pricing = BEDROCK_MODEL_PRICING.get(self.model_id, None)
+        if not pricing:
+            logger.warning(
+                f"Model {self.model_id} not found in pricing data. Using default pricing.",
+                model_id=self.model_id, pricing=BEDROCK_MODEL_PRICING["default"])
+            pricing = BEDROCK_MODEL_PRICING["default"]
+        else:
+            logger.info(f"Using pricing for model {self.model_id}", pricing=pricing)
 
         # Extract token counts
         input_tokens = token_usage.get("input_tokens", 0)

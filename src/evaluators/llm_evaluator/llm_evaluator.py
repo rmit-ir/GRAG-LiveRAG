@@ -419,7 +419,8 @@ class LLMEvaluator(EvaluatorInterface):
                 result,
                 references,
                 num_lowest_relevance=self.num_lowest_relevance,
-                num_lowest_faithfulness=self.num_lowest_faithfulness
+                num_lowest_faithfulness=self.num_lowest_faithfulness,
+                model_id=self.client.model_id,
             )
 
             # Add system analysis to the evaluation result
