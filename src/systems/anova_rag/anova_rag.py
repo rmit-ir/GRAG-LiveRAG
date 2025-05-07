@@ -14,7 +14,7 @@ import argparse
 
 
 class AnovaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5, sanitize_query: bool = False,first_step_ranker = 'bm25+embedding',num_first_retrieved_documents=3, expand_doc=False, expand_words_limit=15_000):
+    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5, sanitize_query: bool = False, first_step_ranker = 'bm25+embedding_model', num_first_retrieved_documents=3, expand_doc=False, expand_words_limit=15_000):
         """
         Initialize the AnovaRAG.
 
@@ -39,7 +39,7 @@ class AnovaRAG(RAGSystemInterface):
         self.k_queries = int(k_queries)
         self.sanitize_query = sanitize_query
         self.first_step_ranker = first_step_ranker
-        self.num_first_retrieved_documents = num_first_retrieved_documents
+        self.num_first_retrieved_documents = int(num_first_retrieved_documents)
 
         # Store system prompts
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
@@ -104,16 +104,17 @@ class AnovaRAG(RAGSystemInterface):
         documents: List[SearchHit] = []
         doc_ids = set()
         for query in queries:
-            if self.first_step_ranker == 'bm25+embedding':
+            if self.first_step_ranker == 'bm25+embedding_model':
                 embed_results = self.query_service.query_embedding(query, k=self.num_first_retrieved_documents)
                 keyword_results = self.query_service.query_keywords(query, k=self.num_first_retrieved_documents)
                 results = embed_results + keyword_results
+            
             elif self.first_step_ranker == 'bm25':
-                results = self.query_service.query_bm25(query, k=self.num_first_retrieved_documents)
-            elif self.first_step_ranker == 'embedding':
+                results = self.query_service.query_keywords(query, k=self.num_first_retrieved_documents)
+            elif self.first_step_ranker == 'embedding_model':
                 results = self.query_service.query_embedding(query, k=self.num_first_retrieved_documents)
             else:
-                raise ValueError(f"Invalid first step ranker: {self.first_step_ranker}")
+                raise ValueError(f"Invalid first step ranker: {self.first_step_ranker}. Options are 'bm25+embedding_model', 'bm25', or 'embedding_model'.")
             
             for doc in results:
                 if doc.id not in doc_ids:
