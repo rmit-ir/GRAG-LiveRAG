@@ -322,7 +322,7 @@ class LLMEvaluator(EvaluatorInterface):
 
         return metrics, total_cost if cost_available else None
 
-    def _log_progress(self, completed: int, total: int, elapsed_time: float, last_log_time: float, log_interval: float = 5) -> float:
+    def _log_progress(self, completed: int, total: int, elapsed_time: float) -> float:
         """
         Log progress information at regular intervals.
 
@@ -337,29 +337,26 @@ class LLMEvaluator(EvaluatorInterface):
             Updated last_log_time if logging occurred, otherwise the original last_log_time
         """
         current_time = time.time()
-        if current_time - last_log_time >= log_interval:
-            # Calculate estimated time remaining
-            if completed > 0:
-                avg_time_per_item = elapsed_time / completed
-                remaining_items = total - completed
-                estimated_time_remaining = avg_time_per_item * remaining_items
-                
-                self.logger.info(
-                    f"Evaluation progress",
-                    completed=f"{completed}/{total}",
-                    elapsed_time=round(elapsed_time, 3),
-                    estimated_remaining=round(estimated_time_remaining, 3)
-                )
-            else:
-                self.logger.info(
-                    f"Evaluation progress",
-                    completed=f"{completed}/{total}",
-                    elapsed_time=round(elapsed_time, 3)
-                )
+        # Calculate estimated time remaining
+        if completed > 0:
+            avg_time_per_item = elapsed_time / completed
+            remaining_items = total - completed
+            estimated_time_remaining = avg_time_per_item * remaining_items
             
-            return current_time
+            self.logger.info(
+                f"Evaluation progress",
+                completed=f"{completed}/{total}",
+                elapsed_time=round(elapsed_time, 3),
+                estimated_remaining=round(estimated_time_remaining, 3)
+            )
+        else:
+            self.logger.info(
+                f"Evaluation progress",
+                completed=f"{completed}/{total}",
+                elapsed_time=round(elapsed_time, 3)
+            )
         
-        return last_log_time
+        return current_time
 
     def _evaluate_with_threads(self, rag_results: List[RAGResult], references_by_qid: Dict[str, QAPair]) -> List[EvaluationResultRow]:
         """
@@ -403,8 +400,7 @@ class LLMEvaluator(EvaluatorInterface):
                 
                 # Log progress at intervals
                 last_log_time = self._log_progress(
-                    completed_count, total_count, elapsed_time, last_log_time
-                )
+                    completed_count, total_count, elapsed_time)
 
             return row
 

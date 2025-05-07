@@ -253,7 +253,7 @@ class BedrockClient(LLMInterface):
                 model_id=self.model_id, pricing=BEDROCK_MODEL_PRICING["default"])
             pricing = BEDROCK_MODEL_PRICING["default"]
         else:
-            logger.info(f"Using pricing for model {self.model_id}", pricing=pricing)
+            logger.info(f"Using pre-defined pricing", model_id=self.model_id, pricing=pricing)
 
         # Extract token counts
         input_tokens = token_usage.get("input_tokens", 0)
