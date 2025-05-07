@@ -141,7 +141,9 @@ class AnovaRAG(RAGSystemInterface):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser(description="AnovaRAG system")
+    
     parser.add_argument("--k_queries", type=int, default=5, help="Number of query variants to generate")
+    
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -150,8 +152,10 @@ if __name__ == "__main__":
     args = parse_args()
     k_quires = args.k_queries
     
+    
     # Create an instance of the AnovaRAG system
     rag_system = AnovaRAG(k_queries=k_quires)
+    
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
         qid=1
