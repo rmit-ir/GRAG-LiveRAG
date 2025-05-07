@@ -13,7 +13,7 @@ from utils.logging_utils import get_logger
 
 
 class AnovaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5, expand_doc=False, expand_words_limit=15_000):
+    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5, remove_surroundings : bool = False, expand_doc=False, expand_words_limit=15_000):
         """
         Initialize the AnovaRAG.
 
@@ -33,7 +33,10 @@ class AnovaRAG(RAGSystemInterface):
 
         # if module_query_gen == 'with_num':
         self.logger = get_logger('anova_rag')
+        
+        # Controllers set up
         self.k_queries = int(k_queries)
+        self.remove_surroundings = remove_surroundings
 
         # Store system prompts
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
@@ -56,7 +59,11 @@ class AnovaRAG(RAGSystemInterface):
             query_text = resp_text
 
         queries = query_text.split("\n")
-        queries = [self._sanitize_query(query) for query in queries]
+        
+        # Remove surrounding quotes, numbers, and prefixes
+        if self.remove_surroundings:
+            queries = [self._sanitize_query(query) for query in queries]
+            
         if len(queries) > self.k_queries:
             self.logger.warning(
                 f"Number of generated queries ({len(queries)}) exceeds the limit ({self.k_queries}). Truncating.",
@@ -142,7 +149,8 @@ def parse_args():
     import argparse
     parser = argparse.ArgumentParser(description="AnovaRAG system")
     
-    parser.add_argument("--k_queries", type=int, default=5, help="Number of query variants to generate")
+    parser.add_argument("--k_queries", type=int, default=5, help="Number of query variants to generate (default: 5)")
+    parser.add_argument("--remove_surroundings", type=bool, default=False, help="Remove surrounding quotes, numbers, prefix from queries (default: False)")
     
     return parser.parse_args()
 
@@ -151,10 +159,11 @@ if __name__ == "__main__":
     # Parse command-line arguments
     args = parse_args()
     k_quires = args.k_queries
+    remove_surroundings = args.remove_surroundings
     
     
     # Create an instance of the AnovaRAG system
-    rag_system = AnovaRAG(k_queries=k_quires)
+    rag_system = AnovaRAG(k_queries=k_quires, remove_surroundings=remove_surroundings)
     
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
