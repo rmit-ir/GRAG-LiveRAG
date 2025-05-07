@@ -24,7 +24,7 @@ import time
 import argparse
 import importlib
 import concurrent.futures
-from typing import List, Dict, Any, Type, Optional, Tuple, TypedDict
+from typing import List, Dict, Any, Type, Optional, TypedDict, NamedTuple
 import jsonlines
 import pandas as pd
 from dotenv import load_dotenv
@@ -345,14 +345,23 @@ def create_trec_run_file(results: List[RAGResult], output_file: str, system_name
         raise
 
 
-def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any], QuestionData, int, int]) -> Optional[RAGResult]:
+class QuestionProcessingArgs(NamedTuple):
+    """
+    Named tuple for question processing arguments.
+    """
+    system: RAGSystemInterface
+    question_data: QuestionData
+    index: int
+    total_questions: int
+
+
+def process_single_question(args: QuestionProcessingArgs) -> Optional[RAGResult]:
     """
     Process a single question with the specified system.
     
     Args:
-        args: Tuple containing:
-            - system_class: The system class to instantiate
-            - system_params: Parameters to pass to the system constructor
+        args: Named tuple containing:
+            - system: The RAGSystem instance to use
             - question_data: Dictionary containing question data
             - index: Index of the question in the original list
             - total_questions: Total number of questions
@@ -360,12 +369,12 @@ def process_single_question(args: Tuple[Type[RAGSystemInterface], Dict[str, Any]
     Returns:
         RAGResult object or None if an error occurred
     """
-    system_class, system_params, question_data, i, total_questions = args
+    system = args.system
+    question_data = args.question_data
+    i = args.index
+    total_questions = args.total_questions
     
     try:
-        # Initialize a new system instance for each question when in parallel mode
-        system = system_class(**system_params)
-        
         # Extract the question text
         question = question_data['question']
         
@@ -424,47 +433,29 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionD
                parallel=parallel,
                num_threads=num_threads)
     
+    # Create a single system instance to be reused across all questions
+    system = system_class(**system_params)
+    
+    # Prepare arguments for each question, passing the same system instance to all
+    question_args = [
+        QuestionProcessingArgs(system=system, question_data=question_data, index=i, total_questions=total_questions)
+        for i, question_data in enumerate(questions)
+    ]
+    
     results = []
     
     if num_threads <= 1:
         # Sequential processing
-        system = system_class(**system_params)
-        
-        for i, question_data in enumerate(questions):
-            try:
-                # Extract the question text
-                question = question_data['question']
-                
-                # Get qid from question data or generate one
-                qid = question_data.get('qid', str(i + 1))
-                
-                # Process the question
-                logger.info(f"Processing question {i+1}/{total_questions}", 
-                           question=question,
-                           qid=qid)
-                
-                result = system.process_question(question, qid=qid)
-                results.append(result)
-                
-                logger.info(f"Completed question {i+1}/{total_questions}", 
-                           question=question,
-                           answer_length=result.answer_words_count,
-                           processing_time_sec=to_sec(result.total_time_ms))
-            
-            except Exception as e:
-                logger.error(f"Error processing question {i+1}/{total_questions}", 
-                            question=question_data.get('question', 'Unknown'),
-                            error=str(e))
-                # Continue with the next question
+        for args in question_args:
+            result = process_single_question(args)
+            if result is None:
+                logger.error("Error processing question, skipping to next", 
+                            question=args.question_data['question'])
+                continue
+            results.append(result)
     else:
         # Parallel processing
         logger.info(f"Using ThreadPoolExecutor with {num_threads} threads")
-        
-        # Prepare arguments for each question
-        question_args = [
-            (system_class, system_params, question_data, i, total_questions)
-            for i, question_data in enumerate(questions)
-        ]
         
         # Process questions in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
@@ -606,17 +597,14 @@ def main():
     
     # Set output prefix
     ds_name = args.input.split('/')[-1].split('.')[0]
-    output_prefix = args.output_prefix or args.system.split('.')[-1]
-    
-    # Define output filenames
-    ds_name = args.input.split('/')[-1].split('.')[0]
-    output_prefix = args.output_prefix or args.system.split('.')[-1]
     timestamp = datetime.now().strftime("%m%d%H%M")  # Format: MMDDHHMM
-    
-    # Standard format uses TSV and TREC
-    tsv_filename = f"{ds_name}.run{timestamp}.{output_prefix}.tsv"
-    excel_filename = f"{ds_name}.run{timestamp}.{output_prefix}.xlsx"
-    # trec_filename = f"{ds_name}_{output_prefix}.trec"
+    if args.output_prefix:
+        tsv_filename = f"{ds_name}.{args.output_prefix}.tsv"
+        excel_filename = f"{ds_name}.{args.output_prefix}.xlsx"
+    else:
+        sys_name = args.system.split('.')[-1]
+        tsv_filename = f"{ds_name}.run{timestamp}.{sys_name}.tsv"
+        excel_filename = f"{ds_name}.run{timestamp}.{sys_name}.xlsx"
     
     tsv_output_path = os.path.join(output_dir, tsv_filename)
     excel_output_path = os.path.join(output_dir, excel_filename)

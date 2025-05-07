@@ -7,6 +7,7 @@ from trectools import TrecRun, fusion
 
 from utils.logging_utils import get_logger
 from services.indicies import SearchHit
+from utils.namedtuple_utils import update_tuple
 
 logger = get_logger("fusion_utils")
 
@@ -64,12 +65,7 @@ def rrf_fusion(hits_list: List[List[SearchHit]], max_documents: int, query_id: s
             # Use the original SearchHit object but update the score
             hit = hit_map[doc_id]
             # Create a new SearchHit with the fused score
-            result.append(SearchHit(
-                id=hit.id,
-                score=row['score'],
-                metadata=hit.metadata,
-                retrieval_model=hit.retrieval_model
-            ))
+            result.append(update_tuple(hit, score=row['score']))
     
     logger.debug("Fusion completed", result_count=len(result))
     return result

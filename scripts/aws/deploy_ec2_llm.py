@@ -11,7 +11,7 @@ from services.aws_costs import get_ec2_price
 from session_manager import SessionManager
 from utils.query_utils import generate_short_id
 from utils.logging_utils import get_logger
-from ec2_app import EC2App, create_vllm_app, create_mini_tgi_app
+from ec2_app import EC2App
 import os
 import sys
 import time
@@ -337,6 +337,11 @@ class EC2Deployer:
             logger.info(f"Stack creation complete: {self.stack_name}")
             logger.info(f"Instance ID: {self.instance_id}")
             logger.info(f"API Key: {self.app.api_key}")
+            
+            # Print blue SSM connection command for devbox app
+            if self.app.name == "devbox":
+                ssm_command = f"\033[94maws ssm start-session --target {self.instance_id} --region {self.region_name}\033[0m"
+                logger.info(f"Connect to devbox using: \n{ssm_command}\n")
 
             return {
                 'stack_name': self.stack_name,
@@ -1402,7 +1407,7 @@ if __name__ == "__main__":
     command_desc = """Deploy an application on EC2 using CloudFormation.
 Before deploying EC2 app stack, make sure that your environment variables (or .env) include RACE_AWS_ aws access keys."""
     parser = argparse.ArgumentParser(description=command_desc)
-    parser.add_argument("--app-name", type=str, choices=["vllm", "mini-tgi"], required=True,
+    parser.add_argument("--app-name", type=str, choices=["vllm", "mini-tgi", "devbox"], required=True,
                         help="Name of application to deploy (REQUIRED)")
     parser.add_argument("--model-id", type=str, default="tiiuae/falcon3-10b-instruct",
                         help="Hugging Face model ID to deploy (for vLLM)")
@@ -1416,12 +1421,10 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
                         help="Local port for port forwarding (uses app's default if not specified)")
     parser.add_argument("--ami-id", type=str, default="ami-04f4302ff68e424cf",
                         help="AMI ID to use for the EC2 instance (Deep Learning OSS Nvidia Driver AMI)")
-    parser.add_argument("--stage-name", type=str, default="prod",
-                        help="Stage name for deployment (used for resource naming)")
-    parser.add_argument("--port-forward", action="store_true", default=True,
-                        help="Set up port forwarding to the EC2 instance")
     parser.add_argument("--test", action="store_true", default=True,
                         help="Send a test request to the app after deployment")
+    parser.add_argument("--port-forward", action="store_true", default=True,
+                        help="Set up port forwarding to the EC2 instance")
     parser.add_argument("--wait-time", type=int, default=1800,
                         help="Timeout for retrying app service after it starts until it's fully ready")
     parser.add_argument("--id", type=str, default=None,
@@ -1438,6 +1441,18 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
                         help="Connect to an existing EC2 instance with the specified instance ID, skipping deployment and setup steps")
 
     args = parser.parse_args()
+    
+    # Create the appropriate EC2App based on the app name
+    if args.app_name == "vllm":
+        from apps.vllm.vllm_app import create_vllm_app
+    elif args.app_name == "mini-tgi":
+        from apps.mini_tgi.mini_tgi_app import create_mini_tgi_app
+    elif args.app_name == "devbox":
+        from apps.devbox.devbox_app import create_devbox_app
+    else:
+        logger.error(f"Unsupported app name: {args.app_name}")
+        sys.exit(1)
+
 
     # Handle the --stop argument if provided (if provided but without id, it will be all, if not provided, it will be None)
     if args.stop is not None:
@@ -1496,9 +1511,8 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
         app = create_vllm_app(local_port=args.local_port, params=params)
     elif args.app_name == "mini-tgi":
         app = create_mini_tgi_app(local_port=args.local_port, params=params)
-    else:
-        logger.error(f"Unsupported app name: {args.app_name}")
-        sys.exit(1)
+    elif args.app_name == "devbox":
+        app = create_devbox_app(local_port=args.local_port, params=params)
 
     # Create deployer using context manager pattern
     deployer = None  # Initialize deployer variable for signal handler
@@ -1570,6 +1584,8 @@ Before deploying EC2 app stack, make sure that your environment variables (or .e
                     
                     # Send a test request to the app
                     deployer.test_app()
+
+            app.post_deploy()
 
             # Keep the main thread running until interrupted
             try:

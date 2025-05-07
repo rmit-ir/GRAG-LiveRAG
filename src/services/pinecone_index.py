@@ -7,71 +7,67 @@ handling authentication, and processing results.
 from utils.logging_utils import get_logger
 from services.embedding_utils import EmbeddingUtils
 from services.live_rag_aws_utils import LiveRAGAWSUtils
-from services.live_rag_metadata import LiveRAGMetadata
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field
+from services.live_rag_metadata import LiveRAGMetadata, live_rag_metadata_from_dict
+from typing import List, Dict, Any, Optional, NamedTuple
 from multiprocessing.pool import ThreadPool
 from dotenv import load_dotenv
 from pinecone import Pinecone
 
 
-@dataclass
-class PineconeMatch:
+class PineconeMatch(NamedTuple):
     """Represents a single match from a Pinecone query."""
     id: str
     score: float
     metadata: LiveRAGMetadata
-    values: List[float] = field(default_factory=list)
+    values: List[float] = []
 
 
-@dataclass
-class PineconeUsage:
+class PineconeUsage(NamedTuple):
     """Represents usage information from a Pinecone query."""
     read_units: int
 
 
-@dataclass
-class PineconeResult:
+class PineconeResult(NamedTuple):
     """
     Structured representation of a Pinecone query result.
 
     Provides convenient access to matches and metadata.
     """
-    matches: List[PineconeMatch] = field(default_factory=list)
+    matches: List[PineconeMatch] = []
     namespace: str = "default"
     usage: Optional[PineconeUsage] = None
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PineconeResult":
-        """
-        Create a PineconeResult instance from a raw Pinecone response dictionary.
 
-        Args:
-            data: Raw Pinecone response dictionary
+def pinecone_result_from_dict(data: Dict[str, Any]) -> PineconeResult:
+    """
+    Create a PineconeResult instance from a raw Pinecone response dictionary.
 
-        Returns:
-            Structured PineconeResult object
-        """
-        matches = [
-            PineconeMatch(
-                id=match["id"],
-                score=match["score"],
-                metadata=LiveRAGMetadata.from_dict(match.get("metadata", {})),
-                values=match.get("values", [])
-            )
-            for match in data.get("matches", [])
-        ]
+    Args:
+        data: Raw Pinecone response dictionary
 
-        usage = None
-        if "usage" in data:
-            usage = PineconeUsage(
-                read_units=data["usage"].get("read_units", 0))
-
-        return cls(
-            matches=matches,
-            namespace=data.get("namespace", "default"),
-            usage=usage
+    Returns:
+        Structured PineconeResult object
+    """
+    matches = [
+        PineconeMatch(
+            id=match["id"],
+            score=match["score"],
+                metadata=live_rag_metadata_from_dict(match.get("metadata", {})),
+            values=match.get("values", [])
         )
+        for match in data.get("matches", [])
+    ]
+
+    usage = None
+    if "usage" in data:
+        usage = PineconeUsage(
+            read_units=data["usage"].get("read_units", 0))
+
+    return PineconeResult(
+        matches=matches,
+        namespace=data.get("namespace", "default"),
+        usage=usage
+    )
 
 
 # Load environment variables from .env file
@@ -157,7 +153,7 @@ class PineconeService:
         self.log.debug("Query completed",
                        matches_found=match_count, results=results)
 
-        return PineconeResult.from_dict(results)
+        return pinecone_result_from_dict(results)
 
     def batch_query_pinecone(
         self,
@@ -203,7 +199,7 @@ class PineconeService:
 
         self.log.debug("Batch query completed",
                        result_count=len(results), results=results)
-        return [PineconeResult.from_dict(result) for result in results]
+        return [pinecone_result_from_dict(result) for result in results]
 
     def show_pinecone_results(self, results: PineconeResult, max_text_length: Optional[int] = 100,
                               show_metadata_fields: Optional[List[str]] = None) -> None:

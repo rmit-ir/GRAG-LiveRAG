@@ -12,6 +12,7 @@ from rerankers.reranker_interface import RerankerInterface
 from services.llms.llm_interface import LLMInterface
 from utils.logging_utils import get_logger
 from services.indicies import SearchHit
+from utils.namedtuple_utils import update_tuple
 
 
 class SetwiseReranker(RerankerInterface):
@@ -131,23 +132,31 @@ class SetwiseReranker(RerankerInterface):
         """
         truncated_hits = []
         for hit in hits:
-            # Create a copy of the hit to avoid modifying the original
-            truncated_hit = SearchHit(
-                id=hit.id,
-                score=hit.score,
-                metadata=hit.metadata,
-                retrieval_model=hit.retrieval_model
-            )
-
             # Simple word-based truncation (approximation of tokens)
             words = hit.metadata.text.split()
             if len(words) > self.max_tokens_per_doc:
                 truncated_text = " ".join(
                     words[:self.max_tokens_per_doc]) + "..."
                 # Create a new metadata object with truncated text
-                # This is a bit hacky but avoids modifying the original metadata
-                truncated_hit.metadata.text = truncated_text
-
+                new_metadata = type(hit.metadata)(
+                    chunk_order=hit.metadata.chunk_order,
+                    doc_id=hit.metadata.doc_id,
+                    is_first_chunk=hit.metadata.is_first_chunk,
+                    is_last_chunk=hit.metadata.is_last_chunk,
+                    text=truncated_text,
+                    total_doc_chunks=hit.metadata.total_doc_chunks
+                )
+                # Create a new hit with the new metadata
+                truncated_hit = SearchHit(
+                    id=hit.id,
+                    score=hit.score,
+                    metadata=new_metadata,
+                    retrieval_model=hit.retrieval_model
+                )
+            else:
+                # No truncation needed, use original hit
+                truncated_hit = hit
+                
             truncated_hits.append(truncated_hit)
 
         return truncated_hits
@@ -304,11 +313,13 @@ class SetwiseReranker(RerankerInterface):
         if len(result) < k and len(result) < n:
             result.append(docs[0])
             
-        # Update scores based on rank
+        # Create new instances with updated scores based on rank
+        scored_result = []
         for i, hit in enumerate(result):
-            hit.score = len(result) - i
+            new_score = len(result) - i
+            scored_result.append(update_tuple(hit, score=new_score))
             
-        return result
+        return scored_result
 
     def _heapify(self, query: str, docs: List[SearchHit], n: int, i: int) -> None:
         """
@@ -403,8 +414,10 @@ class SetwiseReranker(RerankerInterface):
         # Reverse to get descending order of relevance
         result.reverse()
         
-        # Update scores based on rank
+        # Create new instances with updated scores based on rank
+        scored_result = []
         for i, hit in enumerate(result):
-            hit.score = len(result) - i
+            new_score = len(result) - i
+            scored_result.append(update_tuple(hit, score=new_score))
             
-        return result
+        return scored_result

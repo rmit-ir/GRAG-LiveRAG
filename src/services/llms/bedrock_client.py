@@ -4,45 +4,20 @@ Client for interacting with Amazon Bedrock API using LangChain.
 import os
 import json
 import time
+import boto3
 from typing import Dict, Tuple, Any, List, Optional
 from datetime import datetime
 from langchain_aws import ChatBedrock
 from langchain_core.messages import AIMessage
 from botocore.exceptions import BotoCoreError, ClientError
+from services.llms.bedrock_pricing import BEDROCK_MODEL_PRICING
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
 from services.llms.llm_interface import LLMInterface
+from utils.retry_utils import retry
 
 # Initialize logger
 logger = get_logger("bedrock_client")
-
-# Pricing per 1000 tokens for different models (in USD)
-# These prices should be updated as AWS changes their pricing
-MODEL_PRICING = {
-    # Claude 3.5 models
-    "anthropic.claude-3-5-sonnet-20241022-v2:0": {
-        "input_price": 3.00,  # $3.00 per 1M input tokens ($0.003 per 1K)
-        "output_price": 15.00  # $15.00 per 1M output tokens ($0.015 per 1K)
-    },
-    "anthropic.claude-3-5-haiku-20241022-v1:0": {
-        "input_price": 1.00,  # $1.00 per 1M input tokens ($0.001 per 1K)
-        "output_price": 5.00   # $5.00 per 1M output tokens ($0.005 per 1K)
-    },
-    # Claude 3 models
-    "anthropic.claude-3-sonnet-20240229-v1:0": {
-        "input_price": 3.00,  # $3.00 per 1M input tokens ($0.003 per 1K)
-        "output_price": 15.00  # $15.00 per 1M output tokens ($0.015 per 1K)
-    },
-    "anthropic.claude-3-haiku-20240307-v1:0": {
-        "input_price": 0.25,  # $0.25 per 1M input tokens ($0.00025 per 1K)
-        "output_price": 1.25   # $1.25 per 1M output tokens ($0.00125 per 1K)
-    },
-    # Default pricing if model not found
-    "default": {
-        "input_price": 3.00,  # Default to Claude 3.5 Sonnet pricing
-        "output_price": 15.00
-    }
-}
 
 
 class BedrockClient(LLMInterface):
@@ -122,6 +97,7 @@ class BedrockClient(LLMInterface):
             "Please use complete_chat_once instead."
         )
 
+    @retry(max_retries=8, base_delay=1.0, max_delay=300.0, retry_on=(BotoCoreError, ClientError))
     def complete_chat(self, messages: List[Dict[str, str]]) -> Tuple[str, AIMessage]:
         """
         Generate a response for a chat conversation.
@@ -147,7 +123,7 @@ class BedrockClient(LLMInterface):
             response_time = time.time() - start_time
             logger.info(
                 "Bedrock API request completed",
-                response_time_ms=round(response_time * 1000)
+                response_time=round(response_time, 3)
             )
 
             # Extract content from the response
@@ -187,15 +163,10 @@ class BedrockClient(LLMInterface):
 
             return content, response
 
-        except (BotoCoreError, ClientError) as e:
-            logger.error(f"AWS error: {str(e)}")
-            # Check if this is an expired token exception
-            if isinstance(e, ClientError) and "ExpiredTokenException" in str(e):
-                logger.warning(
-                    "AWS token has expired. Please refresh your AWS credentials (environment variables).")
-            raise
         except Exception as e:
-            logger.error(f"Unexpected error in complete_chat: {str(e)}")
+            # Non-AWS exceptions are not retried by the decorator
+            if not isinstance(e, (BotoCoreError, ClientError)):
+                logger.error(f"Unexpected error in complete_chat: {str(e)}")
             raise
 
     def complete_chat_once(self, message: str, system_message: Optional[str] = None) -> Tuple[str, AIMessage]:
@@ -275,7 +246,8 @@ class BedrockClient(LLMInterface):
             Cost in USD
         """
         # Get pricing for the model
-        pricing = MODEL_PRICING.get(self.model_id, MODEL_PRICING["default"])
+        pricing = BEDROCK_MODEL_PRICING.get(
+            self.model_id, BEDROCK_MODEL_PRICING["default"])
 
         # Extract token counts
         input_tokens = token_usage.get("input_tokens", 0)
@@ -320,6 +292,52 @@ class BedrockClient(LLMInterface):
         except Exception as e:
             logger.error(f"Failed to save raw response: {str(e)}")
 
+    def list_models(self) -> List[Dict[str, Any]]:
+        """
+        List available foundation models in Amazon Bedrock.
+
+        Returns:
+            List[Dict[str, Any]]: A list of available models with their details
+
+        Raises:
+            BotoCoreError, ClientError: If there's an issue with the AWS API call
+        """
+        try:
+            # Get AWS credentials from environment variables with RACE_ prefix
+            aws_access_key_id = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
+            aws_secret_access_key = os.environ.get(
+                "RACE_AWS_SECRET_ACCESS_KEY", "")
+            aws_session_token = os.environ.get("RACE_AWS_SESSION_TOKEN", None)
+
+            # Use the same region as the chat model
+            region_name = os.environ.get("RACE_AWS_REGION", "")
+
+            # Create a boto3 Bedrock client
+            bedrock_client = boto3.client(
+                'bedrock',
+                region_name=region_name,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token
+            )
+
+            # List foundation models
+            response = bedrock_client.list_foundation_models()
+
+            # Extract model information
+            models = response.get('modelSummaries', [])
+
+            # Log the number of models found
+            logger.info(f"Found {len(models)} Bedrock foundation models")
+
+            return models
+
+        except Exception as e:
+            # Non-AWS exceptions are not retried by the decorator
+            if not isinstance(e, (BotoCoreError, ClientError)):
+                logger.error(f"Unexpected error in list_models: {str(e)}")
+            raise
+
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
@@ -342,7 +360,22 @@ if __name__ == "__main__":
         model_id="anthropic.claude-3-5-haiku-20241022-v1:0"
     )
 
-    # Send the query and get the response with a custom system message
+    # Example 1: List available models
+    print("\nListing available Bedrock foundation models:")
+    print("-" * 50)
+    models = client.list_models()
+    print(f"Found {len(models)} models:")
+
+    # Print model information in a readable format
+    for i, model in enumerate(models, 1):
+        model_id = model.get('modelId', 'Unknown')
+        provider = model.get('providerName', 'Unknown')
+        model_name = model.get('modelName', 'Unknown')
+        print(f"{i}. {model_name} ({model_id}) by {provider}")
+    print("-" * 50)
+
+    # Example 2: Send a query and get the response with a custom system message
+    print("\nSending a query to Bedrock API:")
     content, raw_response = client.complete_chat_once(
         "What is retrieval-augmented generation (RAG)?",
         system_message="You are an AI assistant that provides clear, concise explanations."
