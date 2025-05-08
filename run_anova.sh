@@ -3,7 +3,7 @@
 # Configuration
 k_queries=10
 sanitize_query=true
-first_step_ranker="bm25+embedding_model"
+first_step_ranker="keywords+embedding_model"
 num_first_retrieved_documents=4
 fusion_method="concatenation"
 

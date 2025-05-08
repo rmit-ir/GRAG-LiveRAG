@@ -20,7 +20,7 @@ class AnovaRAG(RAGSystemInterface):
                  k_queries=5, 
                  sanitize_query: bool = False, 
                  num_first_retrieved_documents=3, 
-                 first_step_ranker = 'bm25+embedding_model', 
+                 first_step_ranker = 'keywords+embedding_model', 
                  fusion_method='concatenation',
                  reranker='pointwise',
                  expand_doc=False, 
@@ -30,7 +30,15 @@ class AnovaRAG(RAGSystemInterface):
 
         Args:
             llm_client: Client for the LLM. Options are 'ai71' or 'ec2_llm', default is 'ai71'.
-            module_query_gen: Select this module for query generation. Options are 'with_number'|'without_number', default is 'with_number'.
+            qgen_model_id: Model ID for the query generation LLM. Default is 'tiiuae/falcon3-10b-instruct'            
+            
+            k_queries: Number of query variants to generate. Default is 5.
+            sanitize_query: If True, sanitize the generated queries (remove qoutes, numbers, etc.). Default is False.
+            num_first_retrieved_documents: Number of documents to retrieve in the first step. Default is 3.
+            first_step_ranker: The first step ranker to use. Options are 'keywords+embedding_model', 'keywords', or 'embedding_model'. Default is 'bm25+embedding_model'.
+            fusion_method: The method to use for gathering the first step retrieval results. Options are 'concatenation'. Default is 'concatenation'.
+            reranker: The reranker to use. Options are 'pointwise'. Default is 'pointwise'.
+            
             expand_doc: If True, expand the chunks into full docs and preserve ranking. Default is False.
             expand_words_limit: The number of words to keep after expanded chunks to documents.
         """
@@ -116,7 +124,7 @@ class AnovaRAG(RAGSystemInterface):
         documents: List[SearchHit] = []
         doc_ids = set()
         for query in queries:
-            if self.first_step_ranker == 'bm25+embedding_model':
+            if self.first_step_ranker == 'keywords+embedding_model':
                 embed_results = self.query_service.query_embedding(query, k=self.num_first_retrieved_documents)
                 keyword_results = self.query_service.query_keywords(query, k=self.num_first_retrieved_documents)
                 if self.fusion_method == 'concatenation':
@@ -124,7 +132,7 @@ class AnovaRAG(RAGSystemInterface):
                 else:
                     raise ValueError(f"Invalid fusion method: {self.fusion}. Options are 'concatenation'.")
             
-            elif self.first_step_ranker == 'bm25':
+            elif self.first_step_ranker == 'keywords':
                 results = self.query_service.query_keywords(query, k=self.num_first_retrieved_documents)
             elif self.first_step_ranker == 'embedding_model':
                 results = self.query_service.query_embedding(query, k=self.num_first_retrieved_documents)
