@@ -32,10 +32,10 @@ class SearchHit(NamedTuple):
 def search_hit_from_pinecone(record: PineconeMatch) -> SearchHit:
     """
     Create a SearchHit from a PineconeMatch.
-    
+
     Args:
         record: PineconeMatch object
-        
+
     Returns:
         SearchHit object
     """
@@ -50,10 +50,10 @@ def search_hit_from_pinecone(record: PineconeMatch) -> SearchHit:
 def search_hit_from_opensearch(record: OpenSearchHit) -> SearchHit:
     """
     Create a SearchHit from an OpenSearchHit.
-    
+
     Args:
         record: OpenSearchHit object
-        
+
     Returns:
         SearchHit object
     """
@@ -68,10 +68,10 @@ def search_hit_from_opensearch(record: OpenSearchHit) -> SearchHit:
 def search_hit_to_dict(hit: SearchHit) -> Dict:
     """
     Convert a SearchHit to a dictionary.
-    
+
     Args:
         hit: SearchHit object
-        
+
     Returns:
         Dictionary representation of the SearchHit
     """
@@ -236,8 +236,9 @@ class QueryService:
                        original_hits_count=len(embedding_hits) + len(keyword_hits))
         return fused_hits
 
-    def get_docs(self, doc_ids: List[str], size_per_doc: int = 20) -> List[SearchHit]:
-        result = self.opensearch_service.get_docs(doc_ids, size_per_doc)
+    def get_docs(self, doc_ids: List[str], size_per_doc: int = 20, combined=True) -> List[SearchHit]:
+        result = self.opensearch_service.get_docs(
+            doc_ids, size_per_doc, combined)
         return [search_hit_from_opensearch(hit) for hit in result.hits]
 
     def _hits_to_trecrun(self, query_id: str, hits: List[SearchHit], tag: str) -> TrecRun:
@@ -265,41 +266,41 @@ class QueryService:
 def truncate_docs(docs: List[SearchHit], words_threshold: int = 20000) -> List[SearchHit]:
     """
     Truncate a list of SearchHit documents based on a word count threshold.
-    
+
     Args:
         docs: List of SearchHit objects
         words_threshold: Maximum number of words to include (default: 20000)
-        
+
     Returns:
         Truncated list of SearchHit objects
     """
     if not docs:
         return []
-    
+
     logger = get_logger("truncate_documents")
     truncated_docs = []
     total_words = 0
-    
+
     for doc in docs:
         # Count words in the document text
         doc_text = doc.metadata.text if hasattr(doc.metadata, "text") else ""
         word_count = len(doc_text.split())
-        
+
         # Check if adding this document would exceed the threshold
         if total_words + word_count > words_threshold:
-            logger.debug("Word threshold reached", 
-                         total_words=total_words, 
+            logger.debug("Word threshold reached",
+                         total_words=total_words,
                          threshold=words_threshold,
                          docs_included=len(truncated_docs),
                          docs_total=len(docs))
             break
-        
+
         # Add document and update word count
         truncated_docs.append(doc)
         total_words += word_count
-    
-    logger.debug("Documents truncated", 
-                 original_count=len(docs), 
+
+    logger.debug("Documents truncated",
+                 original_count=len(docs),
                  truncated_count=len(truncated_docs),
                  total_words=total_words)
     return truncated_docs
@@ -345,6 +346,13 @@ if __name__ == "__main__":
                "<urn:uuid:75931ce4-3825-4ef9-9673-b07dfc319d66>", "<urn:uuid:fc1fd791-7a5c-4d05-a1be-0e1bc92fd342>", "<urn:uuid:75931ce4-3825-4ef9-9673-b07dfc319d66>", "<urn:uuid:164b81ba-7a4b-449c-8232-41c809ef65db>", "<urn:uuid:57031123-cef2-4f51-adbe-4b6070379a8d>", "<urn:uuid:54236e11-cfe0-4870-8679-dcca522c66bc>", "<urn:uuid:380337c6-3957-4c63-9583-ba486d4994c1>"]
     log.info(f"Getting documents by IDs: {doc_ids}")
     docs = service.get_docs(doc_ids, size_per_doc=5)
+    log.info(f"Found {len(docs)} documents by IDs")
+    for doc in docs:
+        log.info(f"Document ID: {doc.id}, Score: {doc.score}")
+        log.info(f"Document Full Text: \n{'-'*10}\n{doc.metadata.text}")
+
+    # combined false
+    docs = service.get_docs(doc_ids, size_per_doc=5, combined=False)
     log.info(f"Found {len(docs)} documents by IDs")
     for doc in docs:
         log.info(f"Document ID: {doc.id}, Score: {doc.score}")

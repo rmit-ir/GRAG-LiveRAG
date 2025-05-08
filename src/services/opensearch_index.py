@@ -250,7 +250,7 @@ class OpenSearchService:
 
         return structured_results
 
-    def get_docs(self, doc_ids: List[str], size_per_doc: int = 20) -> OpenSearchResult:
+    def get_docs(self, doc_ids: List[str], size_per_doc: int = 20, combine: bool = True) -> OpenSearchResult:
         """
         Retrieve all chunks belonging to multiple documents by their doc_ids in a single request.
 
@@ -259,7 +259,8 @@ class OpenSearchService:
 
         Args:
             doc_ids: List of document IDs to search for
-            size_per_doc: Maximum number of chunks to return per document (default: 100)
+            size_per_doc: Maximum number of chunks to return per document (default: 20)
+            combine: Whether to combine chunks into a single document (default: True)
 
         Returns:
             Structured OpenSearchResult object containing all chunks for the requested documents
@@ -303,22 +304,40 @@ class OpenSearchService:
             }
         )
 
-        # Store combined hits in a dictionary keyed by doc_id
-        doc_hits_dict: Dict[str, OpenSearchHit] = {}
-
-        # Process all hits from OpenSearch
+        # Group hits by document ID
+        doc_hits_by_id: Dict[str, List[Dict[str, Any]]] = {}
+        
+        # Process all hits from OpenSearch and group by doc_id
         for hit in results.get("hits", {}).get("hits", []):
-            # Extract the document ID from the hit
             source = hit.get("_source", {})
             doc_id = source.get("doc_id", "")
-
-            if doc_id not in doc_hits_dict:
-                # Create a new hit with default metadata values that make sense for combined chunks
-                source_data = hit.get("_source", {})
+            
+            # Only include hits for requested doc_ids
+            if doc_id in doc_id_list:
+                if doc_id not in doc_hits_by_id:
+                    doc_hits_by_id[doc_id] = []
+                doc_hits_by_id[doc_id].append(hit)
+        
+        # Sort chunks within each document by chunk_order
+        for doc_id, hits in doc_hits_by_id.items():
+            hits.sort(key=lambda hit: hit.get("_source", {}).get("chunk_order", 0))
+        
+        if combine:
+            # Store combined hits in a dictionary keyed by doc_id
+            doc_hits_dict: Dict[str, OpenSearchHit] = {}
+            
+            # Process sorted hits for each document
+            for doc_id, hits in doc_hits_by_id.items():
+                if not hits:
+                    continue
+                    
+                # Initialize with the first hit
+                first_hit = hits[0]
+                source_data = first_hit.get("_source", {})
                 doc_hits_dict[doc_id] = OpenSearchHit(
-                    index=hit.get("_index", ""),
+                    index=first_hit.get("_index", ""),
                     id=doc_id,
-                    score=hit.get("_score", 0.0),
+                    score=first_hit.get("_score", 1.0),  # get by id, so score is 1.0
                     source=LiveRAGMetadata(
                         chunk_order=0.0,  # Combined chunk, so default to 0.0
                         doc_id=doc_id,
@@ -328,23 +347,41 @@ class OpenSearchService:
                         total_doc_chunks=1.0
                     )
                 )
-            else:
-                # Create a new hit with the combined text
-                existing_hit = doc_hits_dict[doc_id]
-                chunk_text = source.get('text', None)
-                if chunk_text:
-                    # Create a new metadata instance with the combined text
-                    new_text = existing_hit.source.text + f"\n\n{chunk_text.strip()}"
-                    old_src = existing_hit.source
-                    new_metadata = update_tuple(old_src, text=new_text)
-                    # Create a new hit with the updated metadata
-                    doc_hits_dict[doc_id] = update_tuple(existing_hit, source=new_metadata)
-
-        # Create the final list of hits in the same order as the input doc_ids
-        doc_hits_merged: List[OpenSearchHit] = []
-        for doc_id in doc_id_list:
-            if doc_id in doc_hits_dict:
-                doc_hits_merged.append(doc_hits_dict[doc_id])
+                
+                # Combine with remaining hits
+                for hit in hits[1:]:
+                    chunk_text = hit.get("_source", {}).get('text', None)
+                    if chunk_text:
+                        existing_hit = doc_hits_dict[doc_id]
+                        # Create a new metadata instance with the combined text
+                        new_text = existing_hit.source.text + f"\n\n{chunk_text.strip()}"
+                        old_src = existing_hit.source
+                        new_metadata = update_tuple(old_src, text=new_text)
+                        # Create a new hit with the updated metadata
+                        doc_hits_dict[doc_id] = update_tuple(existing_hit, source=new_metadata)
+            
+            # Create the final list of hits in the same order as the input doc_ids
+            doc_hits_merged: List[OpenSearchHit] = []
+            for doc_id in doc_id_list:
+                if doc_id in doc_hits_dict:
+                    doc_hits_merged.append(doc_hits_dict[doc_id])
+        else:
+            # Return individual chunks without combining, but sorted by chunk_order within each document
+            doc_hits_merged: List[OpenSearchHit] = []
+            
+            # Process each document in the order of doc_id_list
+            for doc_id in doc_id_list:
+                if doc_id in doc_hits_by_id:
+                    # Add all chunks for this document in sorted order
+                    for hit in doc_hits_by_id[doc_id]:
+                        doc_hits_merged.append(
+                            OpenSearchHit(
+                                index=hit.get("_index", ""),
+                                id=hit.get("_id", ""),
+                                score=hit.get("_score", 1.0), # get by id, so score is 1.0
+                                source=live_rag_metadata_from_dict(hit.get("_source", {}))
+                            )
+                        )
 
         return OpenSearchResult(
             took=results.get("took", 0),
@@ -441,4 +478,10 @@ if __name__ == "__main__":
     result = service.get_docs(doc_ids)
     for hit in result.hits:
         print(f"Document ID: {hit.id}")
+        print("-" * 80)
+
+    # test not combine
+    result = service.get_docs(['<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>', '<urn:uuid:fc1fd791-7a5c-4d05-a1be-0e1bc92fd342>'], combine=False)
+    for hit in result.hits:
+        print(f"Hit ID: {hit.id}")
         print("-" * 80)
