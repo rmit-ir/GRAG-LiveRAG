@@ -10,11 +10,21 @@ from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
 from utils.logging_utils import get_logger
-import argparse
 
 
 class AnovaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5, sanitize_query: bool = False, first_step_ranker = 'bm25+embedding_model', num_first_retrieved_documents=3, expand_doc=False, expand_words_limit=15_000):
+    def __init__(self, 
+                 llm_client='ai71', 
+                 qgen_model_id='tiiuae/falcon3-10b-instruct', 
+                 qgen_api_base=None, 
+                 k_queries=5, 
+                 sanitize_query: bool = False, 
+                 num_first_retrieved_documents=3, 
+                 first_step_ranker = 'bm25+embedding_model', 
+                 fusion_method='concatenation',
+                 reranker='pointwise',
+                 expand_doc=False, 
+                 expand_words_limit=15_000):
         """
         Initialize the AnovaRAG.
 
@@ -40,6 +50,8 @@ class AnovaRAG(RAGSystemInterface):
         self.sanitize_query = sanitize_query
         self.first_step_ranker = first_step_ranker
         self.num_first_retrieved_documents = int(num_first_retrieved_documents)
+        self.fusion_method = fusion_method
+        self.reranker = reranker
 
         # Store system prompts
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
@@ -107,7 +119,10 @@ class AnovaRAG(RAGSystemInterface):
             if self.first_step_ranker == 'bm25+embedding_model':
                 embed_results = self.query_service.query_embedding(query, k=self.num_first_retrieved_documents)
                 keyword_results = self.query_service.query_keywords(query, k=self.num_first_retrieved_documents)
-                results = embed_results + keyword_results
+                if self.fusion_method == 'concatenation':
+                    results = embed_results + keyword_results
+                else:
+                    raise ValueError(f"Invalid fusion method: {self.fusion}. Options are 'concatenation'.")
             
             elif self.first_step_ranker == 'bm25':
                 results = self.query_service.query_keywords(query, k=self.num_first_retrieved_documents)
@@ -156,23 +171,7 @@ class AnovaRAG(RAGSystemInterface):
             system_name="AnovaRAG",
         )
 
-    
-# def parse_args():
-#     parser = argparse.ArgumentParser(description="AnovaRAG system")
-    
-#     parser.add_argument("--k_queries", 
-#                        type=int, 
-#                        default=5, 
-#                        help="Number of query variants to generate (default: 5)")
-
-#     return parser.parse_args()
-
 if __name__ == "__main__":
-    
-    # # Parse command-line arguments
-    # args = parse_args()
-    # k_quires = args.k_queries
-    # print("k_queries:", k_quires)
     
     # Create an instance of the AnovaRAG system
     rag_system = AnovaRAG()
