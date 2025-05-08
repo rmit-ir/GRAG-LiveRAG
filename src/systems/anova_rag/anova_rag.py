@@ -22,9 +22,7 @@ class AnovaRAG(RAGSystemInterface):
                  num_first_retrieved_documents=3, 
                  first_step_ranker = 'keywords+embedding_model', 
                  fusion_method='concatenation',
-                 reranker='pointwise',
-                 expand_doc=False, 
-                 expand_words_limit=15_000):
+                 reranker='pointwise'):
         """
         Initialize the AnovaRAG.
 
@@ -38,9 +36,6 @@ class AnovaRAG(RAGSystemInterface):
             first_step_ranker: The first step ranker to use. Options are 'keywords+embedding_model', 'keywords', or 'embedding_model'. Default is 'bm25+embedding_model'.
             fusion_method: The method to use for gathering the first step retrieval results. Options are 'concatenation'. Default is 'concatenation'.
             reranker: The reranker to use. Options are 'pointwise'. Default is 'pointwise'.
-            
-            expand_doc: If True, expand the chunks into full docs and preserve ranking. Default is False.
-            expand_words_limit: The number of words to keep after expanded chunks to documents.
         """
         if llm_client == 'ai71':
             self.rag_llm_client = AI71Client()
@@ -65,8 +60,6 @@ class AnovaRAG(RAGSystemInterface):
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
         self.qgen_system_prompt = f"Generate a list of {k_queries} search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
         self.query_service = QueryService()
-        self.expand_doc = expand_doc
-        self.expand_words_limit = int(expand_words_limit)
 
     def _create_query_variants(self, question: str) -> List[str]:
         resp_text, _ = self.qgen_llm_client.complete_chat_once(
@@ -143,16 +136,6 @@ class AnovaRAG(RAGSystemInterface):
                 if doc.id not in doc_ids:
                     documents.append(doc)
                     doc_ids.add(doc.id)
-
-        # If expand_doc is True, expand the chunks using get_doc while preserving original ranking
-        if self.expand_doc:
-            ordered_doc_ids = [doc.id for doc in documents]
-            full_docs = self.query_service.get_docs(ordered_doc_ids)
-            documents = truncate_docs(full_docs, self.expand_words_limit)
-            self.logger.info(f"Expanded documents", question=question,
-                             taken_docs=len(documents),
-                             original_docs=len(full_docs),
-                             original_chunks=len(ordered_doc_ids))
 
         context = "Documents: \n\n"
         context += "\n\n".join([doc.metadata.text for doc in documents])
