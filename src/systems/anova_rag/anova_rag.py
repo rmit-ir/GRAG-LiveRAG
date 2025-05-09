@@ -9,6 +9,7 @@ from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
+from services.llms.mini_tgi_client import MiniTGIClient
 from utils.logging_utils import get_logger
 
 
@@ -17,12 +18,15 @@ class AnovaRAG(RAGSystemInterface):
                  llm_client='ai71', 
                  qgen_model_id='tiiuae/falcon3-10b-instruct', 
                  qgen_api_base=None, 
+                 original_question_inlcuded=False,
                  k_queries=5, 
                  sanitize_query: bool = False, 
+                 qpp = None,
                  num_first_retrieved_documents=3, 
                  first_step_ranker = 'keywords+embedding_model', 
                  fusion_method='concatenation',
-                 reranker='pointwise'):
+                 reranker='pointwise',
+                 num_reranked_documents=15,):
         """
         Initialize the AnovaRAG.
 
@@ -47,14 +51,19 @@ class AnovaRAG(RAGSystemInterface):
 
         # if module_query_gen == 'with_num':
         self.logger = get_logger('anova_rag')
+        self.logits_llm = MiniTGIClient()
         
         # Controllers set up
+        self.original_question_inlcuded = bool(original_question_inlcuded)
         self.k_queries = int(k_queries)
         self.sanitize_query = sanitize_query
+        self.qpp = qpp
         self.first_step_ranker = first_step_ranker
         self.num_first_retrieved_documents = int(num_first_retrieved_documents)
         self.fusion_method = fusion_method
         self.reranker = reranker
+        self.num_reranked_documents = num_reranked_documents
+        
 
         # Store system prompts
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
@@ -85,7 +94,8 @@ class AnovaRAG(RAGSystemInterface):
                 f"Number of generated queries ({len(queries)}) exceeds the limit ({self.k_queries}). Truncating.",
                 source_queries=queries)
             queries = queries[:self.k_queries]
-        # return queries + [question]
+        if self.original_question_inlcuded:
+            return queries + [question]
         return queries
 
     def _sanitize_query(self, query: str) -> str:
@@ -105,6 +115,28 @@ class AnovaRAG(RAGSystemInterface):
         query = query.replace("\\'", "'").replace('\\"', '"')
 
         return query
+    
+    def rerank_by_logits(self, documents: List[SearchHit], question: str, num_reranked_documents: int) -> List[SearchHit]:
+        self.log.debug("Documents before reranking", documents=documents)
+        id_doc_dict = {doc.id: doc for doc in documents}
+        id_yes_prob = []
+        for hit in documents:
+            doc_text = hit.metadata.text.replace("\n", " ")
+            prompt = f"Document: {doc_text}\n\nQuestion: {question}\n\nIs this question generated from this document (only answer 'Yes' or 'No')?\nAnswer:\n\n"
+            logits = self.logits_llm.get_token_logits(
+                prompt, tokens=['Yes', 'No'])
+            yes_raw_prob = logits['raw_probabilities'].get('Yes', 0.0)
+            id_yes_prob.append((hit.id, yes_raw_prob))
+        self.log.debug("Logits for documents", logits=id_yes_prob)
+
+        sorted_docs = sorted(id_yes_prob, key=lambda x: x[1], reverse=True)
+        reranked_docs = []
+        for doc_id, _ in sorted_docs:
+            if doc_id in id_doc_dict:
+                reranked_docs.append(id_doc_dict[doc_id])
+        self.log.debug("Documents after reranking", documents=reranked_docs)
+
+        return reranked_docs[:num_reranked_documents]
 
     def process_question(self, question: str, qid: str = None) -> RAGResult:
         """
@@ -137,6 +169,14 @@ class AnovaRAG(RAGSystemInterface):
                     documents.append(doc)
                     doc_ids.add(doc.id)
 
+        # Rerank the documents using logits
+        if self.reranker == 'no_reranker':
+            pass
+        elif self.reranker == 'pointwise':
+            documents = self.rerank_by_logits(documents, question, self.num_reranked_documents)
+        else:
+            raise ValueError(f"Invalid reranker: {self.reranker}. Options are 'no_reranker' or 'pointwise'.")
+        
         context = "Documents: \n\n"
         context += "\n\n".join([doc.metadata.text for doc in documents])
 

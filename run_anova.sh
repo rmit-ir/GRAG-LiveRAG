@@ -1,19 +1,22 @@
 #!/bin/bash
 
 # Configuration
+original_question_inlcuded=false
 k_queries=5
 sanitize_query=true
+qpp='no_qpp'
 first_step_ranker="keywords+embedding_model"
 num_first_retrieved_documents=3
 fusion_method="concatenation"
 reranker="no_reranker"
+num_reranked_documents=15 # (optional) Number of documents to rerank
 
 # File paths
 input="data/generated_qa_pairs/dmds_2_05012333.tsv"
-output_dir="data/anova_result/${k_queries}_${sanitize_query}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}"
+output_dir="data/anova_result/${original_question_inlcuded}_${k_queries}_${sanitize_query}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}"
 
 # Common arguments
-common_args="--llm_client ai71 --system AnovaRAG --input $input --output-dir $output_dir --num-threads 20 --k_queries=$k_queries --num_first_retrieved_documents $num_first_retrieved_documents --first_step_ranker $first_step_ranker --fusion_method $fusion_method --reranker $reranker"
+common_args="--llm_client ai71 --system AnovaRAG --input $input --output-dir $output_dir --num-threads 20 --original_question_inlcuded=$original_question_inlcuded --k_queries=$k_queries --qpp=$qpp --num_first_retrieved_documents $num_first_retrieved_documents --first_step_ranker $first_step_ranker --fusion_method $fusion_method --reranker $reranker"
 
 # Run command with appropriate flags
 if [ "$sanitize_query" = true ]; then
