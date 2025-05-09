@@ -227,8 +227,8 @@ class PineconeService:
                 f"🔍 RESULT #{i} | ID: {match.id} | RELEVANCE: {score_percent}%")
 
             # Handle text content with optional truncation
-            if match.text:
-                text = match.text
+            if match.metadata.text:
+                text = match.metadata.text
                 if max_text_length and len(text) > max_text_length:
                     display_text = text[:max_text_length] + "..."
                 else:

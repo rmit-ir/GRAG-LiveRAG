@@ -92,15 +92,21 @@ class VanillaRAG(RAGSystemInterface):
         queries = self._create_query_variants(question)
 
         documents: List[SearchHit] = []
-        doc_ids = set()
+        hit_ids = set()
+        doc_ids = list()
+        doc_ids_set = set()
         for query in queries:
             embed_results = self.query_service.query_embedding(query, k=3)
             keyword_results = self.query_service.query_keywords(query, k=3)
             results = embed_results + keyword_results
-            for doc in results:
-                if doc.id not in doc_ids:
-                    documents.append(doc)
-                    doc_ids.add(doc.id)
+            for hit in results:
+                if hit.id not in hit_ids:
+                    documents.append(hit)
+                    hit_ids.add(hit.id)
+                    if hit.metadata.doc_id not in doc_ids_set:
+                        doc_ids.append(hit.metadata.doc_id)
+                        doc_ids_set.add(hit.metadata.doc_id)
+                    
 
         # If expand_doc is True, expand the chunks using get_doc while preserving original ranking
         if self.expand_doc:
@@ -131,7 +137,7 @@ class VanillaRAG(RAGSystemInterface):
             answer=answer,
             metadata={"final_prompt": final_prompt},
             context=[doc.metadata.text for doc in documents],
-            doc_ids=list(doc_ids),
+            doc_ids=doc_ids,
             generated_queries=queries,
             total_time_ms=(time.time() - start_time) * 1000,
             system_name="BasicRAG2",
