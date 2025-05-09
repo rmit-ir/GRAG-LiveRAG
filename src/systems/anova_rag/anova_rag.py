@@ -179,7 +179,10 @@ class AnovaRAG(RAGSystemInterface):
         queries = self._create_query_variants(question)
 
         documents: List[SearchHit] = []
-        doc_ids = set()
+        hit_ids = set()
+        doc_ids = list()
+        doc_ids_set = set()
+        
         for query in queries:
             if self.first_step_ranker == 'keywords+embedding_model':
                 embed_results = self.query_service.query_embedding(query, k=self.num_first_retrieved_documents)
@@ -196,10 +199,13 @@ class AnovaRAG(RAGSystemInterface):
             else:
                 raise ValueError(f"Invalid first step ranker: {self.first_step_ranker}. Options are 'bm25+embedding_model', 'bm25', or 'embedding_model'.")
             
-            for doc in results:
-                if doc.id not in doc_ids:
-                    documents.append(doc)
-                    doc_ids.add(doc.id)
+            for hit in results:
+                if hit.id not in hit_ids:
+                    documents.append(hit)
+                    hit_ids.add(hit.id)
+                    if hit.metadata.doc_id not in doc_ids_set:
+                        doc_ids.append(hit.metadata.doc_id)
+                        doc_ids_set.add(hit.metadata.doc_id)
 
         # Rerank the documents using logits
         if self.reranker == 'no_reranker':
@@ -209,7 +215,8 @@ class AnovaRAG(RAGSystemInterface):
         else:
             raise ValueError(f"Invalid reranker: {self.reranker}. Options are 'no_reranker' or 'pointwise'.")
         
-        context = "\n\n".join([doc.metadata.text for doc in documents])
+        # context is the documents in the order of the doc_ids
+        context = "\n\n".join([f"Document [{i+1}] {doc.metadata.text}" for i, doc in enumerate(documents)])
         agen_prompt = self.rag_primary_prompt.format(context=context, question=question)
 
         answer, _ = self.rag_llm_client.complete_chat_once(

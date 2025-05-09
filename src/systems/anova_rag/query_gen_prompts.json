@@ -4,8 +4,8 @@
         "primary_prompt": "{question}"
     },
     "medium": {
-        "system_prompt": "Create {k_queries} different search query variations for the following question. Each query should:\n1. Capture different aspects of the original question\n2. Use alternative but relevant terminology\n3. Be written on a separate line\n4. Not include any additional text or formatting\n\nThe original question has no spelling mistakes.",
-        "primary_prompt": "Original question: {question}\n\nPlease generate query variations:"
+        "system_prompt": "You are an expert in query generation, you will be given a question, please generate {k_queries} relevabt queries based on the question. Make sure every query generated can yield new information when I use them to search. NEVER repeat similar search queries.",
+        "primary_prompt": "Original question: {question}"
     },
     "advanced": {
         "system_prompt": "Generate {k_queries} diverse search query variations for the given question. Follow these guidelines:\n1. Each query should focus on different aspects or interpretations of the original question\n2. Use synonyms and related terms where appropriate\n3. Include both broad and specific variations\n4. Maintain the core meaning while varying the expression\n5. Write each query on a new line\n6. Do not include any additional text or formatting\n\nThe original question is correctly spelled.",
