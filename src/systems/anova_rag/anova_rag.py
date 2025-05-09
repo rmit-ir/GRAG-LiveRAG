@@ -34,12 +34,15 @@ class AnovaRAG(RAGSystemInterface):
             llm_client: Client for the LLM. Options are 'ai71' or 'ec2_llm', default is 'ai71'.
             qgen_model_id: Model ID for the query generation LLM. Default is 'tiiuae/falcon3-10b-instruct'            
             
+            original_question_inlcuded: If True, include the original question in the generated queries. Default is False.
             k_queries: Number of query variants to generate. Default is 5.
             sanitize_query: If True, sanitize the generated queries (remove qoutes, numbers, etc.). Default is False.
+            qpp: Query preformance prediction algorithm. Not in use now.
             num_first_retrieved_documents: Number of documents to retrieve in the first step. Default is 3.
             first_step_ranker: The first step ranker to use. Options are 'keywords+embedding_model', 'keywords', or 'embedding_model'. Default is 'bm25+embedding_model'.
             fusion_method: The method to use for gathering the first step retrieval results. Options are 'concatenation'. Default is 'concatenation'.
             reranker: The reranker to use. Options are 'pointwise'. Default is 'pointwise'.
+            num_reranked_documents: Number of documents returned from reranker. Better be less than num of quries * num of first step retrieved documents. Default is 15.
         """
         if llm_client == 'ai71':
             self.rag_llm_client = AI71Client()
