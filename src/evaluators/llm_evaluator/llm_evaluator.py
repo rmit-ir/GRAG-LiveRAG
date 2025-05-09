@@ -62,7 +62,8 @@ class LLMEvaluator(EvaluatorInterface):
         silent_errors: bool = True,
         num_threads: int = 1,
         perform_system_analysis: bool = True,
-        num_samples_for_analysis: int = 40
+        num_samples_for_analysis: int = 40,
+        answer_word_limit = 300,
     ):
         """
         Initialize the LLM evaluator.
@@ -88,6 +89,7 @@ class LLMEvaluator(EvaluatorInterface):
         )
 
         self.evaluator_name = "llm_evaluator"
+        self.answer_word_limit = answer_word_limit
         self.use_gold_references = use_gold_references
         self.silent_errors = silent_errors
         self.num_threads = max(1, num_threads)
@@ -124,7 +126,7 @@ class LLMEvaluator(EvaluatorInterface):
         # Fill in the template
         prompt = prompt_template.format(
             question=rag_result.question,
-            answer=take_words(rag_result.answer, 200),
+            answer=take_words(rag_result.answer, self.answer_word_limit),
             gold_reference=gold_reference,
             documents=documents
         )
