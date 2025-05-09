@@ -13,6 +13,7 @@ num_reranked_documents=15 # (optional) Number of documents returned from rerank
 
 # File paths
 input="data/generated_qa_pairs/dmds_2_05012333.tsv"
+# output_dir is set dynamically based on the parameters
 output_dir="data/anova_result/${original_question_inlcuded}_${k_queries}_${sanitize_query}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}"
 
 # Common arguments
