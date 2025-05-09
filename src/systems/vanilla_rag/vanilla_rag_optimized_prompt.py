@@ -1,5 +1,5 @@
 """
-uv run scripts/run.py --system VanillaRAG --help
+uv run scripts/run.py --system VanillaRAGNewQGenFlow --help
 """
 import re
 import time
@@ -9,18 +9,28 @@ from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
-from utils.doc_listing_utils import truncate_docs
+from systems.vanilla_rag.query_expansion import expand_queries
+from systems.vanilla_rag.vanilla_rag_optimized_prompt_prompts import ANSWER_SYSTEM_PROMPT
+from utils.doc_listing_utils import truncate_doc_listings, truncate_docs
 from utils.logging_utils import get_logger
 
 
-class VanillaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5, expand_doc=False, expand_words_limit=15_000):
+class VanillaRAGNewQGenFlow(RAGSystemInterface):
+    def __init__(self,
+                 llm_client='ai71',
+                 qgen_model_id='tiiuae/falcon3-10b-instruct',
+                 qgen_api_base=None,
+                 k_queries=5,
+                 rag_prompt_version="vanilla_rag",
+                 expand_doc=False,
+                 context_words_limit=15_000):
         """
         Initialize the BasicRAG2.
 
         Args:
             llm_client: Client for the LLM. Options are 'ai71' or 'ec2_llm', default is 'ai71'.
             module_query_gen: Select this module for query generation. Options are 'with_number'|'without_number', default is 'with_number'.
+            rag_prompt_version: The version of the prompt to use, vanilla_rag, new, Default is vanilla_rag.
             expand_doc: If True, expand the chunks into full docs and preserve ranking. Default is False.
             expand_words_limit: The number of words to keep after expanded chunks to documents.
         """
@@ -37,11 +47,16 @@ class VanillaRAG(RAGSystemInterface):
         self.k_queries = int(k_queries)
 
         # Store system prompts
-        self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
+        self.rag_prompt_version = rag_prompt_version
+        if rag_prompt_version == "vanilla_rag":
+            self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
+        elif rag_prompt_version == "new":
+            self.rag_system_prompt = ANSWER_SYSTEM_PROMPT
+
         self.qgen_system_prompt = f"Generate a list of {k_queries} search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
         self.query_service = QueryService()
         self.expand_doc = expand_doc
-        self.expand_words_limit = int(expand_words_limit)
+        self.context_words_limit = int(context_words_limit)
 
     def _create_query_variants(self, question: str) -> List[str]:
         resp_text, _ = self.qgen_llm_client.complete_chat_once(
@@ -90,38 +105,37 @@ class VanillaRAG(RAGSystemInterface):
         """
 
         start_time = time.time()
-        queries = self._create_query_variants(question)
+        qs_res = expand_queries(question, self.qgen_llm_client)
+        queries = qs_res.sub_queries
 
-        documents: List[SearchHit] = []
-        hit_ids = set()
-        doc_ids = list()
-        doc_ids_set = set()
+        listings: List[List[SearchHit]] = []
         for query in queries:
-            embed_results = self.query_service.query_embedding(query, k=3)
-            keyword_results = self.query_service.query_keywords(query, k=3)
-            results = embed_results + keyword_results
-            for hit in results:
-                if hit.id not in hit_ids:
-                    documents.append(hit)
-                    hit_ids.add(hit.id)
-                    if hit.metadata.doc_id not in doc_ids_set:
-                        doc_ids.append(hit.metadata.doc_id)
-                        doc_ids_set.add(hit.metadata.doc_id)
+            results = self.query_service.query_fusion(
+                query, k=10, per_source_k=100)
+            listings.append(results)
+
+        docs = truncate_doc_listings(
+            listings=listings, context_word_limit=self.context_words_limit)
 
         # If expand_doc is True, expand the chunks using get_doc while preserving original ranking
         if self.expand_doc:
-            ordered_doc_ids = [doc.id for doc in documents]
+            ordered_doc_ids = [doc.id for doc in docs]
             full_docs = self.query_service.get_docs(ordered_doc_ids)
-            documents = truncate_docs(full_docs, self.expand_words_limit)
+            docs = truncate_docs(full_docs, self.context_words_limit)
             self.logger.info(f"Expanded documents", question=question,
-                             taken_docs=len(documents),
+                             taken_docs=len(docs),
                              original_docs=len(full_docs),
                              original_chunks=len(ordered_doc_ids))
 
-        context = "Documents: \n\n"
-        context += "\n\n".join([doc.metadata.text for doc in documents])
+        context = "## Documents: \n\n"
+        context += "\n\n".join([doc.metadata.text for doc in docs])
 
-        prompt = context + "\n\nQuestion: " + question + "\n\nAnswer: "
+        if self.rag_prompt_version == "vanilla_rag":
+            prompt = context + "\n\n## Question: " + question + "\n\n## Answer: "
+        elif self.rag_prompt_version == "new":
+            prompt = context + "\n\n## Question: " + question + "\n\n## Question Components: " + \
+                qs_res.components + "\n\n## Rephrased Question: " + qs_res.rephrased_query
+        self.logger.debug(f"Final prompt", question=question, prompt=prompt)
 
         answer, _ = self.rag_llm_client.complete_chat_once(
             prompt, self.rag_system_prompt)
@@ -136,29 +150,35 @@ class VanillaRAG(RAGSystemInterface):
             question=question,
             answer=answer,
             metadata={"final_prompt": final_prompt},
-            context=[doc.metadata.text for doc in documents],
-            doc_ids=doc_ids,
+            context=[doc.metadata.text for doc in docs],
+            doc_ids=[doc.metadata.doc_id for doc in docs],
             generated_queries=queries,
             total_time_ms=(time.time() - start_time) * 1000,
-            system_name="BasicRAG2",
+            system_name="VanillaRAGNewQGenFlow",
         )
 
 
 if __name__ == "__main__":
     # Test the BasicRAG2 system
-    rag_system = VanillaRAG()
+    rag_system = VanillaRAGNewQGenFlow()
     result = rag_system.process_question(
-        "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
+        "tourist outdoor activities mid january september alice springs ahmedabad compare",
         qid=1
     )
 
-    print("Question:", result.question)
-    print("Answer:", result.answer)
-    print("Context:", result.context)
+    print("-"*60)
+    print("Question:\n", result.question)
+    print("-"*60)
+    print("Answer:\n", result.answer)
+    print("-"*60)
+    print("Context:\n", result.context)
+    print("-"*60)
     print("Document IDs:", result.doc_ids)
+    print("-"*60)
     print("Total Time (s):", result.total_time_ms)
-    # print generated queries
+    print("-"*60)
     print("Generated Queries:", result.generated_queries)
+    print("-"*60)
 
     # ref_qa_pair = QAPair.from_dict({
     #     'question': "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",

@@ -14,6 +14,7 @@ from utils.logging_utils import get_logger
 from services.live_rag_aws_utils import LiveRAGAWSUtils
 from services.live_rag_metadata import LiveRAGMetadata, live_rag_metadata_from_dict
 from utils.namedtuple_utils import update_tuple
+from utils.retry_utils import retry
 
 
 class OpenSearchHit(NamedTuple):
@@ -198,6 +199,7 @@ class OpenSearchService:
 
         return opensearch_result_from_dict(results)
 
+    @retry(max_retries=5, base_delay=1.0, max_delay=300.0, retry_on=(ConnectionError))
     def batch_query_opensearch(
         self, queries: List[str], top_k: int = 10, n_parallel: int = 10
     ) -> List[OpenSearchResult]:
@@ -460,6 +462,15 @@ class OpenSearchService:
 if __name__ == "__main__":
     # Initialize the service
     service = OpenSearchService()
+    
+    # test search
+    print("\n=== Searching OpenSearch ===")
+    result = service.query_opensearch("What is the capital of France?", top_k=5)
+    for hit in result.hits:
+        print(f"Hit ID: {hit.id}")
+        print(f"Score: {hit.score}")
+        print(f"Text: {hit.source.text}")
+        print("-" * 80)
 
     # Example: Get chunks for multiple documents
     print("\n=== Getting chunks by multiple doc IDs ===")
