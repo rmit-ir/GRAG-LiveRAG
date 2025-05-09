@@ -11,8 +11,11 @@ fusion_method="concatenation"
 reranker="no_reranker"
 num_reranked_documents=10 # (optional) Number of documents returned from rerank
 
+# File prefix, used for aligning run and eval
+reference_file="dmds_2_05012333"
+
 # File paths
-input="data/generated_qa_pairs/dmds_2_05012333.tsv"
+input="data/generated_qa_pairs/${reference_file}.tsv"
 
 # Loop through prompt levels
 for query_gen_prompt_level in "naive" "medium" ; do

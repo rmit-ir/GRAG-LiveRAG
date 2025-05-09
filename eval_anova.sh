@@ -11,7 +11,9 @@ fusion_method="concatenation"
 reranker="no_reranker"
 num_reranked_documents=10
 
+# File prefix, used for aligning run and eval
 reference_file="dmds_2_05012333"
+
 # Loop through prompt levels
 for query_gen_prompt_level in "naive" "medium" "advanced"; do
     for rag_prompt_level in "naive" "medium" "advanced"; do
