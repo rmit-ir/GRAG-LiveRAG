@@ -20,8 +20,8 @@ class AnovaRAG(RAGSystemInterface):
                  qgen_api_base=None, 
                  original_question_inlcuded=False,
                  k_queries=5, 
-                 sanitize_query: bool = False, 
-                 qpp = None,
+                 sanitize_query=False, 
+                 qpp='no_qpp',
                  num_first_retrieved_documents=3, 
                  first_step_ranker = 'keywords+embedding_model', 
                  fusion_method='concatenation',
@@ -54,18 +54,20 @@ class AnovaRAG(RAGSystemInterface):
 
         # if module_query_gen == 'with_num':
         self.logger = get_logger('anova_rag')
-        self.logits_llm = MiniTGIClient()
         
         # Controllers set up
         self.original_question_inlcuded = bool(original_question_inlcuded)
         self.k_queries = int(k_queries)
-        self.sanitize_query = sanitize_query
+        self.sanitize_query = bool(sanitize_query)
         self.qpp = qpp
         self.first_step_ranker = first_step_ranker
         self.num_first_retrieved_documents = int(num_first_retrieved_documents)
         self.fusion_method = fusion_method
         self.reranker = reranker
-        self.num_reranked_documents = num_reranked_documents
+        self.num_reranked_documents = int(num_reranked_documents)
+        
+        if self.reranker != 'no_reranker':
+            self.logits_llm = MiniTGIClient()
         
 
         # Store system prompts
@@ -120,6 +122,14 @@ class AnovaRAG(RAGSystemInterface):
         return query
     
     def rerank_by_logits(self, documents: List[SearchHit], question: str, num_reranked_documents: int) -> List[SearchHit]:
+        """
+        Rerank the documents using logits from the LLM.
+        Args:
+            documents: List of documents to rerank.
+            question: The question to use for reranking.
+            num_reranked_documents: Number of documents to return after reranking.
+        """
+        
         self.log.debug("Documents before reranking", documents=documents)
         id_doc_dict = {doc.id: doc for doc in documents}
         id_yes_prob = []

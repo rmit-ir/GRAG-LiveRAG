@@ -9,7 +9,7 @@ first_step_ranker="keywords+embedding_model"
 num_first_retrieved_documents=3
 fusion_method="concatenation"
 reranker="no_reranker"
-num_reranked_documents=15 # (optional) Number of documents to rerank
+num_reranked_documents=15 # (optional) Number of documents returned from rerank
 
 # File paths
 input="data/generated_qa_pairs/dmds_2_05012333.tsv"
@@ -20,7 +20,7 @@ common_args="--llm_client ai71 --system AnovaRAG --input $input --output-dir $ou
 
 # Run command with appropriate flags
 if [ "$sanitize_query" = true ]; then
-    uv run scripts/run.py $common_args --sanitize_query
+    uv run scripts/run.py $common_args --sanitize_query=true
 else
     uv run scripts/run.py $common_args
 fi
