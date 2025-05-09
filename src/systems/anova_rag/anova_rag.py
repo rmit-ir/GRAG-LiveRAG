@@ -76,8 +76,10 @@ class AnovaRAG(RAGSystemInterface):
         self.query_service = QueryService()
 
     def _create_query_variants(self, question: str) -> List[str]:
+        qgen_prompt = question
+        
         resp_text, _ = self.qgen_llm_client.complete_chat_once(
-            question, self.qgen_system_prompt)
+            qgen_prompt, self.qgen_system_prompt)
 
         think = re.search(r'<think>(.*?)</think>(.*)', resp_text, re.DOTALL)
         if think:
@@ -193,14 +195,14 @@ class AnovaRAG(RAGSystemInterface):
         context = "Documents: \n\n"
         context += "\n\n".join([doc.metadata.text for doc in documents])
 
-        prompt = context + "\n\nQuestion: " + question + "\n\nAnswer: "
+        agen_prompt = context + "\n\nQuestion: " + question + "\n\nAnswer: "
 
         answer, _ = self.rag_llm_client.complete_chat_once(
-            prompt, self.rag_system_prompt)
+            agen_prompt, self.rag_system_prompt)
 
         final_prompt = str([
             {"role": "system", "content": self.rag_system_prompt},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": agen_prompt}
         ])
 
         return RAGResult(
