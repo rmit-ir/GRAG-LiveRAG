@@ -26,7 +26,7 @@ class AnovaRAG(RAGSystemInterface):
                  first_step_ranker = 'keywords+embedding_model', 
                  fusion_method='concatenation',
                  reranker='pointwise',
-                 num_reranked_documents=15,):
+                 num_reranked_documents=10,):
         """
         Initialize the AnovaRAG.
 
@@ -42,7 +42,7 @@ class AnovaRAG(RAGSystemInterface):
             first_step_ranker: The first step ranker to use. Options are 'keywords+embedding_model', 'keywords', or 'embedding_model'. Default is 'bm25+embedding_model'.
             fusion_method: The method to use for gathering the first step retrieval results. Options are 'concatenation'. Default is 'concatenation'.
             reranker: The reranker to use. Options are 'pointwise'. Default is 'pointwise'.
-            num_reranked_documents: Number of documents returned from reranker. Better be less than num of quries * num of first step retrieved documents. Default is 15.
+            num_reranked_documents: Number of documents returned from reranker. Better be less than num of quries * num of first step retrieved documents. Default is 10.
         """
         if llm_client == 'ai71':
             self.rag_llm_client = AI71Client()

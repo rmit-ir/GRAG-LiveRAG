@@ -9,7 +9,7 @@ first_step_ranker="keywords+embedding_model"
 num_first_retrieved_documents=3
 fusion_method="concatenation"
 reranker="no_reranker"
-num_reranked_documents=15 # (optional) Number of documents returned from rerank
+num_reranked_documents=10 # (optional) Number of documents returned from rerank
 
 # File paths
 input="data/generated_qa_pairs/dmds_2_05012333.tsv"
