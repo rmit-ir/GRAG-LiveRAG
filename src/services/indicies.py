@@ -161,6 +161,7 @@ class QueryService:
         self,
         query: str,
         k: int = 10,
+        per_source_k: int = 10,
         return_raw_df: bool = False,
         pk_namespace: Optional[str] = None,
         rrf_k: int = 60,
@@ -190,8 +191,8 @@ class QueryService:
 
         # Query both embedding and keywords with the same k
         embedding_hits = self.query_embedding(
-            query, k=k, namespace=pk_namespace)
-        keyword_hits = self.query_keywords(query, k=k)
+            query, k=per_source_k, namespace=pk_namespace)
+        keyword_hits = self.query_keywords(query, k=per_source_k)
 
         # Convert hits to TrecRun objects
         embedding_run = self._hits_to_trecrun(
@@ -261,49 +262,6 @@ class QueryService:
         df.columns = ["query", "q0", "docid", "rank", "score", "system"]
         query_run.load_run_from_dataframe(df)
         return query_run
-
-
-def truncate_docs(docs: List[SearchHit], words_threshold: int = 20000) -> List[SearchHit]:
-    """
-    Truncate a list of SearchHit documents based on a word count threshold.
-
-    Args:
-        docs: List of SearchHit objects
-        words_threshold: Maximum number of words to include (default: 20000)
-
-    Returns:
-        Truncated list of SearchHit objects
-    """
-    if not docs:
-        return []
-
-    logger = get_logger("truncate_documents")
-    truncated_docs = []
-    total_words = 0
-
-    for doc in docs:
-        # Count words in the document text
-        doc_text = doc.metadata.text if hasattr(doc.metadata, "text") else ""
-        word_count = len(doc_text.split())
-
-        # Check if adding this document would exceed the threshold
-        if total_words + word_count > words_threshold:
-            logger.debug("Word threshold reached",
-                         total_words=total_words,
-                         threshold=words_threshold,
-                         docs_included=len(truncated_docs),
-                         docs_total=len(docs))
-            break
-
-        # Add document and update word count
-        truncated_docs.append(doc)
-        total_words += word_count
-
-    logger.debug("Documents truncated",
-                 original_count=len(docs),
-                 truncated_count=len(truncated_docs),
-                 total_words=total_words)
-    return truncated_docs
 
 
 # Example usage

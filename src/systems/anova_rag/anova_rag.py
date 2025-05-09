@@ -6,7 +6,7 @@ import time
 import json
 import os
 from typing import List
-from services.indicies import QueryService, SearchHit, truncate_docs
+from services.indicies import QueryService, SearchHit
 from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
