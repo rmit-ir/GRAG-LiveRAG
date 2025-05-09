@@ -11,6 +11,7 @@ fusion_method="concatenation"
 reranker="no_reranker"
 num_reranked_documents=10
 
+reference_file="dmds_2_05012333"
 # Loop through prompt levels
 for query_gen_prompt_level in "naive" "medium" "advanced"; do
     for rag_prompt_level in "naive" "medium" "advanced"; do
@@ -18,7 +19,7 @@ for query_gen_prompt_level in "naive" "medium" "advanced"; do
         base_dir="data/anova_result/${original_question_inlcuded}_${k_queries}_${sanitize_query}_${query_gen_prompt_level}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}_${rag_prompt_level}"
         
         # Find the most recent result file
-        results_path=$(ls -t "${base_dir}"/dmds_2_05012333.run*.AnovaRAG.tsv 2>/dev/null | head -n1)
+        results_path=$(ls -t "${base_dir}"/${reference_file}.run*.AnovaRAG.tsv 2>/dev/null | head -n1)
         
         if [ -z "$results_path" ]; then
             echo "No result file found in ${base_dir}, skipping..."
@@ -33,7 +34,7 @@ for query_gen_prompt_level in "naive" "medium" "advanced"; do
         uv run scripts/evaluate.py \
             --evaluator LLMEvaluator \
             --results "$results_path" \
-            --reference data/generated_qa_pairs/dmds_2_05012333.tsv \
+            --reference data/generated_qa_pairs/${reference_file}.tsv \
             --output-dir "$output_dir"
     done
 done
