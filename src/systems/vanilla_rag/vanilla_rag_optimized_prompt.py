@@ -58,47 +58,6 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
         self.expand_doc = expand_doc
         self.context_words_limit = int(context_words_limit)
 
-    def _create_query_variants(self, question: str) -> List[str]:
-        resp_text, _ = self.qgen_llm_client.complete_chat_once(
-            question, self.qgen_system_prompt)
-
-        think = re.search(r'<think>(.*?)</think>(.*)', resp_text, re.DOTALL)
-        if think:
-            self.logger.info(f"Think: {think.group(1)}")
-            # Use the second matched group (content after </think>)
-            query_text = think.group(2).strip()
-        else:
-            # If no <think> block, use the entire response
-            query_text = resp_text
-
-        queries = query_text.split("\n")
-        queries = [self._sanitize_query(query) for query in queries]
-        if len(queries) > self.k_queries:
-            self.logger.warning(
-                f"Number of generated queries ({len(queries)}) exceeds the limit ({self.k_queries}). Truncating.",
-                source_queries=queries)
-            queries = queries[:self.k_queries]
-        # return queries + [question]
-        return queries
-
-    def _sanitize_query(self, query: str) -> str:
-        query = query.strip()
-
-        # Check for numbered list format (e.g., "1. query" or "11. query")
-        import re
-        numbered_pattern = re.match(r'^\d+\.\s+(.*)', query)
-        if numbered_pattern:
-            query = numbered_pattern.group(1)
-
-        # Remove surrounding quotes if present
-        if (query.startswith('"') and query.endswith('"')) or (query.startswith("'") and query.endswith("'")):
-            query = query[1:-1]
-
-        # Replace escaped quotes with regular quotes
-        query = query.replace("\\'", "'").replace('\\"', '"')
-
-        return query
-
     def process_question(self, question: str, qid: str = None) -> RAGResult:
         """
         Process the question and return the answer.
