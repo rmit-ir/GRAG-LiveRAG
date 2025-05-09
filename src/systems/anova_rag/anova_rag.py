@@ -3,6 +3,8 @@ uv run scripts/run.py --system AnovaRAG --help
 """
 import re
 import time
+import json
+import os
 from typing import List
 from services.indicies import QueryService, SearchHit, truncate_docs
 from services.llms.ai71_client import AI71Client
@@ -26,7 +28,9 @@ class AnovaRAG(RAGSystemInterface):
                  first_step_ranker = 'keywords+embedding_model', 
                  fusion_method='concatenation',
                  reranker='pointwise',
-                 num_reranked_documents=10,):
+                 num_reranked_documents=10,
+                 query_gen_prompt_level='naive',
+                 rag_prompt_level='naive'):
         """
         Initialize the AnovaRAG.
 
@@ -43,7 +47,10 @@ class AnovaRAG(RAGSystemInterface):
             fusion_method: The method to use for gathering the first step retrieval results. Options are 'concatenation'. Default is 'concatenation'.
             reranker: The reranker to use. Options are 'pointwise'. Default is 'pointwise'.
             num_reranked_documents: Number of documents returned from reranker. Better be less than num of quries * num of first step retrieved documents. Default is 10.
+            query_gen_prompt_level: The level of the query generation prompt to use. Options are 'naive', 'medium', or 'advanced'. Default is 'naive'.
+            rag_prompt_level: The level of the RAG prompt to use. Options are 'naive', 'medium', or 'advanced'. Default is 'naive'.
         """
+        
         if llm_client == 'ai71':
             self.rag_llm_client = AI71Client()
             self.qgen_llm_client = AI71Client()
@@ -70,13 +77,23 @@ class AnovaRAG(RAGSystemInterface):
             self.logits_llm = MiniTGIClient()
         
 
-        # Store system prompts
-        self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
-        self.qgen_system_prompt = f"Generate a list of {k_queries} search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
+        # Load prompts from JSON files
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        with open(os.path.join(current_dir, 'rag_prompts.json'), 'r') as f:
+            rag_prompts = json.load(f)
+        with open(os.path.join(current_dir, 'query_gen_prompts.json'), 'r') as f:
+            query_gen_prompts = json.load(f)
+        
+        # Store system prompts and primary prompts
+        self.rag_system_prompt = rag_prompts[rag_prompt_level]['system_prompt']
+        self.rag_primary_prompt = rag_prompts[rag_prompt_level]['primary_prompt']
+        self.qgen_system_prompt = query_gen_prompts[query_gen_prompt_level]['system_prompt'].format(k_queries=k_queries)
+        self.qgen_primary_prompt = query_gen_prompts[query_gen_prompt_level]['primary_prompt']
         self.query_service = QueryService()
 
     def _create_query_variants(self, question: str) -> List[str]:
-        qgen_prompt = question
+        qgen_prompt = self.qgen_primary_prompt.format(question=question)
         
         resp_text, _ = self.qgen_llm_client.complete_chat_once(
             qgen_prompt, self.qgen_system_prompt)
@@ -192,10 +209,8 @@ class AnovaRAG(RAGSystemInterface):
         else:
             raise ValueError(f"Invalid reranker: {self.reranker}. Options are 'no_reranker' or 'pointwise'.")
         
-        context = "Documents: \n\n"
-        context += "\n\n".join([doc.metadata.text for doc in documents])
-
-        agen_prompt = context + "\n\nQuestion: " + question + "\n\nAnswer: "
+        context = "\n\n".join([doc.metadata.text for doc in documents])
+        agen_prompt = self.rag_primary_prompt.format(context=context, question=question)
 
         answer, _ = self.rag_llm_client.complete_chat_once(
             agen_prompt, self.rag_system_prompt)
