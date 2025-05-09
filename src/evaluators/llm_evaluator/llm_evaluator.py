@@ -342,7 +342,7 @@ class LLMEvaluator(EvaluatorInterface):
             avg_time_per_item = elapsed_time / completed
             remaining_items = total - completed
             estimated_time_remaining = avg_time_per_item * remaining_items
-            
+
             self.logger.info(
                 f"Evaluation progress",
                 completed=f"{completed}/{total}",
@@ -355,7 +355,7 @@ class LLMEvaluator(EvaluatorInterface):
                 completed=f"{completed}/{total}",
                 elapsed_time=round(elapsed_time, 3)
             )
-        
+
         return current_time
 
     def _evaluate_with_threads(self, rag_results: List[RAGResult], references_by_qid: Dict[str, QAPair]) -> List[EvaluationResultRow]:
@@ -378,11 +378,10 @@ class LLMEvaluator(EvaluatorInterface):
         rows = []
         completed_count = 0
         start_time = time.time()
-        last_log_time = start_time
 
         def evaluate_and_collect(rag_result):
-            nonlocal completed_count, last_log_time
-            
+            nonlocal completed_count
+
             # Get the reference QA pair if available
             reference = references_by_qid.get(
                 rag_result.qid) if self.use_gold_references else None
@@ -394,13 +393,12 @@ class LLMEvaluator(EvaluatorInterface):
             with lock:
                 rows.append(row)
                 completed_count += 1
-                
+
                 # Update elapsed time
                 elapsed_time = time.time() - start_time
-                
+
                 # Log progress at intervals
-                last_log_time = self._log_progress(
-                    completed_count, total_count, elapsed_time)
+                self._log_progress(completed_count, total_count, elapsed_time)
 
             return row
 
@@ -444,8 +442,7 @@ class LLMEvaluator(EvaluatorInterface):
             rows = []
             valid_results = [r for r in rag_results if r.qid is not None]
             total_valid = len(valid_results)
-            last_log_time = start_time
-            
+
             for i, rag_result in enumerate(valid_results):
                 # Get the reference QA pair if available
                 reference = references_by_qid.get(
@@ -454,15 +451,13 @@ class LLMEvaluator(EvaluatorInterface):
                 # Create evaluation row
                 row = self._create_evaluation_row(rag_result, reference)
                 rows.append(row)
-                
+
                 # Update elapsed time and log progress
                 elapsed_time = time.time() - start_time
                 completed = i + 1
-                
+
                 # Log progress at intervals
-                last_log_time = self._log_progress(
-                    completed, total_valid, elapsed_time, last_log_time
-                )
+                self._log_progress(completed, total_valid, elapsed_time)
 
         # Calculate aggregate metrics and total cost
         metrics, total_cost = self._calculate_aggregate_metrics(rows)
