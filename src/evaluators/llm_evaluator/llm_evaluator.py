@@ -28,6 +28,7 @@ from evaluators.llm_evaluator.prompts import (
     SUMMARY_PROMPT_TEMPLATE,
     SYSTEM_PROMPT_SUPPORT
 )
+from utils.str_utils import take_words
 
 
 class LLMEvaluator(EvaluatorInterface):
@@ -123,7 +124,7 @@ class LLMEvaluator(EvaluatorInterface):
         # Fill in the template
         prompt = prompt_template.format(
             question=rag_result.question,
-            answer=rag_result.answer,
+            answer=take_words(rag_result.answer, 200),
             gold_reference=gold_reference,
             documents=documents
         )
