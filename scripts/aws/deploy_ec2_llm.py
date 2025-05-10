@@ -471,6 +471,7 @@ class EC2Deployer:
             )
 
             # Upload the program file if provided
+            remote_program_path: str = None
             if self.app.program_file:
                 remote_program_path = f"/tmp/{os.path.basename(self.app.program_file)}"
                 logger.info(
@@ -494,7 +495,9 @@ class EC2Deployer:
             logger.info(f"Setting up {self.app.name} service...")
 
             # Prepare environment variables
-            env_vars_dict = {'UPLOADED_PROGRAM_FILE': remote_launch_path}
+            env_vars_dict = dict()
+            if remote_program_path:
+                env_vars_dict['UPLOADED_PROGRAM_FILE'] = remote_program_path
             if self.app.remote_port:
                 env_vars_dict["PORT"] = self.app.remote_port
                 
@@ -1107,14 +1110,41 @@ class EC2Deployer:
                 if "ExpiredToken" in str(e) or "InvalidToken" in str(e) or "NotSignedUp" in str(e) or "CredentialsNotFound" in str(e) or "InvalidClientTokenId" in str(e):
                     stack_name = self.stack_name
                     region = self.region_name
-                    logger.error(
+                    logger.warning(
                         f"Session token issue detected during cleanup: {str(e)}")
-                    logger.error(
-                        f"IMPORTANT: Please manually delete the CloudFormation stack '{stack_name}' in region '{region}'")
-                    logger.error(
-                        f"Visit: https://{region}.console.aws.amazon.com/cloudformation/home?region={region}#/stacks")
-                    logger.error(
-                        "Find your stack in the list, select it, and click 'Delete' from the Actions menu")
+                    logger.info(
+                        "Reloading credentials from .env file and retrying...")
+                    
+                    try:
+                        # Reload credentials using the session manager
+                        self.session_manager.reload_credentials()
+                        
+                        # Get new clients from the session manager
+                        self.boto_session = self.session_manager.boto_session
+                        self.cf_client = self.boto_session.client('cloudformation')
+                        self.ec2_client = self.boto_session.client('ec2')
+                        
+                        # Retry deleting the stack
+                        logger.info(f"Retrying deletion of CloudFormation stack: {stack_name}")
+                        self.cf_client.delete_stack(StackName=stack_name)
+                        
+                        # Wait for stack deletion to complete
+                        self.wait_for_stack_operation(
+                            operation_type="deletion",
+                            success_status="DELETE_COMPLETE",
+                            failure_statuses=["DELETE_FAILED"]
+                        )
+                        
+                        logger.info(f"Stack deletion complete after credential refresh: {stack_name}")
+                        
+                    except Exception as retry_e:
+                        logger.error(f"Error retrying stack deletion after credential refresh: {str(retry_e)}")
+                        logger.error(
+                            f"IMPORTANT: Please manually delete the CloudFormation stack '{stack_name}' in region '{region}'")
+                        logger.error(
+                            f"Visit: https://{region}.console.aws.amazon.com/cloudformation/home?region={region}#/stacks")
+                        logger.error(
+                            "Find your stack in the list, select it, and click 'Delete' from the Actions menu")
                 else:
                     logger.error(f"Error deleting stack: {str(e)}")
             except Exception as e:

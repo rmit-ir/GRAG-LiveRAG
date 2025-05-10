@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Union
 
 import boto3
 from botocore.exceptions import ClientError
+from dotenv import load_dotenv
 
 from utils.logging_utils import get_logger
 
@@ -34,31 +35,55 @@ class SessionManager:
         Args:
             region_name (str, optional): AWS region name. If None, uses RACE_AWS_REGION from env
         """
+        # Store the region_name for potential client recreation
+        self.region_name = region_name
+        
+        # Initialize the client
+        self._initialize_client()
+        
+        # Check if Session Manager plugin is installed
+        self._check_session_manager_plugin()
+        
+        logger.debug(f"Initialized Session Manager client for region: {self.region_name}")
+        
+    def _initialize_client(self):
+        """
+        Initialize or reinitialize the boto3 session and clients with credentials from environment variables.
+        This method can be called to refresh credentials when they expire.
+        """
         # Get AWS credentials from environment variables with RACE_ prefix
         access_key = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
         secret_key = os.environ.get("RACE_AWS_SECRET_ACCESS_KEY", "")
         session_token = os.environ.get("RACE_AWS_SESSION_TOKEN", "")
         
         # Use provided region_name or get from environment variable
-        if region_name is None:
-            region_name = os.environ.get("RACE_AWS_REGION", "us-west-2")
+        if self.region_name is None:
+            self.region_name = os.environ.get("RACE_AWS_REGION", "us-west-2")
         
         # Set up boto3 session with explicit credentials
         self.boto_session = boto3.Session(
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             aws_session_token=session_token,
-            region_name=region_name
+            region_name=self.region_name
         )
         
-        self.region_name = region_name
+        # Initialize clients
         self.ssm_client = self.boto_session.client('ssm')
         self.ec2_client = self.boto_session.client('ec2')
         
-        # Check if Session Manager plugin is installed
-        self._check_session_manager_plugin()
+        logger.debug(f"(Re)initialized boto3 session and clients for region: {self.region_name}")
         
-        logger.debug(f"Initialized Session Manager client for region: {region_name}")
+    def reload_credentials(self):
+        """
+        Reload credentials from .env file and reinitialize the client.
+        This should be called when credentials expire.
+        """
+        logger.info("Reloading credentials from .env file")
+        # Reload environment variables from .env file
+        load_dotenv(override=True)
+        # Reinitialize the client with fresh credentials
+        self._initialize_client()
 
     def _check_session_manager_plugin(self) -> bool:
         """

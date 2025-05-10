@@ -22,13 +22,13 @@ class AnovaRAG(RAGSystemInterface):
                  qgen_api_base=None, 
                  original_question_inlcuded=False,
                  k_queries=5, 
-                 sanitize_query=False, 
-                 qpp='no_qpp',
-                 num_first_retrieved_documents=3, 
-                 first_step_ranker = 'keywords+embedding_model', 
-                 fusion_method='concatenation',
-                 reranker='pointwise',
-                 num_reranked_documents=10,
+                 sanitize_query=True, 
+                 qpp='no',
+                 num_first_retrieved_documents=5, 
+                 first_step_ranker = 'both', 
+                 fusion_method='concat',
+                 reranker='no',
+                 num_reranked_documents=5,
                  query_gen_prompt_level='naive',
                  rag_prompt_level='naive'):
         """
@@ -40,13 +40,13 @@ class AnovaRAG(RAGSystemInterface):
             
             original_question_inlcuded: If True, include the original question in the generated queries. Default is False.
             k_queries: Number of query variants to generate. Default is 5.
-            sanitize_query: If True, sanitize the generated queries (remove qoutes, numbers, etc.). Default is False.
+            sanitize_query: If True, sanitize the generated queries (remove qoutes, numbers, etc.). Default is True.
             qpp: Query preformance prediction algorithm. Not in use now.
-            num_first_retrieved_documents: Number of documents to retrieve in the first step. Default is 3.
-            first_step_ranker: The first step ranker to use. Options are 'keywords+embedding_model', 'keywords', or 'embedding_model'. Default is 'bm25+embedding_model'.
-            fusion_method: The method to use for gathering the first step retrieval results. Options are 'concatenation'. Default is 'concatenation'.
-            reranker: The reranker to use. Options are 'pointwise'. Default is 'pointwise'.
-            num_reranked_documents: Number of documents returned from reranker. Better be less than num of quries * num of first step retrieved documents. Default is 10.
+            num_first_retrieved_documents: Number of documents to retrieve in the first step. Default is 5.
+            first_step_ranker: The first step ranker to use. Options are 'both', 'keywords', or 'embedding'. Default is 'both'.
+            fusion_method: The method to use for gathering the first step retrieval results. Options are 'concat', 'RRF'. Default is 'concat', RRF is not in use now.
+            reranker: The reranker to use. Options are 'logits'. Default is 'logits'.
+            num_reranked_documents: Number of documents returned from reranker. Better be less than num of quries * num of first step retrieved documents. Default is 5.
             query_gen_prompt_level: The level of the query generation prompt to use. Options are 'naive', 'medium', or 'advanced'. Default is 'naive'.
             rag_prompt_level: The level of the RAG prompt to use. Options are 'naive', 'medium', or 'advanced'. Default is 'naive'.
         """
@@ -73,7 +73,7 @@ class AnovaRAG(RAGSystemInterface):
         self.reranker = reranker
         self.num_reranked_documents = int(num_reranked_documents)
         
-        if self.reranker != 'no_reranker':
+        if self.reranker != 'no':
             self.logits_llm = MiniTGIClient()
         
 
@@ -149,7 +149,7 @@ class AnovaRAG(RAGSystemInterface):
             num_reranked_documents: Number of documents to return after reranking.
         """
         
-        self.log.debug("Documents before reranking", documents=documents)
+        self.logger.debug("Documents before reranking", documents=documents)
         id_doc_dict = {doc.id: doc for doc in documents}
         id_yes_prob = []
         for hit in documents:
@@ -159,14 +159,14 @@ class AnovaRAG(RAGSystemInterface):
                 prompt, tokens=['Yes', 'No'])
             yes_raw_prob = logits['raw_probabilities'].get('Yes', 0.0)
             id_yes_prob.append((hit.id, yes_raw_prob))
-        self.log.debug("Logits for documents", logits=id_yes_prob)
+        self.logger.debug("Logits for documents", logits=id_yes_prob)
 
         sorted_docs = sorted(id_yes_prob, key=lambda x: x[1], reverse=True)
         reranked_docs = []
         for doc_id, _ in sorted_docs:
             if doc_id in id_doc_dict:
                 reranked_docs.append(id_doc_dict[doc_id])
-        self.log.debug("Documents after reranking", documents=reranked_docs)
+        self.logger.debug("Documents after reranking", documents=reranked_docs)
 
         return reranked_docs[:num_reranked_documents]
 
@@ -184,20 +184,20 @@ class AnovaRAG(RAGSystemInterface):
         doc_ids_set = set()
         
         for query in queries:
-            if self.first_step_ranker == 'keywords+embedding_model':
+            if self.first_step_ranker == 'both':
                 embed_results = self.query_service.query_embedding(query, k=self.num_first_retrieved_documents)
                 keyword_results = self.query_service.query_keywords(query, k=self.num_first_retrieved_documents)
-                if self.fusion_method == 'concatenation':
+                if self.fusion_method == 'concat':
                     results = embed_results + keyword_results
                 else:
-                    raise ValueError(f"Invalid fusion method: {self.fusion}. Options are 'concatenation'.")
+                    raise ValueError(f"Invalid fusion method: {self.fusion}. Options are 'concat'.")
             
             elif self.first_step_ranker == 'keywords':
                 results = self.query_service.query_keywords(query, k=self.num_first_retrieved_documents)
-            elif self.first_step_ranker == 'embedding_model':
+            elif self.first_step_ranker == 'embedding':
                 results = self.query_service.query_embedding(query, k=self.num_first_retrieved_documents)
             else:
-                raise ValueError(f"Invalid first step ranker: {self.first_step_ranker}. Options are 'bm25+embedding_model', 'bm25', or 'embedding_model'.")
+                raise ValueError(f"Invalid first step ranker: {self.first_step_ranker}. Options are 'both', 'keywords', or 'embedding'.")
             
             for hit in results:
                 if hit.id not in hit_ids:
@@ -208,12 +208,12 @@ class AnovaRAG(RAGSystemInterface):
                         doc_ids_set.add(hit.metadata.doc_id)
 
         # Rerank the documents using logits
-        if self.reranker == 'no_reranker':
+        if self.reranker == 'no':
             pass
-        elif self.reranker == 'pointwise':
+        elif self.reranker == 'logits':
             documents = self.rerank_by_logits(documents, question, self.num_reranked_documents)
         else:
-            raise ValueError(f"Invalid reranker: {self.reranker}. Options are 'no_reranker' or 'pointwise'.")
+            raise ValueError(f"Invalid reranker: {self.reranker}. Options are 'no' or 'logits'.")
         
         # context is the documents in the order of the doc_ids
         context = "\n\n".join([f"Document [{i+1}] {doc.metadata.text}" for i, doc in enumerate(documents)])

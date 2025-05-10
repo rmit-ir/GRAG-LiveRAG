@@ -412,7 +412,7 @@ def load_reference_qa_pairs(reference_file: str) -> List[QAPair]:
         raise
 
 
-def save_evaluation_results(result: EvaluationResult, base_name: str, output_format: str = None) -> None:
+def save_evaluation_results(result: EvaluationResult, base_name: str, output_format: str = None, full_command: str = None) -> None:
     """
     Save evaluation results to separate files for aggregated results and individual rows.
 
@@ -420,6 +420,7 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
         result: EvaluationResult object
         base_name: Base name for output files (without extension)
         output_format: Format to save results in ('jsonl', 'tsv', or None to default to 'tsv')
+        full_command: Full command string including all parameters and values
     """
     try:
         # Determine format if not specified
@@ -441,6 +442,10 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
                 "system_name": result.system_name,
                 "timestamp": result.timestamp.isoformat()
             }
+            
+            # Add full command if available
+            if full_command:
+                aggregated_dict["full_command"] = full_command
 
             if result.total_time_ms is not None:
                 aggregated_dict["total_time_ms"] = result.total_time_ms
@@ -470,6 +475,10 @@ def save_evaluation_results(result: EvaluationResult, base_name: str, output_for
                 "timestamp": result.timestamp.isoformat(),
                 "is_aggregated": True
             }
+            
+            # Add full command if available
+            if full_command:
+                agg_row["full_command"] = full_command
 
             if result.total_time_ms is not None:
                 agg_row["total_time_ms"] = result.total_time_ms
@@ -597,6 +606,9 @@ def main():
     """Main entry point for the script."""
     # Start timing the entire process
     start_time = time.time()
+    
+    # Capture the full command
+    full_command = " ".join(sys.argv)
 
     # First, create a basic parser to get the evaluator argument
     basic_parser = argparse.ArgumentParser(add_help=False)
@@ -665,7 +677,7 @@ def main():
 
         # Save evaluation results with specified format
         save_evaluation_results(
-            evaluation_result, base_name, args.output_format)
+            evaluation_result, base_name, args.output_format, full_command)
 
         # Determine file extensions for logging
         ext = '.jsonl' if args.output_format == 'jsonl' else '.tsv'

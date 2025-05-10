@@ -8,7 +8,7 @@
         "primary_prompt": "Documents:\n\n{context}\n\n*Question: {question}\nAnswer: "
     },
     "advanced": {
-        "system_prompt": "*You are given a question and you MUST respond by EXTRACTING the answer from provided documents. If none of the documents contain the answer, respond with NO-RES.*",
-        "primary_prompt": "Documents:\n\n{context}\n\n*Question: {question}*\nAnswer: "
+        "system_prompt": "You must respond based strictly on the information in provided passages. Do not incorporate any external knowledge or infer any details beyond what is given in the passages.",
+        "primary_prompt": "Provide a concise answer to the following question based on the information in the provided documents. Documents:\n\n{context}\n\n*Question: {question}*\nAnswer: "
     }
 }
