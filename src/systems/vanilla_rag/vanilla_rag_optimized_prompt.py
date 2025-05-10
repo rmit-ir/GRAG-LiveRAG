@@ -57,7 +57,7 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
         # if module_query_gen == 'with_num':
         self.logger = get_logger('vanilla_rag')
         self.k_queries = int(k_queries)
-        self.initial_retrieval_k_docs = initial_retrieval_k_docs
+        self.initial_retrieval_k_docs = int(initial_retrieval_k_docs)
 
         # Store system prompts
         self.rag_prompt_version = rag_prompt_version
@@ -92,25 +92,26 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
 
         logits_reranker_metrics = {}
         if self.use_logits_reranker:
-            # protect the LLM context length
-            hard_truncated_docs = truncate_doc_listings(
-                listings=listings, context_word_limit=15_000)
+            # # protect the LLM context length
+            # hard_truncated_docs = truncate_doc_listings(
+            #     listings=listings, context_word_limit=15_000)
+            all_docs = [hit for list in listings for hit in list]
             # rerank and also truncate the documents
             docs = self.reranker.rerank(
-                hard_truncated_docs, question=qs_res.rephrased_query, words_limit=self.context_words_limit)
-            
+                all_docs, question=qs_res.rephrased_query, words_limit=self.context_words_limit)
+
             # Record key metrics for logits reranker
             logits_reranker_metrics = {
                 "logits_reranker_prompt_version": self.reranker.prompt_version,
-                "logits_reranker_docs_before": len(hard_truncated_docs),
+                "logits_reranker_docs_before": len(all_docs),
                 "logits_reranker_docs_after": len(docs) if docs else 0,
                 "logits_reranker_highest_score": docs[0].score if docs and len(docs) > 0 else None,
                 "logits_reranker_lowest_score": docs[-1].score if docs and len(docs) > 0 else None,
             }
-            
+
             # If reranking returns nothing, fallback to first 10
             if docs is None or len(docs) == 0:
-                docs = hard_truncated_docs[:10]
+                docs = all_docs[:10]
                 logits_reranker_metrics["logits_reranker_fallback"] = True
         else:
             docs = truncate_doc_listings(
@@ -152,7 +153,7 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
         metadata = {"final_prompt": final_prompt}
         if self.use_logits_reranker:
             metadata.update(logits_reranker_metrics)
-            
+
         return RAGResult(
             qid=qid,
             question=question,

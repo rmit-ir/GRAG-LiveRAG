@@ -1,4 +1,6 @@
 from typing import List
+import sys
+from tqdm import tqdm
 
 from services.indicies import SearchHit
 from services.live_rag_metadata import LiveRAGMetadata
@@ -55,7 +57,9 @@ class LogitsReranker:
         id_yes_prob = []
         tokens = self.tokens
         goal_token = self.goal_token
-        for hit in docs:
+        
+        # Use tqdm with disable=None to automatically disable in non-interactive environments
+        for hit in tqdm(docs, desc="Reranking documents", disable=None if sys.stdout.isatty() else True):
             doc_text = hit.metadata.text.replace("\n", " ")
             prompt = self.prompt_tpl.format(
                 doc_text=doc_text, question=question)
