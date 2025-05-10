@@ -52,6 +52,8 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
             self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
         elif rag_prompt_version == "new":
             self.rag_system_prompt = ANSWER_SYSTEM_PROMPT
+        elif rag_prompt_version == "have_faith":
+            self.rag_system_prompt = "You must respond based strictly on the information in provided passages. Do not incorporate any external knowledge or infer any details beyond what is given in the passages."
 
         self.qgen_system_prompt = f"Generate a list of {k_queries} search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
         self.query_service = QueryService()
@@ -94,6 +96,9 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
         elif self.rag_prompt_version == "new":
             prompt = context + "\n\n## Question: " + question + "\n\n## Question Components: " + \
                 qs_res.components + "\n\n## Rephrased Question: " + qs_res.rephrased_query
+        elif self.rag_prompt_version == "have_faith":
+            _prp = "Provide a concise answer to the following question based on the information in the provided passages."
+            prompt = context + "\n\n## Question: " + question + "\n\n" + _prp + "\n\n## Answer: "
         self.logger.debug(f"Final prompt", question=question, prompt=prompt)
 
         answer, _ = self.rag_llm_client.complete_chat_once(
