@@ -149,7 +149,7 @@ class AnovaRAG(RAGSystemInterface):
             num_reranked_documents: Number of documents to return after reranking.
         """
         
-        self.log.debug("Documents before reranking", documents=documents)
+        self.logger.debug("Documents before reranking", documents=documents)
         id_doc_dict = {doc.id: doc for doc in documents}
         id_yes_prob = []
         for hit in documents:
@@ -159,14 +159,14 @@ class AnovaRAG(RAGSystemInterface):
                 prompt, tokens=['Yes', 'No'])
             yes_raw_prob = logits['raw_probabilities'].get('Yes', 0.0)
             id_yes_prob.append((hit.id, yes_raw_prob))
-        self.log.debug("Logits for documents", logits=id_yes_prob)
+        self.logger.debug("Logits for documents", logits=id_yes_prob)
 
         sorted_docs = sorted(id_yes_prob, key=lambda x: x[1], reverse=True)
         reranked_docs = []
         for doc_id, _ in sorted_docs:
             if doc_id in id_doc_dict:
                 reranked_docs.append(id_doc_dict[doc_id])
-        self.log.debug("Documents after reranking", documents=reranked_docs)
+        self.logger.debug("Documents after reranking", documents=reranked_docs)
 
         return reranked_docs[:num_reranked_documents]
 
