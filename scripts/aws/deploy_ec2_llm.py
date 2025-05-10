@@ -494,7 +494,9 @@ class EC2Deployer:
             logger.info(f"Setting up {self.app.name} service...")
 
             # Prepare environment variables
-            env_vars_dict = {'UPLOADED_PROGRAM_FILE': remote_launch_path}
+            env_vars_dict = dict()
+            if remote_program_path:
+                env_vars_dict['UPLOADED_PROGRAM_FILE'] = remote_program_path
             if self.app.remote_port:
                 env_vars_dict["PORT"] = self.app.remote_port
                 
