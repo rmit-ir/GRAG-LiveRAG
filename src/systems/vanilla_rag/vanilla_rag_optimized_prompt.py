@@ -7,8 +7,10 @@ from typing import List
 from services.indicies import QueryService, SearchHit
 from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
+from services.llms.mini_tgi_client import MiniTGIClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
+from systems.rerank_logits_rag.logits_reranker import LogitsReranker
 from systems.vanilla_rag.query_expansion import expand_queries
 from systems.vanilla_rag.vanilla_rag_optimized_prompt_prompts import ANSWER_SYSTEM_PROMPT
 from utils.doc_listing_utils import truncate_doc_listings, truncate_docs
@@ -22,7 +24,9 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
                  qgen_api_base=None,
                  k_queries=5,
                  rag_prompt_version="vanilla_rag",
+                 use_logits_reranker=False,
                  expand_doc=False,
+                 logits_prompt_version="identify_source",
                  context_words_limit=15_000):
         """
         Initialize the BasicRAG2.
@@ -32,6 +36,7 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
             module_query_gen: Select this module for query generation. Options are 'with_number'|'without_number', default is 'with_number'.
             rag_prompt_version: The version of the prompt to use, vanilla_rag, new, Default is vanilla_rag.
             expand_doc: If True, expand the chunks into full docs and preserve ranking. Default is False.
+            logits_prompt_version: The version of the prompt to use for logits reranking, identify_source | can_answer. Default is identify_source.
             expand_words_limit: The number of words to keep after expanded chunks to documents.
         """
         if llm_client == 'ai71':
@@ -41,6 +46,11 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
             self.rag_llm_client = EC2LLMClient()
             self.qgen_llm_client = EC2LLMClient(
                 model_id=qgen_model_id, api_base=qgen_api_base)
+        self.use_logits_reranker = use_logits_reranker
+        if use_logits_reranker:
+            self.logits_llm = MiniTGIClient()
+            self.reranker = LogitsReranker(
+                self.logits_llm, prompt_version=logits_prompt_version)
 
         # if module_query_gen == 'with_num':
         self.logger = get_logger('vanilla_rag')
@@ -74,9 +84,15 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
             results = self.query_service.query_fusion(
                 query, k=10, per_source_k=100)
             listings.append(results)
+        # len(docs) = k * len(queries) = 10 * 5 = 50
 
-        docs = truncate_doc_listings(
-            listings=listings, context_word_limit=self.context_words_limit)
+        if self.use_logits_reranker:
+            # rerank and also truncate the documents
+            docs = self.reranker.rerank(
+                docs, question=qs_res.rephrased_query, words_limit=self.context_words_limit)
+        else:
+            docs = truncate_doc_listings(
+                listings=listings, context_word_limit=self.context_words_limit)
 
         # If expand_doc is True, expand the chunks using get_doc while preserving original ranking
         if self.expand_doc:
@@ -98,7 +114,8 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
                 qs_res.components + "\n\n## Rephrased Question: " + qs_res.rephrased_query
         elif self.rag_prompt_version == "have_faith":
             _prp = "Provide a concise answer to the following question based on the information in the provided passages."
-            prompt = context + "\n\n## Question: " + question + "\n\n" + _prp + "\n\n## Answer: "
+            prompt = context + "\n\n## Question: " + \
+                question + "\n\n" + _prp + "\n\n## Answer: "
         self.logger.debug(f"Final prompt", question=question, prompt=prompt)
 
         answer, _ = self.rag_llm_client.complete_chat_once(
