@@ -24,7 +24,8 @@ for original_question_inlcuded in false true; do
                             if [ "$stop_loops" = true ]; then break; fi
                             for num_reranked_documents in 5 10 15; do
                                 if [ "$stop_loops" = true ]; then break; fi
-                                for query_gen_prompt_level in naive medium advanced; do
+                                # for query_gen_prompt_level in naive medium advanced; do
+                                for query_gen_prompt_level in naive medium; do
                                     if [ "$stop_loops" = true ]; then break; fi
                                     for rag_prompt_level in naive medium advanced; do
                                         if [ "$stop_loops" = true ]; then break; fi
