@@ -141,36 +141,6 @@ class AnovaRAG(RAGSystemInterface):
         query = query.replace("\\'", "'").replace('\\"', '"')
 
         return query
-    
-    def rerank_by_logits(self, documents: List[SearchHit], question: str, num_reranked_documents: int) -> List[SearchHit]:
-        """
-        Rerank the documents using logits from the LLM.
-        Args:
-            documents: List of documents to rerank.
-            question: The question to use for reranking.
-            num_reranked_documents: Number of documents to return after reranking.
-        """
-        
-        self.logger.debug("Documents before reranking", documents=documents)
-        id_doc_dict = {doc.id: doc for doc in documents}
-        id_yes_prob = []
-        for hit in documents:
-            doc_text = hit.metadata.text.replace("\n", " ")
-            prompt = f"Document: {doc_text}\n\nQuestion: {question}\n\nIs this question generated from this document (only answer 'Yes' or 'No')?\nAnswer:\n\n"
-            logits = self.logits_llm.get_token_logits(
-                prompt, tokens=['Yes', 'No'])
-            yes_raw_prob = logits['raw_probabilities'].get('Yes', 0.0)
-            id_yes_prob.append((hit.id, yes_raw_prob))
-        self.logger.debug("Logits for documents", logits=id_yes_prob)
-
-        sorted_docs = sorted(id_yes_prob, key=lambda x: x[1], reverse=True)
-        reranked_docs = []
-        for doc_id, _ in sorted_docs:
-            if doc_id in id_doc_dict:
-                reranked_docs.append(id_doc_dict[doc_id])
-        self.logger.debug("Documents after reranking", documents=reranked_docs)
-
-        return reranked_docs[:num_reranked_documents]
 
     def process_question(self, question: str, qid: str = None) -> RAGResult:
         """
