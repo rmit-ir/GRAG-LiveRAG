@@ -8,16 +8,16 @@ input="data/generated_qa_pairs/${reference_file}.tsv"
 
 # Configuration lists
 QUERY_GEN_PROMPT_LEVELS=("naive" "medium")
-RAG_PROMPT_LEVELS=("naive" "medium" "advanced")
+RAG_PROMPT_LEVELS=("naive" "medium")
 ORIGINAL_QUESTION_INCLUDED_VALUES=("false" "true")
-K_QUERIES_VALUES=(4 5 8)
+K_QUERIES_VALUES=(5 8)
 QPP_VALUES=("no")
-FIRST_STEP_RANKER_VALUES=("both" "keywords" "embedding")
+FIRST_STEP_RANKER_VALUES=("both" "embedding")
 NUM_FIRST_RETRIEVED_DOCUMENTS_VALUES=(5 8)
 FUSION_METHOD_VALUES=("concat")
 RERANKER_VALUES=("no" "logits")
 NUM_RERANKED_DOCUMENTS_VALUES_NO=(0)
-NUM_RERANKED_DOCUMENTS_VALUES_LOGITS=(10 15 20)
+NUM_RERANKED_DOCUMENTS_VALUES_LOGITS=(10 15)
 
 # Add trap handler for Ctrl+C
 stop_loops=false
