@@ -44,6 +44,10 @@ class LogitsReranker:
             self.prompt_tpl = PROMPT_IDENTIFY_SOURCE
         elif prompt_version == 'can_answer':
             self.prompt_tpl = PROMPT_CAN_ANSWER
+        else:
+            log.error(
+                "Invalid prompt version. Use 'identify_source' or 'can_answer'.")
+            self.prompt_tpl = PROMPT_IDENTIFY_SOURCE
 
     def rerank(self, docs: List[SearchHit], question: str, yes_threshold: float = 0.5, k_docs: int = None, words_limit: int = None) -> List[SearchHit]:
         log.debug("Documents before reranking", documents=docs)
