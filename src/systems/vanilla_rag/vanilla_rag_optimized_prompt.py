@@ -10,7 +10,7 @@ from services.llms.ec2_llm_client import EC2LLMClient
 from services.llms.mini_tgi_client import MiniTGIClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
-from systems.rerank_logits_rag.logits_reranker import LogitsReranker
+from services.logits_reranker import LogitsReranker
 from systems.vanilla_rag.query_expansion import expand_queries
 from systems.vanilla_rag.vanilla_rag_optimized_prompt_prompts import ANSWER_SYSTEM_PROMPT
 from utils.doc_listing_utils import truncate_doc_listings, truncate_docs

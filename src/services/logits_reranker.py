@@ -35,7 +35,7 @@ Does this document contain information that helps answer this question (only ans
 
 
 class LogitsReranker:
-    def __init__(self, logits_llm: MiniTGIClient, prompt_version='identify_source'):
+    def __init__(self, logits_llm: MiniTGIClient, prompt_version='can_answer'):
         self.logits_llm = logits_llm
         self.prompt_version = prompt_version
 
@@ -57,7 +57,7 @@ class LogitsReranker:
         id_yes_prob = []
         tokens = self.tokens
         goal_token = self.goal_token
-        
+
         # Use tqdm with disable=None to automatically disable in non-interactive environments
         for hit in tqdm(docs, desc="Reranking documents", disable=None if sys.stdout.isatty() else True):
             doc_text = hit.metadata.text.replace("\n", " ")
@@ -102,8 +102,7 @@ if __name__ == "__main__":
 
     # Example usage
     logits_llm = MiniTGIClient()
-    reranker = LogitsReranker(logits_llm=logits_llm,
-                              prompt_version='can_answer')
+    reranker = LogitsReranker(logits_llm=logits_llm)
     docs = [
         to_hit("Patty likes dogs", "1", 0.9),
         to_hit("The weather is nice today", "2", 0.9),

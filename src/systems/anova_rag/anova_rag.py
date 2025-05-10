@@ -12,6 +12,7 @@ from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
 from services.llms.mini_tgi_client import MiniTGIClient
+from services.logits_reranker import LogitsReranker
 from utils.logging_utils import get_logger
 
 
@@ -75,6 +76,7 @@ class AnovaRAG(RAGSystemInterface):
         
         if self.reranker != 'no':
             self.logits_llm = MiniTGIClient()
+            self.reranker_client = LogitsReranker(logits_llm=self.logits_llm)
         
 
         # Load prompts from JSON files
@@ -211,7 +213,7 @@ class AnovaRAG(RAGSystemInterface):
         if self.reranker == 'no':
             pass
         elif self.reranker == 'logits':
-            documents = self.rerank_by_logits(documents, question, self.num_reranked_documents)
+            documents = self.reranker_client.rerank(documents, question, k_docs=self.num_reranked_documents)
         else:
             raise ValueError(f"Invalid reranker: {self.reranker}. Options are 'no' or 'logits'.")
         
@@ -242,7 +244,7 @@ class AnovaRAG(RAGSystemInterface):
 if __name__ == "__main__":
     
     # Create an instance of the AnovaRAG system
-    rag_system = AnovaRAG()
+    rag_system = AnovaRAG(reranker='logits')
     
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
