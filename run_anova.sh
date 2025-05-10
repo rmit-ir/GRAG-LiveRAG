@@ -2,7 +2,7 @@
 
 llm_client="ai71" # ai71 or ec2_llm
 # File prefix, used for aligning run and eval
-reference_file="dmds_500_combined.harder"
+reference_file="dmds_500_harder"
 # File paths
 input="data/generated_qa_pairs/${reference_file}.tsv"
 

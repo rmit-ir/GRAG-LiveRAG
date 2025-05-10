@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # File prefix, used for aligning run and eval
-reference_file="dmds_500_combined.harder"
+reference_file="dmds_500_harder"
 
 # Add trap handler for Ctrl+C
 stop_loops=false
