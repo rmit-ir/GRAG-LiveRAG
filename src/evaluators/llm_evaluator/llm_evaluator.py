@@ -62,6 +62,7 @@ class LLMEvaluator(EvaluatorInterface):
         silent_errors: bool = True,
         num_threads: int = 1,
         perform_system_analysis: bool = True,
+        skip_final_summary: bool = True,
         num_samples_for_analysis: int = 40,
         answer_word_limit = 300,
     ):
@@ -76,7 +77,9 @@ class LLMEvaluator(EvaluatorInterface):
             silent_errors: Whether to silently handle errors by returning default scores (True) or raise exceptions (False)
             num_threads: Number of threads to use for parallel evaluation (>1 for parallel, 1 for sequential), note this only speed up API calls
             perform_system_analysis: Whether to automatically perform system analysis during evaluation
+            skip_final_summary: Whether to skip the final summary analysis using LLM
             num_samples_for_analysis: Total number of samples to analyze in system analysis (divided equally between lowest relevance and lowest faithfulness)
+            answer_word_limit: Maximum number of words to include in the answer for evaluation
         """
         self.logger = get_logger("llm_evaluator")
         self.logger.info(f"Initializing LLM evaluator with model: {model_id}")
@@ -84,20 +87,21 @@ class LLMEvaluator(EvaluatorInterface):
         # Initialize the Bedrock client with Claude Sonnet 3.5
         self.client = BedrockClient(
             model_id=model_id,
-            temperature=temperature,
-            max_tokens=max_tokens
+            temperature=float(temperature),
+            max_tokens=int(max_tokens)
         )
 
         self.evaluator_name = "llm_evaluator"
-        self.answer_word_limit = answer_word_limit
+        self.answer_word_limit = int(answer_word_limit)
         self.use_gold_references = use_gold_references
         self.silent_errors = silent_errors
-        self.num_threads = max(1, num_threads)
+        self.num_threads = max(1, int(num_threads))
         self.perform_system_analysis = perform_system_analysis
+        self.skip_final_summary = skip_final_summary
 
         # Set the number of samples for each analysis type (divide total by 2)
-        self.num_lowest_relevance = num_samples_for_analysis // 2
-        self.num_lowest_faithfulness = num_samples_for_analysis // 2
+        self.num_lowest_relevance = int(num_samples_for_analysis) // 2
+        self.num_lowest_faithfulness = int(num_samples_for_analysis) // 2
 
     def _create_evaluation_prompt(self, prompt_template: str, rag_result: RAGResult, reference: Optional[QAPair] = None) -> str:
         """
@@ -479,8 +483,8 @@ class LLMEvaluator(EvaluatorInterface):
             total_cost=total_cost
         )
 
-        # Perform system analysis if requested and there are enough samples
-        if self.perform_system_analysis and len(rows) >= 2:
+        # Perform system analysis if requested, not skipped, and there are enough samples
+        if self.perform_system_analysis and not self.skip_final_summary and len(rows) >= 2:
             self.logger.info("Performing system analysis")
             system_analysis = self.summarize_evaluation(
                 result,
@@ -497,6 +501,8 @@ class LLMEvaluator(EvaluatorInterface):
             if system_analysis.cost_usd is not None and result.total_cost is not None:
                 result.total_cost += system_analysis.cost_usd
                 result.metrics["total_cost"] = result.total_cost
+        elif self.perform_system_analysis and self.skip_final_summary and len(rows) >= 2:
+            self.logger.info("Skipping system analysis as requested (skip_final_summary=True)")
 
         self.logger.info(
             f"Evaluation complete",
