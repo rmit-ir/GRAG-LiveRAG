@@ -8,34 +8,49 @@ stop_loops=false
 trap 'stop_loops=true; echo -e "\nStopping after current iteration..."' SIGINT
 
 # Loop through all parameter combinations
-for original_question_inlcuded in false true; do
+for query_gen_prompt_level in naive medium; do
     if [ "$stop_loops" = true ]; then break; fi
-    for k_queries in 3 5 8; do
+    for rag_prompt_level in naive medium advanced; do
         if [ "$stop_loops" = true ]; then break; fi
-        for qpp in no; do
+        for original_question_inlcuded in false true; do
             if [ "$stop_loops" = true ]; then break; fi
-            for first_step_ranker in both keywords embedding; do
+            for k_queries in 4 5 8; do
                 if [ "$stop_loops" = true ]; then break; fi
-                for num_first_retrieved_documents in 5 10 15; do
+                for qpp in no; do
                     if [ "$stop_loops" = true ]; then break; fi
-                    for fusion_method in concat; do
+                    for first_step_ranker in both keywords embedding; do
                         if [ "$stop_loops" = true ]; then break; fi
-                        for reranker in no logits; do
+                        for num_first_retrieved_documents in 5 8; do
                             if [ "$stop_loops" = true ]; then break; fi
-                            for num_reranked_documents in 5 10 15; do
+                            for fusion_method in concat; do
                                 if [ "$stop_loops" = true ]; then break; fi
-                                # for query_gen_prompt_level in naive medium advanced; do
-                                for query_gen_prompt_level in naive medium; do
+                                for reranker in no logits; do
                                     if [ "$stop_loops" = true ]; then break; fi
-                                    for rag_prompt_level in naive medium advanced; do
+                                    
+                                    # Set num_reranked_documents based on reranker
+                                    if [ "$reranker" = "no" ]; then
+                                        num_reranked_documents_values=(0)
+                                    else
+                                        num_reranked_documents_values=(10 15 20)
+                                    fi
+                                    
+                                    for num_reranked_documents in "${num_reranked_documents_values[@]}"; do
                                         if [ "$stop_loops" = true ]; then break; fi
                                         base_dir="data/anova_result/${original_question_inlcuded}_${k_queries}_${query_gen_prompt_level}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}_${num_reranked_documents}_${rag_prompt_level}"
+                                        output_dir="data/evaluation_results/${original_question_inlcuded}_${k_queries}_${query_gen_prompt_level}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}_${num_reranked_documents}_${rag_prompt_level}"
+                                        
+                                        # Skip if output directory exists and contains aggregate files
+                                        if [ -d "$output_dir" ] && [ -n "$(ls -A $output_dir/*.aggregate.* 2>/dev/null)" ]; then
+                                            echo "Skipping existing evaluation: $output_dir"
+                                            continue
+                                        fi
+                                        
                                         results_path=$(ls -t "${base_dir}"/${reference_file}.run*.AnovaRAG.tsv 2>/dev/null | head -n1)
                                         if [ -z "$results_path" ]; then
                                             echo "No result file found in ${base_dir}, skipping..."
                                             continue
                                         fi
-                                        output_dir="data/evaluation_results/${original_question_inlcuded}_${k_queries}_${query_gen_prompt_level}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}_${num_reranked_documents}_${rag_prompt_level}"
+                                        
                                         echo "Evaluating with original_question_inlcuded=$original_question_inlcuded, k_queries=$k_queries, qpp=$qpp, first_step_ranker=$first_step_ranker, num_first_retrieved_documents=$num_first_retrieved_documents, fusion_method=$fusion_method, reranker=$reranker, num_reranked_documents=$num_reranked_documents, query_gen_prompt_level=$query_gen_prompt_level, rag_prompt_level=$rag_prompt_level"
                                         echo "Using result file: $results_path"
                                         uv run scripts/evaluate.py \
