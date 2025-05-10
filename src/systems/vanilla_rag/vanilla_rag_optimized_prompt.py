@@ -87,9 +87,15 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
         # len(docs) = k * len(queries) = 10 * 5 = 50
 
         if self.use_logits_reranker:
+            # protect the LLM context length
+            hard_truncated_docs = truncate_doc_listings(
+                listings=listings, context_word_limit=15_000)
             # rerank and also truncate the documents
-            docs = self.reranker.rerank(
-                docs, question=qs_res.rephrased_query, words_limit=self.context_words_limit)
+            ranked_docs = self.reranker.rerank(
+                hard_truncated_docs, question=qs_res.rephrased_query, words_limit=self.context_words_limit)
+            # If reranking returns nothing, fallback to first 10
+            if ranked_docs is None or len(ranked_docs) == 0:
+                ranked_docs = hard_truncated_docs[:10]
         else:
             docs = truncate_doc_listings(
                 listings=listings, context_word_limit=self.context_words_limit)
