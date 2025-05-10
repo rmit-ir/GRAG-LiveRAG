@@ -3,35 +3,48 @@
 # File prefix, used for aligning run and eval
 reference_file="dmds_500_hard_sampled_15"
 
+# Configuration lists
+QUERY_GEN_PROMPT_LEVELS=("naive" "medium")
+RAG_PROMPT_LEVELS=("naive" "medium" "advanced")
+ORIGINAL_QUESTION_INCLUDED_VALUES=("false" "true")
+K_QUERIES_VALUES=(4 5 8)
+QPP_VALUES=("no")
+FIRST_STEP_RANKER_VALUES=("both" "keywords" "embedding")
+NUM_FIRST_RETRIEVED_DOCUMENTS_VALUES=(5 8)
+FUSION_METHOD_VALUES=("concat")
+RERANKER_VALUES=("no" "logits")
+NUM_RERANKED_DOCUMENTS_VALUES_NO=(0)
+NUM_RERANKED_DOCUMENTS_VALUES_LOGITS=(10 15 20)
+
 # Add trap handler for Ctrl+C
 stop_loops=false
 trap 'stop_loops=true; echo -e "\nStopping after current iteration..."' SIGINT
 
 # Loop through all parameter combinations
-for query_gen_prompt_level in naive medium; do
+for query_gen_prompt_level in "${QUERY_GEN_PROMPT_LEVELS[@]}"; do
     if [ "$stop_loops" = true ]; then break; fi
-    for rag_prompt_level in naive medium advanced; do
+    for rag_prompt_level in "${RAG_PROMPT_LEVELS[@]}"; do
         if [ "$stop_loops" = true ]; then break; fi
-        for original_question_inlcuded in false true; do
+        for original_question_inlcuded in "${ORIGINAL_QUESTION_INCLUDED_VALUES[@]}"; do
             if [ "$stop_loops" = true ]; then break; fi
-            for k_queries in 4 5 8; do
+            for k_queries in "${K_QUERIES_VALUES[@]}"; do
                 if [ "$stop_loops" = true ]; then break; fi
-                for qpp in no; do
+                for qpp in "${QPP_VALUES[@]}"; do
                     if [ "$stop_loops" = true ]; then break; fi
-                    for first_step_ranker in both keywords embedding; do
+                    for first_step_ranker in "${FIRST_STEP_RANKER_VALUES[@]}"; do
                         if [ "$stop_loops" = true ]; then break; fi
-                        for num_first_retrieved_documents in 5 8; do
+                        for num_first_retrieved_documents in "${NUM_FIRST_RETRIEVED_DOCUMENTS_VALUES[@]}"; do
                             if [ "$stop_loops" = true ]; then break; fi
-                            for fusion_method in concat; do
+                            for fusion_method in "${FUSION_METHOD_VALUES[@]}"; do
                                 if [ "$stop_loops" = true ]; then break; fi
-                                for reranker in no logits; do
+                                for reranker in "${RERANKER_VALUES[@]}"; do
                                     if [ "$stop_loops" = true ]; then break; fi
                                     
                                     # Set num_reranked_documents based on reranker
                                     if [ "$reranker" = "no" ]; then
-                                        num_reranked_documents_values=(0)
+                                        num_reranked_documents_values=("${NUM_RERANKED_DOCUMENTS_VALUES_NO[@]}")
                                     else
-                                        num_reranked_documents_values=(10 15 20)
+                                        num_reranked_documents_values=("${NUM_RERANKED_DOCUMENTS_VALUES_LOGITS[@]}")
                                     fi
                                     
                                     for num_reranked_documents in "${num_reranked_documents_values[@]}"; do
