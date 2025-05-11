@@ -2,6 +2,7 @@ import pandas as pd
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
 from io import StringIO
+import argparse
 
 def analyze_factor_importance(file_path_or_data, relevance_col='relevance_score', faithfulness_col='faithfulness_score', 
                               relevance_weight=0.5, faithfulness_weight=0.5, delimiter=','):
@@ -141,25 +142,28 @@ def analyze_factor_importance(file_path_or_data, relevance_col='relevance_score'
         return [], pd.DataFrame()
 
 if __name__ == '__main__':
-
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Analyze factor importance using ANOVA')
+    parser.add_argument('--csv_file', type=str, required=True,
+                      help='Path to the CSV file containing evaluation results')
+    parser.add_argument('--relevance_col', type=str, default='relevance_score',
+                      help='Name of the relevance score column (default: relevance_score)')
+    parser.add_argument('--faithfulness_col', type=str, default='faithfulness_score',
+                      help='Name of the faithfulness score column (default: faithfulness_score)')
+    parser.add_argument('--relevance_weight', type=float, default=0.5,
+                      help='Weight for relevance score (default: 0.5)')
+    parser.add_argument('--faithfulness_weight', type=float, default=0.5,
+                      help='Weight for faithfulness score (default: 0.5)')
+    
+    args = parser.parse_args()
     
     print("--- Running Analysis with Data from CSV file ---")
-    # Specify your score column names if they are different
-    # relevance_col_name = 'relevance_score'
-    # faithfulness_col_name = 'faithfulness_score'
     
-    # Specify weights if different from 0.5/0.5
-    # rel_weight = 0.6
-    # faith_weight = 0.4
-    
-    # Specify the path to the CSV file
-    csv_file_path = '/Users/sunshuoqi/Downloads/harder-questions-not-complete/anova_result/evaluation_results_summary.csv'   
-    
-    ordered_factors, factor_details_df = analyze_factor_importance(csv_file_path, 
-                                                                  relevance_col='relevance_score', 
-                                                                  faithfulness_col='faithfulness_score',
-                                                                  relevance_weight=0.5, 
-                                                                  faithfulness_weight=0.5,
+    ordered_factors, factor_details_df = analyze_factor_importance(args.csv_file, 
+                                                                  relevance_col=args.relevance_col, 
+                                                                  faithfulness_col=args.faithfulness_col,
+                                                                  relevance_weight=args.relevance_weight, 
+                                                                  faithfulness_weight=args.faithfulness_weight,
                                                                   delimiter=',')
 
     if ordered_factors:
