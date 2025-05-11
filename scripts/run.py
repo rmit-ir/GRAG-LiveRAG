@@ -405,7 +405,8 @@ def process_single_question(args: QuestionProcessingArgs) -> Optional[RAGResult]
 
 def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionData], 
                system_params: Optional[Dict[str, Any]] = None, 
-               num_threads: int = 1) -> List[RAGResult]:
+               num_threads: int = 1,
+               rolling_start_delay: float = 0.0) -> List[RAGResult]:
     """
     Run the specified system on a list of questions.
     
@@ -414,6 +415,7 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionD
         questions: List of dictionaries containing question data
         system_params: Optional parameters to pass to the system constructor
         num_threads: Number of threads to use for parallel processing
+        rolling_start_delay: Delay in seconds between starting each task (0 disables rolling start)
         
     Returns:
         List of RAGResult objects
@@ -426,12 +428,15 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionD
     
     # Determine if we're using parallel processing based on thread count
     parallel = num_threads > 1
+    rolling_start = rolling_start_delay > 0
     
     logger.info("Starting to process questions", 
                total_questions=total_questions,
                system_class=system_class.__name__,
                parallel=parallel,
-               num_threads=num_threads)
+               num_threads=num_threads,
+               rolling_start=rolling_start,
+               rolling_start_delay=rolling_start_delay if rolling_start else None)
     
     # Create a single system instance to be reused across all questions
     system = system_class(**system_params)
@@ -459,8 +464,21 @@ def run_system(system_class: Type[RAGSystemInterface], questions: List[QuestionD
         
         # Process questions in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-            # Submit all tasks and collect futures
-            futures = [executor.submit(process_single_question, args) for args in question_args]
+            # Submit tasks with or without rolling start
+            futures = []
+            
+            if rolling_start:
+                # Submit tasks with a rolling delay
+                for i, args in enumerate(question_args):
+                    future = executor.submit(process_single_question, args)
+                    futures.append(future)
+                    
+                    # Add a delay before submitting the next task (except for the last one)
+                    if i < len(question_args) - 1:
+                        time.sleep(rolling_start_delay)
+            else:
+                # Submit all tasks at once (original behavior)
+                futures = [executor.submit(process_single_question, args) for args in question_args]
             
             # Collect results in order
             for future in concurrent.futures.as_completed(futures):
@@ -532,6 +550,10 @@ def create_parser_with_system_params(system_class=None):
     # Add thread count argument for parallel processing
     parser.add_argument('--num-threads', type=int, default=1,
                         help='Number of threads to use for processing (default: 1, values > 1 enable parallel processing)')
+    
+    # Add rolling start delay argument
+    parser.add_argument('--rolling-start', type=float, default=0.0,
+                        help='Delay in seconds between starting each task (default: 0, which disables rolling start)')
     
     # Add system-specific parameters if a system class is provided
     if system_class:
@@ -629,7 +651,8 @@ def main():
         
         # Run the system on the questions
         results = run_system(system_class, questions, system_params, 
-                            num_threads=args.num_threads)
+                            num_threads=args.num_threads,
+                            rolling_start_delay=args.rolling_start)
         overall_time_ms = (time.time() - start_time) * 1000
         
         # Calculate timing information
