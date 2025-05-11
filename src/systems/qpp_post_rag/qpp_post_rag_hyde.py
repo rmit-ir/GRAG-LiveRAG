@@ -180,7 +180,7 @@ class QPPPostRAGHYDE(RAGSystemInterface):
         return result
 
 if __name__ == "__main__":
-    rag_system = QPPPostRAG()
+    rag_system = QPPPostRAGHYDE()
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
         qid=1
