@@ -60,7 +60,7 @@ def print_results(results):
 
 def main():
     parser = argparse.ArgumentParser(description='Analyze factor options performance')
-    parser.add_argument('--data_file', type=str, required=True,
+    parser.add_argument('--csv_file', type=str, required=True,
                       help='Path to the CSV data file')
     parser.add_argument('--relevance_weight', type=float, default=0.6,
                       help='Weight for relevance score (default: 0.6)')
@@ -71,7 +71,7 @@ def main():
     
     try:
         # Read data from file
-        df = pd.read_csv(args.data_file)
+        df = pd.read_csv(args.csv_file)
         
         # Validate weights
         if not (0 <= args.relevance_weight <= 1 and 0 <= args.faithfulness_weight <= 1):
@@ -84,9 +84,9 @@ def main():
         print_results(results)
         
     except FileNotFoundError:
-        print(f"Error: Could not find data file '{args.data_file}'")
+        print(f"Error: Could not find data file '{args.csv_file}'")
     except pd.errors.EmptyDataError:
-        print(f"Error: The data file '{args.data_file}' is empty")
+        print(f"Error: The data file '{args.csv_file}' is empty")
     except Exception as e:
         print(f"Error: {str(e)}")
 
