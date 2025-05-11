@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Change to the project root directory
-cd "$(dirname "$0")/../../../.."
+cd "$(dirname "$0")/../../../"
 
 # File prefix, used for aligning run and eval
 reference_file="dmds_500_hard_sampled_15"
