@@ -4,7 +4,7 @@
         "primary_prompt": "{question}"
     },
     "medium": {
-        "system_prompt": "You are an expert in query generation, you will be given a question, please generate {k_queries} relevabt queries based on the question. Make sure every query generated can yield new information when I use them to search. NEVER repeat similar search queries.",
+        "system_prompt": "You are an expert in query generation, you will be given a question, please generate {k_queries} relevant queries based on the question. Make sure every query generated can yield new information when I use them to search. NEVER repeat similar search queries.",
         "primary_prompt": "Original question: {question}"
     },
     "advanced": {

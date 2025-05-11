@@ -1,7 +1,6 @@
 """
 uv run scripts/run.py --system VanillaRAGNewQGenFlow --help
 """
-import re
 import time
 from typing import List
 from services.indicies import QueryService, SearchHit
@@ -83,8 +82,8 @@ class VanillaRAGNewQGenFlow(RAGSystemInterface):
         queries = qs_res.sub_queries
 
         listings: List[List[SearchHit]] = []
+        k = int(self.initial_retrieval_k_docs / len(queries))
         for query in queries:
-            k = int(self.initial_retrieval_k_docs / len(queries))
             results = self.query_service.query_fusion(
                 query, k=k, per_source_k=100)
             listings.append(results)

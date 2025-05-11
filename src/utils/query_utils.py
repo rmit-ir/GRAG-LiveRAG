@@ -4,7 +4,7 @@ Utility functions for query processing.
 import re
 import time
 import random
-from typing import Optional
+from typing import Optional, List
 from sqids import Sqids
 
 from utils.logging_utils import get_logger

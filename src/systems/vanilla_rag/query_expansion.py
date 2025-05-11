@@ -54,7 +54,58 @@ def _extract_sub_queries(llm_txt: str) -> List[str]:
     logger.debug(f"Extracted sub-queries", input=llm_txt, output=extracted)
     return extracted
 
-def expand_queries(q: str, llm_client: GeneralOpenAIClient) -> ExpandedQueries:
+def expand_simple_query(q: str, llm_client: GeneralOpenAIClient, n_queries: int = 5) -> List[str]:
+    """
+    Generate query variants for simple questions.
+    
+    Args:
+        q: The original query
+        llm_client: LLM client to use
+        n_queries: Number of query variants to generate
+        
+    Returns:
+        List of query variants
+    """
+    system_prompt = f"Generate a list of {n_queries} search query variants based on the user's question. Format each variant as 'query: <your query>'. There are no spelling mistakes in the original question. Do not include any other text."
+    
+    query_variants, _ = llm_client.complete_chat_once(
+        system_message=system_prompt, message="Question: " + q)
+    
+    logger.debug(f"Generated simple query variants", input=q, output=query_variants)
+    
+    # Extract queries using the same extraction function
+    return _extract_sub_queries(query_variants)
+
+def expand_composite_query(q: str, llm_client: GeneralOpenAIClient) -> List[str]:
+    """
+    Generate sub-queries for composite questions.
+    
+    Args:
+        q: The rephrased query
+        llm_client: LLM client to use
+        
+    Returns:
+        List of sub-queries
+    """
+    qs_str, _ = llm_client.complete_chat_once(
+        system_message=SUB_QUERIES_SYS_PROMPT, message=f"Question: {q}")
+    
+    logger.debug(f"Generated composite sub-queries", input=q, output=qs_str)
+    
+    return _extract_sub_queries(qs_str)
+
+def expand_queries(q: str, llm_client: GeneralOpenAIClient, n_queries: int = 5) -> ExpandedQueries:
+    """
+    Expand a query into components, rephrased query, and sub-queries.
+    
+    Args:
+        q: The original query
+        llm_client: LLM client to use
+        n_queries: Number of query variants to generate for simple queries
+        
+    Returns:
+        ExpandedQueries object containing all intermediary results
+    """
     # Query decomposition
     components_str, _ = llm_client.complete_chat_once(
         system_message=QUERY_DECOMPOSITION_SYS_PROMPT, message="Question: " + q)
@@ -69,27 +120,23 @@ def expand_queries(q: str, llm_client: GeneralOpenAIClient) -> ExpandedQueries:
     simple = is_simple_query(q, llm_client)
     
     if simple:
-        # For simple queries, just use the original question as the only sub-query
-        return ExpandedQueries(
-            original_query=q,
-            components=components_str,
-            rephrased_query=rephrased_q,
-            is_simple=True,
-            sub_queries=[q]
-        )
+        # For simple queries, generate query variants
+        sub_queries = expand_simple_query(q, llm_client, n_queries)
+        if not sub_queries:  # Fallback if extraction fails
+            sub_queries = [q]
     else:
-        # Sub-queries generation
-        qs_str, _ = llm_client.complete_chat_once(
-            system_message=SUB_QUERIES_SYS_PROMPT, message=f"Question: {rephrased_q}")
-        logger.debug(f"Generated sub-queries, input: \n{q}\noutput: \n{qs_str}")
-        sub_queries = _extract_sub_queries(qs_str)
-        return ExpandedQueries(
-            original_query=q,
-            components=components_str,
-            rephrased_query=rephrased_q,
-            is_simple=False,
-            sub_queries=sub_queries
-        )
+        # For composite queries, generate sub-queries
+        sub_queries = expand_composite_query(rephrased_q, llm_client)
+        if not sub_queries:  # Fallback if extraction fails
+            sub_queries = [rephrased_q]
+    
+    return ExpandedQueries(
+        original_query=q,
+        components=components_str,
+        rephrased_query=rephrased_q,
+        is_simple=simple,
+        sub_queries=sub_queries
+    )
 
 
 # question: tourist outdoor activities mid january september alice springs ahmedabad compare
