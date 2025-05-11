@@ -77,6 +77,7 @@ class AnovaRAGLite(RAGSystemInterface):
         # Store system prompts and primary prompts
         self.rag_system_prompt = rag_prompts[rag_prompt_level]['system_prompt']
         self.rag_primary_prompt = rag_prompts[rag_prompt_level]['primary_prompt']
+        self.query_gen_sys_prompt = query_gen_prompts[query_gen_prompt_level]['system_prompt']
 
         self.query_service = QueryService()
 
@@ -86,17 +87,9 @@ class AnovaRAGLite(RAGSystemInterface):
         """
         start_time = time.time()
 
-        # Get the appropriate system prompt for query variants based on query_gen_prompt_level
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'query_gen_prompts.json'), 'r') as f:
-            query_gen_prompts = json.load(f)
-
-        # Create a QueryVariantsGenerator with the appropriate system prompt
-        query_variants_system_prompt = query_gen_prompts.get(
-            self.query_gen_prompt_level, {}).get('system_prompt', None)
-
         query_variants_generator = QueryVariantsGenerator(
             llm_client=self.qgen_llm_client,
-            system_prompt=query_variants_system_prompt
+            system_prompt=self.query_gen_sys_prompt
         )
 
         # Use the enhanced query expansion with the custom QueryVariantsGenerator
