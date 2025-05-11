@@ -5,7 +5,7 @@ from io import StringIO
 import argparse
 
 def analyze_factor_importance(file_path_or_data, relevance_col='relevance_score', faithfulness_col='faithfulness_score', 
-                              relevance_weight=0.5, faithfulness_weight=0.5, delimiter=','):
+                              relevance_weight=0.6, faithfulness_weight=0.4, delimiter=','):
     """
     Analyzes the importance of categorical factors on a weighted score using ANOVA.
 
@@ -150,10 +150,10 @@ if __name__ == '__main__':
                       help='Name of the relevance score column (default: relevance_score)')
     parser.add_argument('--faithfulness_col', type=str, default='faithfulness_score',
                       help='Name of the faithfulness score column (default: faithfulness_score)')
-    parser.add_argument('--relevance_weight', type=float, default=0.5,
-                      help='Weight for relevance score (default: 0.5)')
-    parser.add_argument('--faithfulness_weight', type=float, default=0.5,
-                      help='Weight for faithfulness score (default: 0.5)')
+    parser.add_argument('--relevance_weight', type=float, default=0.6,
+                      help='Weight for relevance score (default: 0.6)')
+    parser.add_argument('--faithfulness_weight', type=float, default=0.4,
+                      help='Weight for faithfulness score (default: 0.4)')
     
     args = parser.parse_args()
     

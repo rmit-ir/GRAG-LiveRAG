@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import argparse
 
-def analyze_factor_options(df, relevance_weight=0.5, faithfulness_weight=0.5):
+def analyze_factor_options(df, relevance_weight=0.6, faithfulness_weight=0.4):
     """
     Analyze the performance of different options within each factor.
     
@@ -16,21 +16,26 @@ def analyze_factor_options(df, relevance_weight=0.5, faithfulness_weight=0.5):
     """
     # Calculate weighted score
     df['weighted_score'] = (df['relevance_score'] * relevance_weight + 
-                           df['faithfulness_score'] * faithfulness_weight)
+                          df['faithfulness_score'] * faithfulness_weight)
     
-    # Get factor columns (all columns except score columns)
-    factor_cols = [col for col in df.columns if col not in ['relevance_score', 'faithfulness_score', 'weighted_score']]
+    # Get all factor columns (excluding score columns)
+    factor_columns = [col for col in df.columns if col not in ['relevance_score', 'faithfulness_score', 'weighted_score']]
     
     results = {}
-    
-    for factor in factor_cols:
+    for factor in factor_columns:
         # Group by factor and calculate statistics
-        grouped = df.groupby(factor)['weighted_score'].agg(['mean', 'std', 'count'])
-        grouped = grouped.sort_values('mean', ascending=False)
+        grouped = df.groupby(factor).agg({
+            'weighted_score': ['mean', 'std', 'count'],
+            'relevance_score': 'mean',
+            'faithfulness_score': 'mean'
+        }).round(3)
         
-        # Add percentage of total
-        total_count = grouped['count'].sum()
-        grouped['percentage'] = (grouped['count'] / total_count * 100).round(1)
+        # Calculate percentage of total
+        total = grouped[('weighted_score', 'count')].sum()
+        grouped[('weighted_score', 'percentage')] = (grouped[('weighted_score', 'count')] / total * 100).round(1)
+        
+        # Sort by mean weighted score
+        grouped = grouped.sort_values(('weighted_score', 'mean'), ascending=False)
         
         results[factor] = grouped
     
@@ -39,39 +44,51 @@ def analyze_factor_options(df, relevance_weight=0.5, faithfulness_weight=0.5):
 def print_results(results):
     """Print the analysis results in a readable format."""
     for factor, stats in results.items():
-        print(f"\n=== {factor.upper()} ===")
-        print("Options ranked by mean weighted score (descending):")
+        print(f"\nFactor: {factor}")
         print("=" * 80)
-        print(f"{'Option':<20} {'Mean Score':<12} {'Std Dev':<12} {'Count':<8} {'% of Total':<10}")
+        print(f"{'Option':<20} {'Mean Score':<12} {'Std Dev':<12} {'Count':<8} {'%':<8} {'Mean Rel':<12} {'Mean Faith':<12}")
         print("-" * 80)
         
         for option, row in stats.iterrows():
-            print(f"{str(option):<20} {row['mean']:.3f}      {row['std']:.3f}      {row['count']:<8} {row['percentage']:.1f}%")
-        print("=" * 80)
+            print(f"{str(option):<20} "
+                  f"{row[('weighted_score', 'mean')]:<12.3f} "
+                  f"{row[('weighted_score', 'std')]:<12.3f} "
+                  f"{row[('weighted_score', 'count')]:<8} "
+                  f"{row[('weighted_score', 'percentage')]:<8.1f} "
+                  f"{row[('relevance_score', 'mean')]:<12.3f} "
+                  f"{row[('faithfulness_score', 'mean')]:<12.3f}")
 
-if __name__ == "__main__":
-    # Set up argument parser
+def main():
     parser = argparse.ArgumentParser(description='Analyze factor options performance')
     parser.add_argument('--data_file', type=str, required=True,
-                      help='Path to the CSV file containing the data')
-    parser.add_argument('--relevance_weight', type=float, default=0.5,
-                      help='Weight for relevance score (default: 0.5)')
-    parser.add_argument('--faithfulness_weight', type=float, default=0.5,
-                      help='Weight for faithfulness score (default: 0.5)')
+                      help='Path to the CSV data file')
+    parser.add_argument('--relevance_weight', type=float, default=0.6,
+                      help='Weight for relevance score (default: 0.6)')
+    parser.add_argument('--faithfulness_weight', type=float, default=0.4,
+                      help='Weight for faithfulness score (default: 0.4)')
     
     args = parser.parse_args()
     
-    # Read the data from file
     try:
+        # Read data from file
         df = pd.read_csv(args.data_file)
+        
+        # Validate weights
+        if not (0 <= args.relevance_weight <= 1 and 0 <= args.faithfulness_weight <= 1):
+            raise ValueError("Weights must be between 0 and 1")
+        if abs(args.relevance_weight + args.faithfulness_weight - 1.0) > 1e-10:
+            raise ValueError("Weights must sum to 1")
+        
+        # Analyze and print results
+        results = analyze_factor_options(df, args.relevance_weight, args.faithfulness_weight)
+        print_results(results)
+        
+    except FileNotFoundError:
+        print(f"Error: Could not find data file '{args.data_file}'")
+    except pd.errors.EmptyDataError:
+        print(f"Error: The data file '{args.data_file}' is empty")
     except Exception as e:
-        print(f"Error reading data file: {e}")
-        exit(1)
-    
-    # Analyze factor options
-    results = analyze_factor_options(df, 
-                                   relevance_weight=args.relevance_weight,
-                                   faithfulness_weight=args.faithfulness_weight)
-    
-    # Print results
-    print_results(results) 
+        print(f"Error: {str(e)}")
+
+if __name__ == "__main__":
+    main() 
