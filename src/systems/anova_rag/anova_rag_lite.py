@@ -1,8 +1,7 @@
-import re
 import time
 import json
 import os
-from typing import List, Literal, Union
+from typing import List, Literal
 from services.indicies import QueryService, SearchHit
 from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
