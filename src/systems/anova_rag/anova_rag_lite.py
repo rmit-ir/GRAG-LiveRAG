@@ -22,10 +22,10 @@ class AnovaRAGLite(RAGSystemInterface):
                  query_gen_prompt_level: Literal['naive', 'medium', 'advanced'] = 'naive',
                  rag_prompt_level: Literal['naive', 'medium', 'advanced'] = 'naive',
                  qpp: Literal['no'] = 'no',
-                 first_step_ranker: Literal['keywords', 'embedding', 'both_concat', 'both_fusion'] = 'both_concat',
-                 reranker: Literal['no', 'logits'] = 'no',
+                 first_step_ranker: Literal['keywords', 'embedding', 'both_concat', 'both_fusion'] = 'both_fusion',
+                 reranker: Literal['no', 'logits'] = 'logits',
                  context_words_limit: int = 15_000,
-                 n_queries: int = 5,
+                 n_queries: int = 8,
                  initial_retrieval_k_docs: int = 50,
                  query_expansion_mode: Literal['none', 'variants', 'decomposition'] = 'none'):
     # autopep8: on
