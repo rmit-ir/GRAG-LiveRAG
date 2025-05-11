@@ -16,19 +16,18 @@ from utils.logging_utils import get_logger
 
 
 class AnovaRAGLite(RAGSystemInterface):
+    # autopep8: off
     def __init__(self,
                  llm_client: Literal['ai71', 'ec2_llm'] = 'ai71',
-                 query_gen_prompt_level: Literal['naive',
-                                                 'medium', 'advanced'] = 'naive',
-                 rag_prompt_level: Literal['naive',
-                                           'medium', 'advanced'] = 'naive',
+                 query_gen_prompt_level: Literal['naive', 'medium', 'advanced'] = 'naive',
+                 rag_prompt_level: Literal['naive', 'medium', 'advanced'] = 'naive',
                  qpp: Literal['no'] = 'no',
-                 first_step_ranker: Literal['keywords', 'embedding',
-                                            'both_concat', 'both_fusion'] = 'both_concat',
+                 first_step_ranker: Literal['keywords', 'embedding', 'both_concat', 'both_fusion'] = 'both_concat',
                  reranker: Literal['no', 'logits'] = 'no',
                  context_words_limit: int = 15_000,
                  n_queries: int = 5,
                  initial_retrieval_k_docs: int = 50):
+    # autopep8: on
         """
         Initialize the AnovaRAGLite.
 
