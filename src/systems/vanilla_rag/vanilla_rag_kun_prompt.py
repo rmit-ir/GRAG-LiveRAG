@@ -13,7 +13,7 @@ from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
-from systems.vanilla_rag.prompts import QUERY_GENERATION_SYSTEM_PROMPT, QUERY_GENERATION_USER_PROMPT
+from systems.vanilla_rag.vanilla_rag_kun_prompt_prompts import QUERY_GENERATION_SYSTEM_PROMPT, QUERY_GENERATION_USER_PROMPT
 
 
 class VanillaRAGKunPrompt(RAGSystemInterface):

@@ -2,3 +2,5 @@
 raw_responses
 rag_results
 evaluation_results
+azure_openai_responses
+*.xlsx

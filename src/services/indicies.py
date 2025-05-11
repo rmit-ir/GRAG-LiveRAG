@@ -4,8 +4,7 @@ Vector index service module for vector operations.
 This module imports specialized services for AWS utilities, embedding utilities,
 and specific vector database implementations (Pinecone and OpenSearch).
 """
-from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Dict, NamedTuple
 from dotenv import load_dotenv
 
 # Import utilities
@@ -22,38 +21,66 @@ from services.opensearch_index import OpenSearchHit, OpenSearchService
 load_dotenv()
 
 
-@dataclass
-class SearchHit:
+class SearchHit(NamedTuple):
+    """Represents a search hit from any search backend."""
     id: str
     score: float
     metadata: LiveRAGMetadata
     retrieval_model: str
 
-    @classmethod
-    def from_pinecone(cls, record: PineconeMatch) -> "SearchHit":
-        return cls(
-            id=record.id,
-            score=record.score,
-            metadata=record.metadata,
-            retrieval_model="embedding"
-        )
 
-    @classmethod
-    def from_opensearch(cls, record: OpenSearchHit) -> "SearchHit":
-        return cls(
-            id=record.id,
-            score=record.score,
-            metadata=record.source,
-            retrieval_model="BM25"
-        )
+def search_hit_from_pinecone(record: PineconeMatch) -> SearchHit:
+    """
+    Create a SearchHit from a PineconeMatch.
 
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "score": self.score,
-            "metadata": self.metadata.to_dict(),
-            "retrieval_model": self.retrieval_model
-        }
+    Args:
+        record: PineconeMatch object
+
+    Returns:
+        SearchHit object
+    """
+    return SearchHit(
+        id=record.id,
+        score=record.score,
+        metadata=record.metadata,
+        retrieval_model="embedding"
+    )
+
+
+def search_hit_from_opensearch(record: OpenSearchHit) -> SearchHit:
+    """
+    Create a SearchHit from an OpenSearchHit.
+
+    Args:
+        record: OpenSearchHit object
+
+    Returns:
+        SearchHit object
+    """
+    return SearchHit(
+        id=record.id,
+        score=record.score,
+        metadata=record.source,
+        retrieval_model="BM25"
+    )
+
+
+def search_hit_to_dict(hit: SearchHit) -> Dict:
+    """
+    Convert a SearchHit to a dictionary.
+
+    Args:
+        hit: SearchHit object
+
+    Returns:
+        Dictionary representation of the SearchHit
+    """
+    return {
+        "id": hit.id,
+        "score": hit.score,
+        "metadata": hit.metadata.to_dict(),
+        "retrieval_model": hit.retrieval_model
+    }
 
 
 class QueryService:
@@ -103,7 +130,7 @@ class QueryService:
                        query=query, k=k, namespace=namespace)
         results = self.pinecone_service.query_pinecone(
             query, top_k=k, namespace=namespace, **kwargs)
-        hits = [SearchHit.from_pinecone(match) for match in results.matches]
+        hits = [search_hit_from_pinecone(match) for match in results.matches]
         self.log.debug("Embedding query completed", hits_count=len(hits))
         return hits
 
@@ -126,7 +153,7 @@ class QueryService:
         self.log.debug("Starting keyword query", query=query, k=k)
         results = self.opensearch_service.query_opensearch(
             query, top_k=k, **kwargs)
-        hits = [SearchHit.from_opensearch(hit) for hit in results.hits]
+        hits = [search_hit_from_opensearch(hit) for hit in results.hits]
         self.log.debug("Keyword query completed", hits_count=len(hits))
         return hits
 
@@ -134,6 +161,7 @@ class QueryService:
         self,
         query: str,
         k: int = 10,
+        per_source_k: int = 10,
         return_raw_df: bool = False,
         pk_namespace: Optional[str] = None,
         rrf_k: int = 60,
@@ -163,8 +191,8 @@ class QueryService:
 
         # Query both embedding and keywords with the same k
         embedding_hits = self.query_embedding(
-            query, k=k, namespace=pk_namespace)
-        keyword_hits = self.query_keywords(query, k=k)
+            query, k=per_source_k, namespace=pk_namespace)
+        keyword_hits = self.query_keywords(query, k=per_source_k)
 
         # Convert hits to TrecRun objects
         embedding_run = self._hits_to_trecrun(
@@ -208,6 +236,11 @@ class QueryService:
                        fused_hits_count=len(fused_hits),
                        original_hits_count=len(embedding_hits) + len(keyword_hits))
         return fused_hits
+
+    def get_docs(self, doc_ids: List[str], size_per_doc: int = 20, combined=True) -> List[SearchHit]:
+        result = self.opensearch_service.get_docs(
+            doc_ids, size_per_doc, combined)
+        return [search_hit_from_opensearch(hit) for hit in result.hits]
 
     def _hits_to_trecrun(self, query_id: str, hits: List[SearchHit], tag: str) -> TrecRun:
         """
@@ -264,3 +297,21 @@ if __name__ == "__main__":
     # Print first row as a dictionary
     log.info("First row as dict:")
     log.info(fusion_df.iloc[0].to_dict())
+
+    # Example 5: Get documents by IDs
+    log.info("\n=== Example 5: Get Documents by IDs ===")
+    doc_ids = ["<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>", "<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>", "<urn:uuid:32d4d757-52c6-4a26-a038-9eb45f29389a>", "<urn:uuid:4cb3fec5-366c-4f66-a78e-3390c4b8fcc2>", "<urn:uuid:56a0db0c-f984-4f4b-bad4-36e317725375>", "<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>",
+               "<urn:uuid:75931ce4-3825-4ef9-9673-b07dfc319d66>", "<urn:uuid:fc1fd791-7a5c-4d05-a1be-0e1bc92fd342>", "<urn:uuid:75931ce4-3825-4ef9-9673-b07dfc319d66>", "<urn:uuid:164b81ba-7a4b-449c-8232-41c809ef65db>", "<urn:uuid:57031123-cef2-4f51-adbe-4b6070379a8d>", "<urn:uuid:54236e11-cfe0-4870-8679-dcca522c66bc>", "<urn:uuid:380337c6-3957-4c63-9583-ba486d4994c1>"]
+    log.info(f"Getting documents by IDs: {doc_ids}")
+    docs = service.get_docs(doc_ids, size_per_doc=5)
+    log.info(f"Found {len(docs)} documents by IDs")
+    for doc in docs:
+        log.info(f"Document ID: {doc.id}, Score: {doc.score}")
+        log.info(f"Document Full Text: \n{'-'*10}\n{doc.metadata.text}")
+
+    # combined false
+    docs = service.get_docs(doc_ids, size_per_doc=5, combined=False)
+    log.info(f"Found {len(docs)} documents by IDs")
+    for doc in docs:
+        log.info(f"Document ID: {doc.id}, Score: {doc.score}")
+        log.info(f"Document Full Text: \n{'-'*10}\n{doc.metadata.text}")

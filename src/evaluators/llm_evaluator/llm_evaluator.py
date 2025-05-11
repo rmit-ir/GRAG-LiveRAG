@@ -28,6 +28,7 @@ from evaluators.llm_evaluator.prompts import (
     SUMMARY_PROMPT_TEMPLATE,
     SYSTEM_PROMPT_SUPPORT
 )
+from utils.str_utils import take_words
 
 
 class LLMEvaluator(EvaluatorInterface):
@@ -61,7 +62,9 @@ class LLMEvaluator(EvaluatorInterface):
         silent_errors: bool = True,
         num_threads: int = 1,
         perform_system_analysis: bool = True,
-        num_samples_for_analysis: int = 40
+        skip_final_summary: bool = True,
+        num_samples_for_analysis: int = 40,
+        answer_word_limit = 300,
     ):
         """
         Initialize the LLM evaluator.
@@ -74,7 +77,9 @@ class LLMEvaluator(EvaluatorInterface):
             silent_errors: Whether to silently handle errors by returning default scores (True) or raise exceptions (False)
             num_threads: Number of threads to use for parallel evaluation (>1 for parallel, 1 for sequential), note this only speed up API calls
             perform_system_analysis: Whether to automatically perform system analysis during evaluation
+            skip_final_summary: Whether to skip the final summary analysis using LLM
             num_samples_for_analysis: Total number of samples to analyze in system analysis (divided equally between lowest relevance and lowest faithfulness)
+            answer_word_limit: Maximum number of words to include in the answer for evaluation
         """
         self.logger = get_logger("llm_evaluator")
         self.logger.info(f"Initializing LLM evaluator with model: {model_id}")
@@ -82,19 +87,21 @@ class LLMEvaluator(EvaluatorInterface):
         # Initialize the Bedrock client with Claude Sonnet 3.5
         self.client = BedrockClient(
             model_id=model_id,
-            temperature=temperature,
-            max_tokens=max_tokens
+            temperature=float(temperature),
+            max_tokens=int(max_tokens)
         )
 
         self.evaluator_name = "llm_evaluator"
+        self.answer_word_limit = int(answer_word_limit)
         self.use_gold_references = use_gold_references
         self.silent_errors = silent_errors
-        self.num_threads = max(1, num_threads)
+        self.num_threads = max(1, int(num_threads))
         self.perform_system_analysis = perform_system_analysis
+        self.skip_final_summary = skip_final_summary
 
         # Set the number of samples for each analysis type (divide total by 2)
-        self.num_lowest_relevance = num_samples_for_analysis // 2
-        self.num_lowest_faithfulness = num_samples_for_analysis // 2
+        self.num_lowest_relevance = int(num_samples_for_analysis) // 2
+        self.num_lowest_faithfulness = int(num_samples_for_analysis) // 2
 
     def _create_evaluation_prompt(self, prompt_template: str, rag_result: RAGResult, reference: Optional[QAPair] = None) -> str:
         """
@@ -123,7 +130,7 @@ class LLMEvaluator(EvaluatorInterface):
         # Fill in the template
         prompt = prompt_template.format(
             question=rag_result.question,
-            answer=rag_result.answer,
+            answer=take_words(rag_result.answer, self.answer_word_limit),
             gold_reference=gold_reference,
             documents=documents
         )
@@ -252,128 +259,50 @@ class LLMEvaluator(EvaluatorInterface):
                 self.logger.exception(e)
                 raise e
 
-    def _evaluate_with_threads(self, rag_results: List[RAGResult], references_by_qid: Dict[str, QAPair]) -> List[EvaluationResultRow]:
+    def _create_evaluation_row(self, rag_result: RAGResult, reference: Optional[QAPair] = None) -> EvaluationResultRow:
         """
-        Evaluate RAG results using multiple threads.
+        Create an evaluation row for a single RAG result.
 
         Args:
-            rag_results: List of RAG results to evaluate
-            references_by_qid: Dictionary mapping qid to reference QA pair
+            rag_result: The RAG result to evaluate
+            reference: Optional reference QA pair with gold standard answer
 
         Returns:
-            List of EvaluationResultRow objects
+            An EvaluationResultRow object
         """
-        # Filter out results with no qid
-        valid_results = [r for r in rag_results if r.qid is not None]
+        # Evaluate the RAG result
+        evaluation = self._evaluate_single(rag_result, reference)
 
-        # Create a lock for thread-safe operations
-        lock = Lock()
-        rows = []
+        # Create row-level result
+        metrics = {
+            "relevance_score": evaluation.get("relevance_score", 0),
+            "faithfulness_score": evaluation.get("faithfulness_score", 0),
+            "evaluation_notes": evaluation.get("evaluation_notes", "")
+        }
 
-        def evaluate_and_collect(rag_result):
-            # Get the reference QA pair if available
-            reference = references_by_qid.get(
-                rag_result.qid) if self.use_gold_references else None
+        # Add token usage and cost to metrics if available
+        if "token_usage" in evaluation:
+            metrics["token_usage"] = evaluation["token_usage"]
 
-            # Evaluate the RAG result
-            evaluation = self._evaluate_single(rag_result, reference)
+        if "cost_usd" in evaluation:
+            metrics["cost_usd"] = evaluation["cost_usd"]
 
-            # Create row-level result
-            metrics = {
-                "relevance_score": evaluation.get("relevance_score", 0),
-                "faithfulness_score": evaluation.get("faithfulness_score", 0),
-                "evaluation_notes": evaluation.get("evaluation_notes", "")
-            }
+        return EvaluationResultRow(
+            qid=rag_result.qid,
+            metrics=metrics,
+            evaluator_name=self.evaluator_name
+        )
 
-            # Add token usage and cost to metrics if available
-            if "token_usage" in evaluation:
-                metrics["token_usage"] = evaluation["token_usage"]
-
-            if "cost_usd" in evaluation:
-                metrics["cost_usd"] = evaluation["cost_usd"]
-
-            row = EvaluationResultRow(
-                qid=rag_result.qid,
-                metrics=metrics,
-                evaluator_name=self.evaluator_name
-            )
-
-            # Thread-safe append to rows list
-            with lock:
-                rows.append(row)
-
-            return row
-
-        # Use ThreadPoolExecutor to parallelize evaluation
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            # Submit all tasks and wait for them to complete
-            list(executor.map(evaluate_and_collect, valid_results))
-
-        return rows
-
-    def evaluate(self, rag_results: List[RAGResult], references: List[QAPair]) -> EvaluationResult:
+    def _calculate_aggregate_metrics(self, rows: List[EvaluationResultRow]) -> tuple:
         """
-        Evaluate a list of RAG results against a list of reference QA pairs.
+        Calculate aggregate metrics from evaluation rows.
 
         Args:
-            rag_results: List of RAG results to evaluate
-            references: List of reference QA pairs to compare against
+            rows: List of evaluation result rows
 
         Returns:
-            An EvaluationResult containing evaluation metrics and row-level results
+            Tuple of (metrics dictionary, total_cost)
         """
-        start_time = time.time()
-        self.logger.info(
-            f"Evaluating {len(rag_results)} RAG results with {self.num_threads} threads")
-
-        # Create a mapping of QA pairs by qid for easier lookup
-        references_by_qid = {
-            qa.qid: qa for qa in references if qa.qid is not None}
-
-        # Skip results with no qid
-        for rag_result in rag_results:
-            if rag_result.qid is None:
-                self.logger.warning("Skipping RAG result with no qid")
-
-        # Evaluate using threads if num_threads > 1, otherwise use sequential evaluation
-        if self.num_threads > 1:
-            rows = self._evaluate_with_threads(rag_results, references_by_qid)
-        else:
-            # Sequential evaluation
-            rows = []
-            for rag_result in rag_results:
-                # Skip if qid is None
-                if rag_result.qid is None:
-                    continue
-
-                # Get the reference QA pair if available
-                reference = references_by_qid.get(
-                    rag_result.qid) if self.use_gold_references else None
-
-                # Evaluate the RAG result
-                evaluation = self._evaluate_single(rag_result, reference)
-
-                # Create row-level result
-                metrics = {
-                    "relevance_score": evaluation.get("relevance_score", 0),
-                    "faithfulness_score": evaluation.get("faithfulness_score", 0),
-                    "evaluation_notes": evaluation.get("evaluation_notes", "")
-                }
-
-                # Add token usage and cost to metrics if available
-                if "token_usage" in evaluation:
-                    metrics["token_usage"] = evaluation["token_usage"]
-
-                if "cost_usd" in evaluation:
-                    metrics["cost_usd"] = evaluation["cost_usd"]
-
-                row = EvaluationResultRow(
-                    qid=rag_result.qid,
-                    metrics=metrics,
-                    evaluator_name=self.evaluator_name
-                )
-                rows.append(row)
-
         # Extract scores for aggregation
         relevance_scores = [row.metrics["relevance_score"] for row in rows]
         faithfulness_scores = [
@@ -398,6 +327,148 @@ class LLMEvaluator(EvaluatorInterface):
         if cost_available:
             metrics["total_cost"] = total_cost
 
+        return metrics, total_cost if cost_available else None
+
+    def _log_progress(self, completed: int, total: int, elapsed_time: float) -> float:
+        """
+        Log progress information at regular intervals.
+
+        Args:
+            completed: Number of completed evaluations
+            total: Total number of evaluations to perform
+            elapsed_time: Total elapsed time in seconds
+            last_log_time: Time of the last progress log
+            log_interval: Interval in seconds between progress logs
+
+        Returns:
+            Updated last_log_time if logging occurred, otherwise the original last_log_time
+        """
+        current_time = time.time()
+        # Calculate estimated time remaining
+        if completed > 0:
+            avg_time_per_item = elapsed_time / completed
+            remaining_items = total - completed
+            estimated_time_remaining = avg_time_per_item * remaining_items
+
+            self.logger.info(
+                f"Evaluation progress",
+                completed=f"{completed}/{total}",
+                elapsed_time=round(elapsed_time, 3),
+                estimated_remaining=round(estimated_time_remaining, 3)
+            )
+        else:
+            self.logger.info(
+                f"Evaluation progress",
+                completed=f"{completed}/{total}",
+                elapsed_time=round(elapsed_time, 3)
+            )
+
+        return current_time
+
+    def _evaluate_with_threads(self, rag_results: List[RAGResult], references_by_qid: Dict[str, QAPair]) -> List[EvaluationResultRow]:
+        """
+        Evaluate RAG results using multiple threads.
+
+        Args:
+            rag_results: List of RAG results to evaluate
+            references_by_qid: Dictionary mapping qid to reference QA pair
+
+        Returns:
+            List of EvaluationResultRow objects
+        """
+        # Filter out results with no qid
+        valid_results = [r for r in rag_results if r.qid is not None]
+        total_count = len(valid_results)
+
+        # Create a lock for thread-safe operations
+        lock = Lock()
+        rows = []
+        completed_count = 0
+        start_time = time.time()
+
+        def evaluate_and_collect(rag_result):
+            nonlocal completed_count
+
+            # Get the reference QA pair if available
+            reference = references_by_qid.get(
+                rag_result.qid) if self.use_gold_references else None
+
+            # Create evaluation row
+            row = self._create_evaluation_row(rag_result, reference)
+
+            # Thread-safe update of progress and rows
+            with lock:
+                rows.append(row)
+                completed_count += 1
+
+                # Update elapsed time
+                elapsed_time = time.time() - start_time
+
+                # Log progress at intervals
+                self._log_progress(completed_count, total_count, elapsed_time)
+
+            return row
+
+        # Use ThreadPoolExecutor to parallelize evaluation
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            # Submit all tasks and wait for them to complete
+            list(executor.map(evaluate_and_collect, valid_results))
+
+        return rows
+
+    def evaluate(self, rag_results: List[RAGResult], references: List[QAPair]) -> EvaluationResult:
+        """
+        Evaluate a list of RAG results against a list of reference QA pairs.
+
+        Args:
+            rag_results: List of RAG results to evaluate
+            references: List of reference QA pairs to compare against
+
+        Returns:
+            An EvaluationResult containing evaluation metrics and row-level results
+        """
+        start_time = time.time()
+        total_count = len(rag_results)
+        self.logger.info(
+            f"Evaluating {total_count} RAG results with {self.num_threads} threads")
+
+        # Create a mapping of QA pairs by qid for easier lookup
+        references_by_qid = {
+            qa.qid: qa for qa in references if qa.qid is not None}
+
+        # Skip results with no qid
+        for rag_result in rag_results:
+            if rag_result.qid is None:
+                self.logger.warning("Skipping RAG result with no qid")
+
+        # Evaluate using threads if num_threads > 1, otherwise use sequential evaluation
+        if self.num_threads > 1:
+            rows = self._evaluate_with_threads(rag_results, references_by_qid)
+        else:
+            # Sequential evaluation
+            rows = []
+            valid_results = [r for r in rag_results if r.qid is not None]
+            total_valid = len(valid_results)
+
+            for i, rag_result in enumerate(valid_results):
+                # Get the reference QA pair if available
+                reference = references_by_qid.get(
+                    rag_result.qid) if self.use_gold_references else None
+
+                # Create evaluation row
+                row = self._create_evaluation_row(rag_result, reference)
+                rows.append(row)
+
+                # Update elapsed time and log progress
+                elapsed_time = time.time() - start_time
+                completed = i + 1
+
+                # Log progress at intervals
+                self._log_progress(completed, total_valid, elapsed_time)
+
+        # Calculate aggregate metrics and total cost
+        metrics, total_cost = self._calculate_aggregate_metrics(rows)
+
         # Calculate total processing time
         total_time_ms = (time.time() - start_time) * 1000
 
@@ -409,26 +480,29 @@ class LLMEvaluator(EvaluatorInterface):
             system_name=rag_results[0].system_name if rag_results else None,
             rows=rows,
             total_time_ms=total_time_ms,
-            total_cost=total_cost if cost_available else None
+            total_cost=total_cost
         )
 
-        # Perform system analysis if requested and there are enough samples
-        if self.perform_system_analysis and len(rows) >= 2:
+        # Perform system analysis if requested, not skipped, and there are enough samples
+        if self.perform_system_analysis and not self.skip_final_summary and len(rows) >= 2:
             self.logger.info("Performing system analysis")
             system_analysis = self.summarize_evaluation(
                 result,
                 references,
                 num_lowest_relevance=self.num_lowest_relevance,
-                num_lowest_faithfulness=self.num_lowest_faithfulness
+                num_lowest_faithfulness=self.num_lowest_faithfulness,
+                model_id=self.client.model_id,
             )
 
             # Add system analysis to the evaluation result
             result.system_analysis = system_analysis
 
             # Add system analysis cost to total cost if available
-            if cost_available and system_analysis.cost_usd is not None:
+            if system_analysis.cost_usd is not None and result.total_cost is not None:
                 result.total_cost += system_analysis.cost_usd
                 result.metrics["total_cost"] = result.total_cost
+        elif self.perform_system_analysis and self.skip_final_summary and len(rows) >= 2:
+            self.logger.info("Skipping system analysis as requested (skip_final_summary=True)")
 
         self.logger.info(
             f"Evaluation complete",
@@ -436,7 +510,7 @@ class LLMEvaluator(EvaluatorInterface):
             avg_faithfulness_score=metrics["avg_faithfulness_score"],
             count=metrics["count"],
             total_time_ms=total_time_ms,
-            total_cost=total_cost if cost_available else None
+            total_cost=total_cost
         )
 
         return result

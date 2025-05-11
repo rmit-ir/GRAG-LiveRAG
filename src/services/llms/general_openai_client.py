@@ -6,9 +6,10 @@ import os
 import json
 import time
 from typing import Dict, Optional, Tuple, Any, List
+from openai import OpenAI, APIError, APIConnectionError, RateLimitError
+from utils.retry_utils import retry
 from datetime import datetime
 from services.llms.llm_interface import LLMInterface
-from openai import OpenAI
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
 
@@ -73,6 +74,8 @@ class GeneralOpenAIClient(LLMInterface):
         self.logger.debug(
             f"Initialized OpenAI-compatible client with model: {model_id}")
 
+    # another level of retry, this wait time is increased exponentially
+    @retry(max_retries=8, retry_on=(APIError, APIConnectionError, RateLimitError))
     def complete(self, prompt: str) -> str:
         """
         Generate a text completion for the given prompt.
@@ -96,7 +99,7 @@ class GeneralOpenAIClient(LLMInterface):
             response_time = time.time() - start_time
             self.logger.info(
                 "Completion API request completed",
-                response_time_ms=round(response_time * 1000)
+                response_time=round(response_time, 3)
             )
 
             # Try to log token usage if available
@@ -126,6 +129,8 @@ class GeneralOpenAIClient(LLMInterface):
             self.logger.error(f"Unexpected error in complete: {str(e)}")
             raise
 
+    # another level of retry, this wait time is increased exponentially
+    @retry(max_retries=8, retry_on=(APIError, APIConnectionError, RateLimitError))
     def complete_chat(self, messages: List[Dict[str, str]]) -> Tuple[str, Any]:
         """
         Generate a response for a chat conversation.
@@ -158,7 +163,7 @@ class GeneralOpenAIClient(LLMInterface):
             response_time = time.time() - start_time
             self.logger.info(
                 "API request completed",
-                response_time_ms=round(response_time * 1000)
+                response_time=round(response_time, 3)
             )
 
             # Try to log token usage if available

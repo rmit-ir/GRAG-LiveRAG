@@ -10,6 +10,7 @@ from rerankers.reranker_interface import RerankerInterface
 from services.llms.llm_interface import LLMInterface
 from utils.logging_utils import get_logger
 from services.indicies import SearchHit
+from utils.namedtuple_utils import update_tuple
 
 
 class LLMReranker(RerankerInterface):
@@ -120,23 +121,31 @@ class LLMReranker(RerankerInterface):
         """
         truncated_hits = []
         for hit in hits:
-            # Create a copy of the hit to avoid modifying the original
-            truncated_hit = SearchHit(
-                id=hit.id,
-                score=hit.score,
-                metadata=hit.metadata,
-                retrieval_model=hit.retrieval_model
-            )
-
             # Simple word-based truncation (approximation of tokens)
             words = hit.metadata.text.split()
             if len(words) > self.max_tokens_per_doc:
                 truncated_text = " ".join(
                     words[:self.max_tokens_per_doc]) + "..."
                 # Create a new metadata object with truncated text
-                # This is a bit hacky but avoids modifying the original metadata
-                truncated_hit.metadata.text = truncated_text
-
+                new_metadata = type(hit.metadata)(
+                    chunk_order=hit.metadata.chunk_order,
+                    doc_id=hit.metadata.doc_id,
+                    is_first_chunk=hit.metadata.is_first_chunk,
+                    is_last_chunk=hit.metadata.is_last_chunk,
+                    text=truncated_text,
+                    total_doc_chunks=hit.metadata.total_doc_chunks
+                )
+                # Create a new hit with the new metadata
+                truncated_hit = SearchHit(
+                    id=hit.id,
+                    score=hit.score,
+                    metadata=new_metadata,
+                    retrieval_model=hit.retrieval_model
+                )
+            else:
+                # No truncation needed, use original hit
+                truncated_hit = hit
+                
             truncated_hits.append(truncated_hit)
 
         return truncated_hits
@@ -292,11 +301,12 @@ class LLMReranker(RerankerInterface):
         reranked_hits = sorted(
             hits, key=lambda hit: scores[hit.id], reverse=True)
 
-        # Update scores in the hits
+        # Create new instances with updated scores
+        scored_hits = []
         for hit in reranked_hits:
-            hit.score = scores[hit.id]
+            scored_hits.append(update_tuple(hit, score=scores[hit.id]))
 
-        return reranked_hits
+        return scored_hits
 
     def _listwise_rerank(self, query: str, hits: List[SearchHit]) -> List[SearchHit]:
         """
@@ -354,11 +364,13 @@ class LLMReranker(RerankerInterface):
         # Rerank hits based on the order
         reranked_hits = [hits[i] for i in ordered_indices]
 
-        # Update scores based on rank (higher rank = higher score)
+        # Create new instances with updated scores based on rank
+        scored_hits = []
         for i, hit in enumerate(reranked_hits):
-            hit.score = len(reranked_hits) - i
+            new_score = len(reranked_hits) - i
+            scored_hits.append(update_tuple(hit, score=new_score))
 
-        return reranked_hits
+        return scored_hits
 
     def _setwise_rerank(self, query: str, hits: List[SearchHit], k: int = None) -> List[SearchHit]:
         """
@@ -440,11 +452,13 @@ class LLMReranker(RerankerInterface):
                 selected_hit = remaining_hits.pop(0)
                 reranked_hits.append(selected_hit)
 
-        # Update scores based on rank (higher rank = higher score)
+        # Create new instances with updated scores based on rank
+        scored_hits = []
         for i, hit in enumerate(reranked_hits):
-            hit.score = len(reranked_hits) - i
+            new_score = len(reranked_hits) - i
+            scored_hits.append(update_tuple(hit, score=new_score))
 
-        return reranked_hits
+        return scored_hits
 
     def _setwise_rerank_rerank(self, query: str, hits: List[SearchHit]) -> List[SearchHit]:
         """

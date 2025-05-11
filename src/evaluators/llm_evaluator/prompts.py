@@ -95,7 +95,7 @@ Based on the above, please evaluate the response on relevance (2, 1, 0, or -1).
 Provide your evaluation in the following JSON format:
 ```json
 {{
-  "evaluation_notes": "[your reasoning]",
+  "evaluation_notes": "[your reasoning in a single paragraph]",
   "relevance_score": [score]
 }}
 ```
@@ -141,7 +141,7 @@ Based on the above, please evaluate the response on faithfulness (1, 0, or -1).
 Provide your evaluation in the following JSON format:
 ```json
 {{
-  "evaluation_notes": "[your reasoning]",
+  "evaluation_notes": "[your reasoning in a single paragraph]",
   "faithfulness_score": [score]
 }}
 ```"""

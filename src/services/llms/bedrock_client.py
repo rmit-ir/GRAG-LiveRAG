@@ -4,45 +4,22 @@ Client for interacting with Amazon Bedrock API using LangChain.
 import os
 import json
 import time
+import random
+import boto3
 from typing import Dict, Tuple, Any, List, Optional
 from datetime import datetime
 from langchain_aws import ChatBedrock
 from langchain_core.messages import AIMessage
 from botocore.exceptions import BotoCoreError, ClientError
+from services.llms.bedrock_pricing import BEDROCK_MODEL_PRICING
 from utils.logging_utils import get_logger
 from utils.path_utils import get_data_dir
 from services.llms.llm_interface import LLMInterface
+from utils.retry_utils import retry
+from dotenv import load_dotenv
 
 # Initialize logger
 logger = get_logger("bedrock_client")
-
-# Pricing per 1000 tokens for different models (in USD)
-# These prices should be updated as AWS changes their pricing
-MODEL_PRICING = {
-    # Claude 3.5 models
-    "anthropic.claude-3-5-sonnet-20241022-v2:0": {
-        "input_price": 3.00,  # $3.00 per 1M input tokens ($0.003 per 1K)
-        "output_price": 15.00  # $15.00 per 1M output tokens ($0.015 per 1K)
-    },
-    "anthropic.claude-3-5-haiku-20241022-v1:0": {
-        "input_price": 1.00,  # $1.00 per 1M input tokens ($0.001 per 1K)
-        "output_price": 5.00   # $5.00 per 1M output tokens ($0.005 per 1K)
-    },
-    # Claude 3 models
-    "anthropic.claude-3-sonnet-20240229-v1:0": {
-        "input_price": 3.00,  # $3.00 per 1M input tokens ($0.003 per 1K)
-        "output_price": 15.00  # $15.00 per 1M output tokens ($0.015 per 1K)
-    },
-    "anthropic.claude-3-haiku-20240307-v1:0": {
-        "input_price": 0.25,  # $0.25 per 1M input tokens ($0.00025 per 1K)
-        "output_price": 1.25   # $1.25 per 1M output tokens ($0.00125 per 1K)
-    },
-    # Default pricing if model not found
-    "default": {
-        "input_price": 3.00,  # Default to Claude 3.5 Sonnet pricing
-        "output_price": 15.00
-    }
-}
 
 
 class BedrockClient(LLMInterface):
@@ -70,6 +47,21 @@ class BedrockClient(LLMInterface):
             temperature=temperature,
             max_tokens=max_tokens
         )
+        
+        # Store parameters for potential client recreation
+        self.model_id = model_id
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.region_name = region_name
+        
+        # Initialize the client
+        self._initialize_client()
+        
+    def _initialize_client(self):
+        """
+        Initialize or reinitialize the Bedrock client with credentials from environment variables.
+        This method can be called to refresh credentials when they expire.
+        """
         # Get AWS credentials from environment variables with RACE_ prefix
         aws_access_key_id = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
         aws_secret_access_key = os.environ.get(
@@ -81,18 +73,19 @@ class BedrockClient(LLMInterface):
                 "AWS credentials (RACE_AWS_ACCESS_KEY_ID and RACE_AWS_SECRET_ACCESS_KEY) are required for Bedrock API access.")
 
         # Use provided region_name or get from environment variable
+        region_name = self.region_name
         if region_name is None:
             region_name = os.environ.get("RACE_AWS_REGION", "us-west-2")
 
         # Set up model kwargs with temperature and max_tokens
         model_kwargs = {
-            "temperature": temperature,
-            "max_tokens": max_tokens
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens
         }
 
         # Initialize ChatBedrock with the specified model and credentials
         self.chat_model = ChatBedrock(
-            model_id=model_id,
+            model_id=self.model_id,
             region_name=region_name,
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
@@ -100,9 +93,18 @@ class BedrockClient(LLMInterface):
             model_kwargs=model_kwargs
         )
 
-        # Store model ID for reference
-        self.model_id = model_id
-        logger.debug(f"Initialized Bedrock client with model: {model_id}")
+        logger.info(f"Initialized Bedrock client with model: {self.model_id}")
+        
+    def reload_credentials(self):
+        """
+        Reload credentials from .env file and reinitialize the client.
+        This should be called when credentials expire.
+        """
+        logger.info("Reloading credentials from .env file")
+        # Reload environment variables from .env file
+        load_dotenv(override=True)
+        # Reinitialize the client with fresh credentials
+        self._initialize_client()
 
     def complete(self, prompt: str) -> str:
         """
@@ -137,66 +139,88 @@ class BedrockClient(LLMInterface):
         """
         # Start timing the API request
         start_time = time.time()
+        
+        # Try with automatic token refresh on expiration
+        max_retries = 8
+        base_delay = 1.0
+        max_delay = 300.0
+        
+        for attempt in range(max_retries):
+            try:
+                # Send the message and get the response
+                response = self.chat_model.invoke(messages)
+                logger.debug(f"Raw response from Bedrock API", response=response)
 
-        try:
-            # Send the message and get the response
-            response = self.chat_model.invoke(messages)
-            logger.debug(f"Raw response from Bedrock API", response=response)
+                # Log response time
+                response_time = time.time() - start_time
+                logger.info(
+                    "Bedrock API request completed",
+                    response_time=round(response_time, 3)
+                )
 
-            # Log response time
-            response_time = time.time() - start_time
-            logger.info(
-                "Bedrock API request completed",
-                response_time_ms=round(response_time * 1000)
-            )
+                # Extract content from the response
+                content = response.content
 
-            # Extract content from the response
-            content = response.content
+                # Extract token usage from response
+                token_usage = self._extract_token_usage(response)
 
-            # Extract token usage from response
-            token_usage = self._extract_token_usage(response)
+                # Calculate cost based on token usage
+                cost = self._calculate_cost(token_usage)
 
-            # Calculate cost based on token usage
-            cost = self._calculate_cost(token_usage)
+                # Log token usage and cost
+                logger.info(
+                    "Token usage and cost",
+                    input_tokens=token_usage.get("input_tokens", 0),
+                    output_tokens=token_usage.get("output_tokens", 0),
+                    total_tokens=token_usage.get("total_tokens", 0),
+                    cost_usd=cost
+                )
 
-            # Log token usage and cost
-            logger.info(
-                "Token usage and cost",
-                input_tokens=token_usage.get("input_tokens", 0),
-                output_tokens=token_usage.get("output_tokens", 0),
-                total_tokens=token_usage.get("total_tokens", 0),
-                cost_usd=cost
-            )
+                # Create response metadata for saving
+                response_metadata = {
+                    "model": self.model_id,
+                    "messages": messages,
+                    "response": content,
+                    "timestamp": datetime.now().isoformat(),
+                    "token_usage": token_usage,
+                    "cost_usd": cost
+                }
 
-            # Create response metadata for saving
-            response_metadata = {
-                "model": self.model_id,
-                "messages": messages,
-                "response": content,
-                "timestamp": datetime.now().isoformat(),
-                "token_usage": token_usage,
-                "cost_usd": cost
-            }
+                # Save response for reproducibility
+                self._save_raw_response(response_metadata)
 
-            # Save response for reproducibility
-            self._save_raw_response(response_metadata)
+                # Add token usage and cost to response object for access by callers
+                response.token_usage = token_usage
+                response.cost_usd = cost
 
-            # Add token usage and cost to response object for access by callers
-            response.token_usage = token_usage
-            response.cost_usd = cost
+                return content, response
 
-            return content, response
-
-        except (BotoCoreError, ClientError) as e:
-            logger.error(f"AWS error: {str(e)}")
-            # Check if this is an expired token exception
-            if isinstance(e, ClientError) and "ExpiredTokenException" in str(e):
-                logger.warning(
-                    "AWS token has expired. Please refresh your AWS credentials (environment variables).")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in complete_chat: {str(e)}")
-            raise
+            except Exception as e:
+                # Check if this is an expired token exception
+                if isinstance(e, ClientError) and "ExpiredTokenException" in str(e):
+                    logger.warning("AWS token expired. Reloading credentials and retrying.")
+                    # Reload credentials from .env file
+                    self.reload_credentials()
+                    # Don't count this as a retry for token expiration
+                    continue
+                
+                # For other AWS errors, implement retry with exponential backoff
+                if isinstance(e, (BotoCoreError, ClientError)):
+                    if attempt < max_retries - 1:
+                        # Calculate delay with exponential backoff and jitter
+                        delay = min(base_delay * (2 ** attempt), max_delay)
+                        # Add jitter (±10%)
+                        jitter = delay * 0.1
+                        delay = delay + (jitter * (2 * random.random() - 1))
+                        
+                        logger.warning(f"AWS API error. Retrying in {delay:.2f}s", 
+                                      error=str(e), attempt=attempt+1, max_retries=max_retries)
+                        time.sleep(delay)
+                        continue
+                
+                # Non-AWS exceptions or max retries exceeded
+                logger.error(f"Error in complete_chat: {str(e)}")
+                raise
 
     def complete_chat_once(self, message: str, system_message: Optional[str] = None) -> Tuple[str, AIMessage]:
         """
@@ -275,7 +299,14 @@ class BedrockClient(LLMInterface):
             Cost in USD
         """
         # Get pricing for the model
-        pricing = MODEL_PRICING.get(self.model_id, MODEL_PRICING["default"])
+        pricing = BEDROCK_MODEL_PRICING.get(self.model_id, None)
+        if not pricing:
+            logger.warning(
+                f"Model {self.model_id} not found in pricing data. Using default pricing.",
+                model_id=self.model_id, pricing=BEDROCK_MODEL_PRICING["default"])
+            pricing = BEDROCK_MODEL_PRICING["default"]
+        else:
+            logger.info(f"Using pre-defined pricing", model_id=self.model_id, pricing=pricing)
 
         # Extract token counts
         input_tokens = token_usage.get("input_tokens", 0)
@@ -320,6 +351,52 @@ class BedrockClient(LLMInterface):
         except Exception as e:
             logger.error(f"Failed to save raw response: {str(e)}")
 
+    def list_models(self) -> List[Dict[str, Any]]:
+        """
+        List available foundation models in Amazon Bedrock.
+
+        Returns:
+            List[Dict[str, Any]]: A list of available models with their details
+
+        Raises:
+            BotoCoreError, ClientError: If there's an issue with the AWS API call
+        """
+        try:
+            # Get AWS credentials from environment variables with RACE_ prefix
+            aws_access_key_id = os.environ.get("RACE_AWS_ACCESS_KEY_ID", "")
+            aws_secret_access_key = os.environ.get(
+                "RACE_AWS_SECRET_ACCESS_KEY", "")
+            aws_session_token = os.environ.get("RACE_AWS_SESSION_TOKEN", None)
+
+            # Use the same region as the chat model
+            region_name = os.environ.get("RACE_AWS_REGION", "")
+
+            # Create a boto3 Bedrock client
+            bedrock_client = boto3.client(
+                'bedrock',
+                region_name=region_name,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token
+            )
+
+            # List foundation models
+            response = bedrock_client.list_foundation_models()
+
+            # Extract model information
+            models = response.get('modelSummaries', [])
+
+            # Log the number of models found
+            logger.info(f"Found {len(models)} Bedrock foundation models")
+
+            return models
+
+        except Exception as e:
+            # Non-AWS exceptions are not retried by the decorator
+            if not isinstance(e, (BotoCoreError, ClientError)):
+                logger.error(f"Unexpected error in list_models: {str(e)}")
+            raise
+
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
@@ -342,7 +419,22 @@ if __name__ == "__main__":
         model_id="anthropic.claude-3-5-haiku-20241022-v1:0"
     )
 
-    # Send the query and get the response with a custom system message
+    # Example 1: List available models
+    print("\nListing available Bedrock foundation models:")
+    print("-" * 50)
+    models = client.list_models()
+    print(f"Found {len(models)} models:")
+
+    # Print model information in a readable format
+    for i, model in enumerate(models, 1):
+        model_id = model.get('modelId', 'Unknown')
+        provider = model.get('providerName', 'Unknown')
+        model_name = model.get('modelName', 'Unknown')
+        print(f"{i}. {model_name} ({model_id}) by {provider}")
+    print("-" * 50)
+
+    # Example 2: Send a query and get the response with a custom system message
+    print("\nSending a query to Bedrock API:")
     content, raw_response = client.complete_chat_once(
         "What is retrieval-augmented generation (RAG)?",
         system_message="You are an AI assistant that provides clear, concise explanations."

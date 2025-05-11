@@ -1,28 +1,28 @@
 """
-uv run scripts/run.py --system systems.basic_rag_2.rag_2.BasicRAG2 --help
+uv run scripts/run.py --system VanillaRAG --help
 """
 import re
 import time
 from typing import List
-from evaluators.evaluator_interface import test_evaluator
-from evaluators.llm_evaluator.llm_evaluator import LLMEvaluator
-from services.ds_data_morgana import QAPair
 from services.indicies import QueryService, SearchHit
 from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
 from systems.rag_result import RAGResult
 from systems.rag_system_interface import RAGSystemInterface
+from utils.doc_listing_utils import truncate_docs
 from utils.logging_utils import get_logger
 
 
 class VanillaRAG(RAGSystemInterface):
-    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5):
+    def __init__(self, llm_client='ai71', qgen_model_id='tiiuae/falcon3-10b-instruct', qgen_api_base=None, k_queries=5, expand_doc=False, expand_words_limit=15_000):
         """
         Initialize the BasicRAG2.
 
         Args:
             llm_client: Client for the LLM. Options are 'ai71' or 'ec2_llm', default is 'ai71'.
             module_query_gen: Select this module for query generation. Options are 'with_number'|'without_number', default is 'with_number'.
+            expand_doc: If True, expand the chunks into full docs and preserve ranking. Default is False.
+            expand_words_limit: The number of words to keep after expanded chunks to documents.
         """
         if llm_client == 'ai71':
             self.rag_llm_client = AI71Client()
@@ -40,6 +40,8 @@ class VanillaRAG(RAGSystemInterface):
         self.rag_system_prompt = "You are a helpful assistant. Answer the question based on the provided documents."
         self.qgen_system_prompt = f"Generate a list of {k_queries} search query variants based on the user's question, give me one query variant per line. There are no spelling mistakes in the original question. Do not include any other text."
         self.query_service = QueryService()
+        self.expand_doc = expand_doc
+        self.expand_words_limit = int(expand_words_limit)
 
     def _create_query_variants(self, question: str) -> List[str]:
         resp_text, _ = self.qgen_llm_client.complete_chat_once(
@@ -58,7 +60,8 @@ class VanillaRAG(RAGSystemInterface):
         queries = [self._sanitize_query(query) for query in queries]
         if len(queries) > self.k_queries:
             self.logger.warning(
-                f"Number of generated queries ({len(queries)}) exceeds the limit ({self.k_queries}). Truncating.")
+                f"Number of generated queries ({len(queries)}) exceeds the limit ({self.k_queries}). Truncating.",
+                source_queries=queries)
             queries = queries[:self.k_queries]
         # return queries + [question]
         return queries
@@ -90,15 +93,30 @@ class VanillaRAG(RAGSystemInterface):
         queries = self._create_query_variants(question)
 
         documents: List[SearchHit] = []
-        doc_ids = set()
+        hit_ids = set()
+        doc_ids = list()
+        doc_ids_set = set()
         for query in queries:
             embed_results = self.query_service.query_embedding(query, k=3)
             keyword_results = self.query_service.query_keywords(query, k=3)
             results = embed_results + keyword_results
-            for doc in results:
-                if doc.id not in doc_ids:
-                    documents.append(doc)
-                    doc_ids.add(doc.id)
+            for hit in results:
+                if hit.id not in hit_ids:
+                    documents.append(hit)
+                    hit_ids.add(hit.id)
+                    if hit.metadata.doc_id not in doc_ids_set:
+                        doc_ids.append(hit.metadata.doc_id)
+                        doc_ids_set.add(hit.metadata.doc_id)
+
+        # If expand_doc is True, expand the chunks using get_doc while preserving original ranking
+        if self.expand_doc:
+            ordered_doc_ids = [doc.id for doc in documents]
+            full_docs = self.query_service.get_docs(ordered_doc_ids)
+            documents = truncate_docs(full_docs, self.expand_words_limit)
+            self.logger.info(f"Expanded documents", question=question,
+                             taken_docs=len(documents),
+                             original_docs=len(full_docs),
+                             original_chunks=len(ordered_doc_ids))
 
         context = "Documents: \n\n"
         context += "\n\n".join([doc.metadata.text for doc in documents])
@@ -108,12 +126,18 @@ class VanillaRAG(RAGSystemInterface):
         answer, _ = self.rag_llm_client.complete_chat_once(
             prompt, self.rag_system_prompt)
 
+        final_prompt = str([
+            {"role": "system", "content": self.rag_system_prompt},
+            {"role": "user", "content": prompt}
+        ])
+
         return RAGResult(
             qid=qid,
             question=question,
             answer=answer,
+            metadata={"final_prompt": final_prompt},
             context=[doc.metadata.text for doc in documents],
-            doc_ids=list(doc_ids),
+            doc_ids=doc_ids,
             generated_queries=queries,
             total_time_ms=(time.time() - start_time) * 1000,
             system_name="BasicRAG2",
@@ -122,8 +146,7 @@ class VanillaRAG(RAGSystemInterface):
 
 if __name__ == "__main__":
     # Test the BasicRAG2 system
-    rag_system = VanillaRAG(
-        llm_client='ec2_llm', qgen_api_base='http://localhost:8988/v1/', qgen_model_id='qwen/qwen3-8b')
+    rag_system = VanillaRAG()
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
         qid=1

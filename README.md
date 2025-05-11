@@ -148,8 +148,15 @@ say "evaluation finished"
 
 ## Live Day Procedure
 
-1. Download the jsonl LiveRAG questions, save to [data/live_rag_questions/](data/live_rag_questions/)
-2. Run the system over questions, results will be saved to [data/rag_results/](data/rag_results/)
+1. Launch EC2 LLM instance (if not already running)
+
+   ```bash
+   uv run scripts/aws/deploy_ec2_llm.py --app-name vllm
+   ```
+
+   This will take around 9 minutes to start the instance.
+2. Download the jsonl LiveRAG questions, save to [data/live_rag_questions/](data/live_rag_questions/)
+3. Run the system over questions, results will be saved to [data/rag_results/](data/rag_results/)
 
   ```bash
   uv run scripts/run.py --system VanillaRAG \
@@ -160,7 +167,7 @@ say "evaluation finished"
     --input data/live_rag_questions/questions.jsonl
   ```
 
-3. Collect the results under [data/rag_results/](data/rag_results/) and send it to the organizers
+4. Collect the results under [data/rag_results/](data/rag_results/) and send it to the organizers
 
 ## Usage
 

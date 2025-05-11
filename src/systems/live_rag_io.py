@@ -2,6 +2,7 @@
 Classes for handling LiveRAG Challenge input and output formats.
 """
 from dataclasses import dataclass
+import re
 from typing import List, Dict, Any, TypedDict
 import json
 from services.ds_data_morgana import QAPair
@@ -143,6 +144,9 @@ class LiveRAGAnswer:
         # If context and doc_ids have the same length, pair them directly
         if len(result.context) == len(result.doc_ids):
             for passage, doc_id in zip(result.context, result.doc_ids):
+                # transform doc-<urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>::chunk-1
+                # to <urn:uuid:8cfe9f92-9499-422a-a4a5-55a7ae879410>
+                doc_id = re.sub(r'doc-(.*)::chunk-\d+', r'\1', doc_id)
                 passages.append(LiveRAGPassage(
                     passage=passage,
                     doc_IDs=[doc_id]

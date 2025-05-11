@@ -176,3 +176,5 @@ cython_debug/
 # macOS system files
 .DS_Store
 **/.DS_Store
+/data/anova_result
+data/live_rag_questions/azure_openai_responses_*
