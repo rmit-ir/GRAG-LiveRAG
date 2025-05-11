@@ -178,3 +178,4 @@ cython_debug/
 **/.DS_Store
 /data/anova_result
 data/live_rag_questions/azure_openai_responses_*
+data/anova_result_backups
