@@ -81,6 +81,7 @@ for query_gen_prompt_level in "${QUERY_GEN_PROMPT_LEVELS[@]}"; do
                                         echo "Using result file: $results_path"
                                         uv run scripts/evaluate.py \
                                             --evaluator LLMEvaluator \
+                                            --num_threads 20 \
                                             --results "$results_path" \
                                             --reference data/generated_qa_pairs/${reference_file}.tsv \
                                             --output-dir "$output_dir"
