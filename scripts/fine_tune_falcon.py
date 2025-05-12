@@ -32,7 +32,7 @@ else:
 # Define paths and parameters
 MODEL_NAME = "tiiuae/Falcon3-10B-Instruct"
 OUTPUT_DIR = "./fine_tuned_falcon3"
-DATA_PATH = "../data/live_rag_questions/combined_judgments_df_prompts.tsv"  # Replace with your TSV file path
+DATA_PATH = "./data/live_rag_questions/combined_judgments_df_prompts.tsv"  # Replace with your TSV file path
 
 # A100 40GB Optimized Settings
 MAX_LENGTH = 1024
