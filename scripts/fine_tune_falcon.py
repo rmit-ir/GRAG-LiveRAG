@@ -61,10 +61,12 @@ if not tokenizer.pad_token:
 
 # Load model with 8-bit quantization but NO device_map when using DeepSpeed
 bnb_config = BitsAndBytesConfig(
-    load_in_8bit=True,  # Use 8-bit instead of 4-bit
+    load_in_8bit=True,
     llm_int8_skip_modules=["lm_head"],
     llm_int8_threshold=6.0,
     llm_int8_has_fp16_weight=False,
+    bnb_8bit_use_double_quant=False,  # Add this to avoid compatibility issues
+    bnb_8bit_quant_type="int8",       # Specify the quantization type explicitly
 )
 
 model = AutoModelForCausalLM.from_pretrained(
@@ -76,10 +78,17 @@ model = AutoModelForCausalLM.from_pretrained(
     token=HF_TOKEN,
 )
 
-# Prepare model for training
+# Special handling for compatibility with PEFT
+for param in model.parameters():
+    # Make sure params are in the right dtype
+    if hasattr(param, 'data'):  # Check that param has data attribute
+        param.data = param.data.to(torch.bfloat16)
+
+# Then prepare model for training
 model = prepare_model_for_kbit_training(model)
 
 # Configure LoRA for parameter-efficient fine-tuning
+# Update target modules to match Falcon architecture
 lora_config = LoraConfig(
     r=LORA_R,
     lora_alpha=LORA_ALPHA,
@@ -96,6 +105,7 @@ lora_config = LoraConfig(
         "mlp.down_proj"
     ],
     modules_to_save=["lm_head"],
+    inference_mode=False,  # Make sure this is set to False for training
 )
 
 # Apply LoRA to model
