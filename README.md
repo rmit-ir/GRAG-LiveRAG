@@ -153,8 +153,13 @@ say "evaluation finished"
    ```bash
    # terminal 1
    uv run scripts/aws/deploy_ec2_llm.py --app-name vllm
+   # or connect to existing instances
+   uv run scripts/aws/deploy_ec2_llm.py --app-name vllm --connect i-xxxxxxxxxxxx
+   
    # terminal 2
    uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi --instance-type g6e.12xlarge
+   # or connect to existing instances
+   uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi --connect i-xxxxxxxxxxxx
    ```
 
    This will take around 9 minutes to start the instance.
