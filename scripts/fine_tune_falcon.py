@@ -59,7 +59,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 if not tokenizer.pad_token:
     tokenizer.pad_token = tokenizer.eos_token
 
-# Load model with 4-bit quantization for distributed A100 efficiency
+# Load model with 4-bit quantization but NO device_map when using DeepSpeed
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
@@ -68,8 +68,8 @@ bnb_config = BitsAndBytesConfig(
 
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
-    quantization_config=bnb_config,  # Replace load_in_4bit with quantization_config
-    device_map="auto",  # Let the model decide how to distribute across GPUs
+    quantization_config=bnb_config,
+    # Remove device_map="auto" to allow DeepSpeed to handle device mapping
     trust_remote_code=True,
     cache_dir=cache_dir,
     token=HF_TOKEN,
