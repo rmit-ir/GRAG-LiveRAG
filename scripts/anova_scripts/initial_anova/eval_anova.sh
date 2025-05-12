@@ -1,10 +1,23 @@
 #!/bin/bash
 
-llm_client="ec2_llm" # ai71 or ec2_llm
+# Change to the project root directory
+cd "$(dirname "$0")/../../../"
+
 # File prefix, used for aligning run and eval
 reference_file="dmds_500_hard_sampled_15"
-# File paths
-input="data/generated_qa_pairs/${reference_file}.tsv"
+
+# # Configuration lists
+# QUERY_GEN_PROMPT_LEVELS=("naive" "medium")
+# RAG_PROMPT_LEVELS=("naive" "medium" "advanced")
+# ORIGINAL_QUESTION_INCLUDED_VALUES=("false" "true")
+# K_QUERIES_VALUES=(4 5 8)
+# QPP_VALUES=("no")
+# FIRST_STEP_RANKER_VALUES=("both" "keywords" "embedding")
+# NUM_FIRST_RETRIEVED_DOCUMENTS_VALUES=(5 8)
+# FUSION_METHOD_VALUES=("concat")
+# RERANKER_VALUES=("no" "logits")
+# NUM_RERANKED_DOCUMENTS_VALUES_NO=(0)
+# NUM_RERANKED_DOCUMENTS_VALUES_LOGITS=(10 15 20)
 
 # Configuration lists
 QUERY_GEN_PROMPT_LEVELS=("naive" "medium")
@@ -52,18 +65,29 @@ for query_gen_prompt_level in "${QUERY_GEN_PROMPT_LEVELS[@]}"; do
                                     
                                     for num_reranked_documents in "${num_reranked_documents_values[@]}"; do
                                         if [ "$stop_loops" = true ]; then break; fi
+                                        base_dir="data/anova_result/${original_question_inlcuded}_${k_queries}_${query_gen_prompt_level}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}_${num_reranked_documents}_${rag_prompt_level}"
+                                        output_dir="data/evaluation_results/${original_question_inlcuded}_${k_queries}_${query_gen_prompt_level}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}_${num_reranked_documents}_${rag_prompt_level}"
                                         
-                                        output_dir="data/anova_result/${original_question_inlcuded}_${k_queries}_${query_gen_prompt_level}_${qpp}_${num_first_retrieved_documents}_${first_step_ranker}_${fusion_method}_${reranker}_${num_reranked_documents}_${rag_prompt_level}"
-                                        
-                                        # Skip if output directory exists and contains run files
-                                        if [ -d "$output_dir" ] && [ -n "$(ls -A $output_dir/${reference_file}.run*.AnovaRAG.tsv 2>/dev/null)" ]; then
-                                            echo "Skipping existing configuration: $output_dir"
+                                        # Skip if output directory exists and contains aggregate files
+                                        if [ -d "$output_dir" ] && [ -n "$(ls -A $output_dir/*.aggregate.* 2>/dev/null)" ]; then
+                                            echo "Skipping existing evaluation: $output_dir"
                                             continue
                                         fi
                                         
-                                        common_args="--llm_client $llm_client --system AnovaRAG --input $input --output-dir $output_dir --num-threads 20 --original_question_inlcuded=$original_question_inlcuded --k_queries=$k_queries --qpp=$qpp --num_first_retrieved_documents $num_first_retrieved_documents --first_step_ranker $first_step_ranker --fusion_method $fusion_method --reranker $reranker --num_reranked_documents $num_reranked_documents --rag_prompt_level $rag_prompt_level --query_gen_prompt_level $query_gen_prompt_level"
-                                        echo "Running with original_question_inlcuded=$original_question_inlcuded, k_queries=$k_queries, qpp=$qpp, first_step_ranker=$first_step_ranker, num_first_retrieved_documents=$num_first_retrieved_documents, fusion_method=$fusion_method, reranker=$reranker, num_reranked_documents=$num_reranked_documents, query_gen_prompt_level=$query_gen_prompt_level, rag_prompt_level=$rag_prompt_level"
-                                        uv run scripts/run.py $common_args
+                                        results_path=$(ls -t "${base_dir}"/${reference_file}.run*.AnovaRAG.tsv 2>/dev/null | head -n1)
+                                        if [ -z "$results_path" ]; then
+                                            echo "No result file found in ${base_dir}, skipping..."
+                                            continue
+                                        fi
+                                        
+                                        echo "Evaluating with original_question_inlcuded=$original_question_inlcuded, k_queries=$k_queries, qpp=$qpp, first_step_ranker=$first_step_ranker, num_first_retrieved_documents=$num_first_retrieved_documents, fusion_method=$fusion_method, reranker=$reranker, num_reranked_documents=$num_reranked_documents, query_gen_prompt_level=$query_gen_prompt_level, rag_prompt_level=$rag_prompt_level"
+                                        echo "Using result file: $results_path"
+                                        uv run scripts/evaluate.py \
+                                            --evaluator LLMEvaluator \
+                                            --num_threads 20 \
+                                            --results "$results_path" \
+                                            --reference data/generated_qa_pairs/${reference_file}.tsv \
+                                            --output-dir "$output_dir"
                                     done
                                 done
                             done

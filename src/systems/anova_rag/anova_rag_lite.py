@@ -22,11 +22,12 @@ class AnovaRAGLite(RAGSystemInterface):
                  query_gen_prompt_level: Literal['naive', 'medium', 'advanced'] = 'naive',
                  rag_prompt_level: Literal['naive', 'medium', 'advanced'] = 'naive',
                  qpp: Literal['no'] = 'no',
-                 first_step_ranker: Literal['keywords', 'embedding', 'both_concat', 'both_fusion'] = 'both_concat',
-                 reranker: Literal['no', 'logits'] = 'no',
+                 first_step_ranker: Literal['keywords', 'embedding', 'both_concat', 'both_fusion'] = 'both_fusion',
+                 reranker: Literal['no', 'logits'] = 'logits',
                  context_words_limit: int = 15_000,
-                 n_queries: int = 5,
-                 initial_retrieval_k_docs: int = 50):
+                 n_queries: int = 8,
+                 initial_retrieval_k_docs: int = 50,
+                 query_expansion_mode: Literal['none', 'variants', 'decomposition'] = 'none'):
     # autopep8: on
         """
         Initialize the AnovaRAGLite.
@@ -41,6 +42,8 @@ class AnovaRAGLite(RAGSystemInterface):
             context_words_limit: Maximum number of words to include in the context. Default is 15,000.
             n_queries: Number of query variants to generate. Default is 5.
             initial_retrieval_k_docs: Total number of documents to retrieve initially. Default is 50.
+            query_expansion_mode: Mode for query expansion. Options are 'none' (no expansion), 'variants' (only use query variants), 
+                                 or 'decomposition' (full query expansion). Default is 'none'.
         """
 
         if llm_client == 'ai71':
@@ -60,6 +63,7 @@ class AnovaRAGLite(RAGSystemInterface):
         self.initial_retrieval_k_docs = int(initial_retrieval_k_docs)
         self.context_words_limit = int(context_words_limit)
         self.query_gen_prompt_level = query_gen_prompt_level
+        self.query_expansion_mode = query_expansion_mode
 
         if self.reranker != 'no':
             self.logits_llm = MiniTGIClient()
@@ -92,14 +96,26 @@ class AnovaRAGLite(RAGSystemInterface):
             system_prompt=self.query_gen_sys_prompt
         )
 
-        # Use the enhanced query expansion with the custom QueryVariantsGenerator
-        query_expansion = QueryExpansion(
-            llm_client=self.qgen_llm_client,
-            query_variants_generator=query_variants_generator
-        )
-
-        qs_res = query_expansion.expand_queries(question, self.n_queries)
-        queries = qs_res.sub_queries
+        rephrased_query = question
+        # Handle different query expansion modes
+        if self.query_expansion_mode == 'none':
+            # No query expansion, just use the original question
+            queries = [question]
+        elif self.query_expansion_mode == 'variants':
+            # Only use query variants generator
+            queries = query_variants_generator.generate_variants(question, self.n_queries)
+        elif self.query_expansion_mode == 'decomposition':  # 'decomposition'
+            # Use the full query expansion
+            query_expansion = QueryExpansion(
+                llm_client=self.qgen_llm_client,
+                query_variants_generator=query_variants_generator
+            )
+            qs_res = query_expansion.expand_queries(question, self.n_queries)
+            queries = qs_res.sub_queries
+            rephrased_query = qs_res.rephrased_query
+        else:
+            raise ValueError(
+                f"Invalid query expansion mode", mode=self.query_expansion_mode)
 
         # Calculate k per query based on total initial retrieval docs
         k_per_query = int(self.initial_retrieval_k_docs / len(queries))
@@ -135,7 +151,7 @@ class AnovaRAGLite(RAGSystemInterface):
         if self.reranker == 'logits':
             # For logits reranker, pass all documents directly to reranker
             docs = self.reranker_client.rerank(
-                all_docs, question=qs_res.rephrased_query, words_limit=self.context_words_limit)
+                all_docs, question=rephrased_query, words_limit=self.context_words_limit)
 
             # If reranking returns nothing, fallback to first 10
             if docs is None or len(docs) == 0:
