@@ -2,6 +2,7 @@ import time
 import json
 import os
 from typing import List, Literal
+from services.answer_utils import condense_answer
 from services.indicies import QueryService, SearchHit
 from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
@@ -105,7 +106,8 @@ class AnovaRAGLite(RAGSystemInterface):
             queries = [question]
         elif self.query_expansion_mode == 'variants':
             # Only use query variants generator
-            queries = query_variants_generator.generate_variants(question, self.n_queries)
+            queries = query_variants_generator.generate_variants(
+                question, self.n_queries)
         elif self.query_expansion_mode == 'decomposition':  # 'decomposition'
             # Use the full query expansion
             query_expansion = QueryExpansion(
@@ -120,7 +122,7 @@ class AnovaRAGLite(RAGSystemInterface):
                 f"Invalid query expansion mode", mode=self.query_expansion_mode)
         if self.enable_hyde:
             hyde_system_prompt = "Given the question, write a short hypothetical answer that could be true. Be brief and concise."
-            hyde_answer, _  = self.qgen_llm_client.complete_chat_once(
+            hyde_answer, _ = self.qgen_llm_client.complete_chat_once(
                 question, hyde_system_prompt)
             queries.append(hyde_answer.strip())
         # Calculate k per query based on total initial retrieval docs
@@ -179,6 +181,9 @@ class AnovaRAGLite(RAGSystemInterface):
         answer, _ = self.rag_llm_client.complete_chat_once(
             agen_prompt, self.rag_system_prompt)
 
+        answer = condense_answer(llm_client=self.rag_llm_client,
+                                 answer=answer, words_limit=300)
+
         final_prompt = str([
             {"role": "system", "content": self.rag_system_prompt},
             {"role": "user", "content": agen_prompt}
@@ -199,7 +204,8 @@ class AnovaRAGLite(RAGSystemInterface):
 
 if __name__ == "__main__":
     # Test the AnovaRAGLite system
-    rag_system = AnovaRAGLite( initial_retrieval_k_docs=10, enable_hyde=True, query_gen_prompt_level='naive',reranker='no', first_step_ranker='both_fusion')
+    rag_system = AnovaRAGLite(initial_retrieval_k_docs=10, enable_hyde=True,
+                              query_gen_prompt_level='naive', reranker='no', first_step_ranker='both_fusion')
 
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
