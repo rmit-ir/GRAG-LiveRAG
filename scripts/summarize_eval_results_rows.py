@@ -17,11 +17,45 @@ def resolve_path(path):
         return path
     return os.path.join(get_project_root(), path)
 
-def get_query_variants_label(dir_path):
-    """Extract the query variants label from directory path."""
+def get_directory_factors(dir_path):
+    """Extract all factors from directory path."""
     # Get the directory name and split by underscore
     dir_name = os.path.basename(dir_path)
-    return dir_name.split('_')[0]
+    parts = dir_name.split('_')
+    
+    # Initialize factors list
+    factors = []
+    i = 0
+    
+    while i < len(parts):
+        # Check for both_concat or both_fusion pattern
+        if parts[i] == 'both' and i + 1 < len(parts) and parts[i + 1] in ['concat', 'fusion']:
+            # Combine both and concat/fusion into one factor
+            factors.append(f"both_{parts[i + 1]}")
+            i += 2
+            # The next part should be the reranker value
+            if i < len(parts):
+                factors.append(parts[i])
+                i += 1
+        else:
+            factors.append(parts[i])
+            i += 1
+    
+    return factors
+
+def get_factor_names():
+    """Return the list of factor names in the correct order."""
+    return [
+        'query_expansion_mode',
+        'n_queries',
+        'query_gen_prompt_level',
+        'qpp',
+        'initial_retrieval_k_docs',
+        'first_step_ranker',
+        'reranker',
+        'context_words_limit',
+        'rag_prompt_level'
+    ]
 
 def process_eval_results(eval_results_path):
     """Process all evaluation results and combine them into a single DataFrame."""
@@ -41,24 +75,29 @@ def process_eval_results(eval_results_path):
     
     # List to store all DataFrames
     dfs = []
+    factor_names = get_factor_names()
     
     for file_path in row_files:
         try:
             # Read the TSV file
             df = pd.read_csv(file_path, sep='\t')
             
-            # Get the query variants label from the directory path
+            # Get all factors from the directory path
             dir_path = os.path.dirname(file_path)
-            query_variants_label = get_query_variants_label(dir_path)
+            factors = get_directory_factors(dir_path)
             
-            # Add the query variants label column
-            df['query_variants_label'] = query_variants_label
+            # Add each factor as a separate column with proper names
+            for i, factor in enumerate(factors):
+                if i < len(factor_names):
+                    df[factor_names[i]] = factor
+                else:
+                    print(f"Warning: Extra factor found in directory name: {factor}")
             
             # Select only the required columns
-            df = df[['qid', 'query_variants_label', 'relevance_score', 'faithfulness_score']]
+            columns = ['qid'] + factor_names[:len(factors)] + ['relevance_score', 'faithfulness_score']
+            df = df[columns]
             
             dfs.append(df)
-            # print(f"Successfully processed: {file_path}")
             
         except Exception as e:
             print(f"Error processing {file_path}: {str(e)}")
@@ -71,8 +110,11 @@ def process_eval_results(eval_results_path):
     # Combine all DataFrames
     combined_df = pd.concat(dfs, ignore_index=True)
     
-    # Sort by qid and query_variants_label
-    combined_df = combined_df.sort_values(['qid', 'query_variants_label'])
+    # Get all factor columns that exist in the DataFrame
+    factor_columns = [col for col in factor_names if col in combined_df.columns]
+    
+    # Sort by qid and all factors
+    combined_df = combined_df.sort_values(['qid'] + factor_columns)
     
     return combined_df
 
@@ -97,12 +139,23 @@ def main():
         print(f"\nSummary saved to: {output_path}")
         print(f"Total records: {len(combined_df)}")
         print(f"Unique qids: {combined_df['qid'].nunique()}")
-        print(f"Unique query variants: {combined_df['query_variants_label'].nunique()}")
+        
+        # Print information about factors
+        factor_columns = [col for col in get_factor_names() if col in combined_df.columns]
+        print("\nFactors found in directory names:")
+        for factor_col in factor_columns:
+            print(f"{factor_col}: {combined_df[factor_col].nunique()} unique values")
+            print(f"Unique values: {sorted(combined_df[factor_col].unique())}")
         
         # Print example of the grouping
         print("\nExample of grouped data (first qids):")
         example_df = combined_df[combined_df['qid'].isin(combined_df['qid'].unique()[:1])]
         print(example_df.to_string(index=False))
+        
+        # Print summary statistics by factors
+        print("\nSummary statistics by factors:")
+        factor_stats = combined_df.groupby(factor_columns)[['relevance_score', 'faithfulness_score']].agg(['mean', 'std', 'count'])
+        print(factor_stats)
     else:
         print("No data was processed. Please check the input path and file structure.")
 

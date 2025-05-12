@@ -5,7 +5,9 @@ import glob
 def parse_folder_name(folder_name):
     """Parse the folder name to extract parameter values for AnovaRAGLite."""
     parts = folder_name.split('_')
-    return {
+    
+    # Initialize parameters dictionary
+    params = {
         'query_expansion_mode': parts[0],
         'n_queries': parts[1],
         'query_gen_prompt_level': parts[2],
@@ -16,6 +18,21 @@ def parse_folder_name(folder_name):
         'context_words_limit': parts[7],
         'rag_prompt_level': parts[8]
     }
+    
+    # Handle both_concat and both_fusion cases
+    if params['first_step_ranker'] == 'both':
+        # Check if the next part is concat or fusion
+        if params['reranker'] in ['concat', 'fusion']:
+            # Combine them into first_step_ranker
+            params['first_step_ranker'] = f"both_{params['reranker']}"
+            # Set reranker to the next value if it exists
+            if len(parts) > 7:
+                params['reranker'] = parts[7]
+                # Shift the remaining values
+                params['context_words_limit'] = parts[8] if len(parts) > 8 else None
+                params['rag_prompt_level'] = parts[9] if len(parts) > 9 else None
+    
+    return params
 
 def get_scores_from_aggregated_file(folder_path):
     """Read scores from the aggregated.tsv file."""
