@@ -4,7 +4,7 @@
         "primary_prompt": "Documents: \n\n{context}\n\nQuestion: {question}\n\nAnswer: "
     },
     "medium": {
-        "system_prompt": "*You are given a question and you MUST respond by EXTRACTING the answer from provided documents. If none of the documents contain the answer, respond with NO-RES.*",
+        "system_prompt": "You are given a question and you MUST respond by EXTRACTING the answer from provided documents. If none of the documents contain the answer, respond with *'I don't know'*.",
         "primary_prompt": "Documents:\n\n{context}\n\n*Question: {question}\nAnswer: "
     },
     "advanced": {
