@@ -633,7 +633,10 @@ def main():
     # trec_output_path = os.path.join(output_dir, trec_filename)
     if args.live:
         # LiveRAG Challenge format uses JSONL
-        live_output_filename = f"{ds_name}_{output_prefix}.jsonl"
+        if args.output_prefix:
+            live_output_filename = f"{ds_name}_{args.output_prefix}.jsonl"
+        else:
+            live_output_filename = f"{ds_name}.jsonl"
         live_output_path = os.path.join(output_dir, live_output_filename)
     
     try:
