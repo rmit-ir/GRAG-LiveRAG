@@ -120,9 +120,9 @@ class AnovaRAGLite(RAGSystemInterface):
                 f"Invalid query expansion mode", mode=self.query_expansion_mode)
         if self.enable_hyde:
             hyde_system_prompt = "Given the question, write a short hypothetical answer that could be true. Be brief and concise."
-            hyde_answer = self.qgen_llm_client.complete_chat_once(
+            hyde_answer, _  = self.qgen_llm_client.complete_chat_once(
                 question, hyde_system_prompt)
-            queries.append(hyde_answer)
+            queries.append(hyde_answer.strip())
         # Calculate k per query based on total initial retrieval docs
         k_per_query = int(self.initial_retrieval_k_docs / len(queries))
 
@@ -199,7 +199,7 @@ class AnovaRAGLite(RAGSystemInterface):
 
 if __name__ == "__main__":
     # Test the AnovaRAGLite system
-    rag_system = AnovaRAGLite(reranker='logits', initial_retrieval_k_docs=100)
+    rag_system = AnovaRAGLite( initial_retrieval_k_docs=10, enable_hyde=True, query_gen_prompt_level='naive',reranker='no', first_step_ranker='both_fusion')
 
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
