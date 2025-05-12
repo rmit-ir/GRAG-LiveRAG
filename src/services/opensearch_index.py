@@ -168,6 +168,9 @@ class OpenSearchService:
                 use_ssl=True,
                 verify_certs=True,
                 connection_class=RequestsHttpConnection,
+                timeout=30,           # Connection timeout in seconds
+                max_retries=3,        # Number of retries
+                retry_on_timeout=True # Retry on timeout errors
             )
             self.log.debug("Connected to OpenSearch",
                            index_name=self.index_name)
