@@ -148,10 +148,13 @@ say "evaluation finished"
 
 ## Live Day Procedure
 
-1. Launch EC2 LLM instance (if not already running)
+1. Launch EC2 LLM instances
 
    ```bash
+   # terminal 1
    uv run scripts/aws/deploy_ec2_llm.py --app-name vllm
+   # terminal 2
+   uv run scripts/aws/deploy_ec2_llm.py --app-name mini-tgi --instance-type g6e.12xlarge
    ```
 
    This will take around 9 minutes to start the instance.
@@ -159,15 +162,32 @@ say "evaluation finished"
 3. Run the system over questions, results will be saved to [data/rag_results/](data/rag_results/)
 
   ```bash
-  uv run scripts/run.py --system VanillaRAG \
+  uv run scripts/run.py --system AnovaRAGLite \
     --live \
     --num-threads 20 \
     --llm_client ec2_llm \
-    --output-prefix dry_run \
+    --query_expansion_mode none \
+    --n_queries 8 \
+    --query_gen_prompt_level medium \
+    --qpp no \
+    --initial_retrieval_k_docs 50 \
+    --first_step_ranker both_fusion \
+    --reranker logits \
+    --context_words_limit 15000 \
+    --rag_prompt_level naive \
     --input data/live_rag_questions/questions.jsonl
   ```
 
 4. Collect the results under [data/rag_results/](data/rag_results/) and send it to the organizers
+5. Optionally, you can evaluate the results (no gold answer, scores are only for reference)
+
+  ```bash
+  uv run scripts/evaluate.py --evaluator LLMEvaluator \
+    --results data/rag_results/LiveRAG_Dry_Test_Question_file.run05051753.tsv \
+    --num_threads 20 \
+    --no-use_gold_references \
+    --reference data/generated_qa_pairs/fake.tsv
+  ```
 
 ## Usage
 
