@@ -179,3 +179,5 @@ cython_debug/
 /data/anova_result
 data/live_rag_questions/azure_openai_responses_*
 data/anova_result_backups
+
+data/live_rag_questions/dmds_combined_questions_1000_opensearch_1000-results.tsv
