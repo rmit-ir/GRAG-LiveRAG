@@ -8,6 +8,7 @@ from transformers import (
     TrainingArguments,
     Trainer,
     DataCollatorForLanguageModeling,
+    BitsAndBytesConfig  # Add this import
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from huggingface_hub import login
@@ -59,11 +60,15 @@ if not tokenizer.pad_token:
     tokenizer.pad_token = tokenizer.eos_token
 
 # Load model with 4-bit quantization for distributed A100 efficiency
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
+bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_compute_dtype=torch.bfloat16,
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    quantization_config=bnb_config,  # Replace load_in_4bit with quantization_config
     device_map="auto",  # Let the model decide how to distribute across GPUs
     trust_remote_code=True,
     cache_dir=cache_dir,
@@ -223,8 +228,8 @@ training_args = TrainingArguments(
     per_device_train_batch_size=BATCH_SIZE,
     gradient_accumulation_steps=GRADIENT_ACCUMULATION,
     num_train_epochs=3,
-    save_strategy="epoch",  # Changed from "steps" to "epoch"
-    save_total_limit=3,     # Keep only the 3 most recent checkpoints
+    save_strategy="epoch",
+    save_total_limit=3,
     logging_steps=10,
     learning_rate=1e-4,
     bf16=True,
@@ -232,23 +237,21 @@ training_args = TrainingArguments(
     warmup_ratio=0.03,
     weight_decay=0.01,
     gradient_checkpointing=True,
-    report_to="none",  # Disable tensorboard to avoid dependencies
+    report_to="none",
     remove_unused_columns=False,
     push_to_hub=False,
     ddp_find_unused_parameters=False,
-    torch_compile=False,  # Disable torch.compile as it can be unstable with distributed training
+    torch_compile=False,
     max_grad_norm=0.3,
     hub_token=HF_TOKEN,
     hub_strategy="checkpoint",
-    # DeepSpeed and distributed training settings
     deepspeed="ds_config.json",
-    local_rank=-1,  # This will be set by the deepspeed launcher
-    fp16=False,  # Use bf16 instead
-    sharded_ddp="zero_dp_3",  # Use ZeRO-3 optimization
-    # Load best model at the end of training
-    load_best_model_at_end=True,  # Added to load best model at end
-    metric_for_best_model="loss",  # Use loss as metric to determine best model
-    greater_is_better=False,      # Lower loss is better
+    local_rank=-1,
+    fp16=False,
+    # Remove the sharded_ddp parameter as it's not supported
+    load_best_model_at_end=True,
+    metric_for_best_model="loss",
+    greater_is_better=False,
 )
 
 # Initialize the Trainer
@@ -265,10 +268,88 @@ trainer = Trainer(
 print("Starting distributed fine-tuning...")
 trainer.train()
 
-# Save the fine-tuned model
+# Save the fine-tuned model and push to Hub
 print("Saving model...")
-# Make sure to save on the main process only
+# Make sure to save and push only on the main process
 if trainer.args.local_rank == 0 or trainer.args.local_rank == -1:
+    # Define HF repository name
+    HF_MODEL_ID = "live-rag/falcon3-lora-finetuned"
+    
+    # Save model locally
     model.save_pretrained(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
-    print("Fine-tuning completed! Model saved to:", OUTPUT_DIR)
+    print(f"Fine-tuning completed! Model saved locally to: {OUTPUT_DIR}")
+    
+    # Upload to Hugging Face Hub
+    if HF_TOKEN:
+        try:
+            print(f"Uploading model to Hugging Face Hub as {HF_MODEL_ID}...")
+            
+            # Create model card with relevant information
+            model_card = f"""
+            # LiveRAG Fine-tuned Falcon 3 (LoRA)
+            
+            This model is a fine-tuned version of [{MODEL_NAME}](https://huggingface.co/{MODEL_NAME}) using LoRA.
+            
+            ## Training Details
+            
+            - Base model: {MODEL_NAME}
+            - Training data: LiveRAG dataset
+            - LoRA parameters: r={LORA_R}, alpha={LORA_ALPHA}
+            - Training hardware: 8x A100 GPUs
+            - Trained on: {pd.Timestamp.now().strftime("%Y-%m-%d")}
+            
+            ## Usage
+            
+            This model uses the Falcon3 chat format:
+            
+            ```
+            <|im_start|>user
+            Your query here
+            <|im_end|>
+            
+            <|im_start|>assistant
+            The model response
+            <|im_end|>
+            ```
+            
+            ## License
+            
+            This model is subject to the license of the original Falcon 3 model.
+            """
+            
+            # Push to hub with PEFT format
+            model.push_to_hub(
+                HF_MODEL_ID,
+                use_auth_token=HF_TOKEN,
+                commit_message="Fine-tuned LiveRAG model using LoRA",
+            )
+            
+            # Push tokenizer to hub
+            tokenizer.push_to_hub(
+                HF_MODEL_ID, 
+                use_auth_token=HF_TOKEN,
+                commit_message="Tokenizer for fine-tuned LiveRAG model"
+            )
+            
+            # Save model card
+            with open(os.path.join(OUTPUT_DIR, "README.md"), "w") as f:
+                f.write(model_card)
+                
+            # Push model card
+            from huggingface_hub import HfApi
+            api = HfApi()
+            api.upload_file(
+                path_or_fileobj=os.path.join(OUTPUT_DIR, "README.md"),
+                path_in_repo="README.md",
+                repo_id=HF_MODEL_ID,
+                token=HF_TOKEN,
+            )
+            
+            print(f"Successfully uploaded model to Hugging Face Hub: https://huggingface.co/{HF_MODEL_ID}")
+            
+        except Exception as e:
+            print(f"Error uploading to Hugging Face Hub: {e}")
+            print("Model saved locally only.")
+    else:
+        print("HF_TOKEN not found. Model saved locally only.")
