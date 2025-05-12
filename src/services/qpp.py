@@ -1,8 +1,9 @@
 import numpy as np
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from scipy.stats import kendalltau
 from sklearn.metrics import cohen_kappa_score
-
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from utils.logging_utils import get_logger
 
 
@@ -252,8 +253,36 @@ class QPPService:
         # Calculate Cohen's kappa using sklearn
         kappa = cohen_kappa_score(labels1, labels2)
         return kappa
-    
- 
 
+
+    def calculate_qpp_scores(
+        query: str,
+        passages: List[str],
+        relevance_assessor,
+        batch_size: int = 5
+    ) -> Tuple[List[float], List[float]]:
+        """
+        Calculate QPP scores using TF-IDF for oracle scores.
+        """
+        # Get predicted scores as before
+        relevance_scores = []
+        for i in range(0, len(passages), batch_size):
+            batch = passages[i:i + batch_size]
+            batch_scores = relevance_assessor.assess_batch(query, batch)
+            relevance_scores.extend(batch_scores)
+        
+        # Create oracle scores using TF-IDF similarity
+        vectorizer = TfidfVectorizer()
+        passage_vectors = vectorizer.fit_transform(passages)
+        query_vector = vectorizer.transform([query])
+        oracle_scores = cosine_similarity(query_vector, passage_vectors)[0].tolist()
+        
+        return relevance_scores, oracle_scores
+
+
+
+        
     
+
+        
 

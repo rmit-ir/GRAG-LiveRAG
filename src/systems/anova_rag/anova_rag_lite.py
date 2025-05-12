@@ -22,6 +22,7 @@ class AnovaRAGLite(RAGSystemInterface):
                  query_gen_prompt_level: Literal['naive', 'medium', 'advanced'] = 'naive',
                  rag_prompt_level: Literal['naive', 'medium', 'advanced'] = 'naive',
                  qpp: Literal['no'] = 'no',
+                 enable_hyde: bool = False,
                  first_step_ranker: Literal['keywords', 'embedding', 'both_concat', 'both_fusion'] = 'both_fusion',
                  reranker: Literal['no', 'logits'] = 'logits',
                  context_words_limit: int = 15_000,
@@ -64,6 +65,7 @@ class AnovaRAGLite(RAGSystemInterface):
         self.context_words_limit = int(context_words_limit)
         self.query_gen_prompt_level = query_gen_prompt_level
         self.query_expansion_mode = query_expansion_mode
+        self.enable_hyde = enable_hyde
 
         if self.reranker != 'no':
             self.logits_llm = MiniTGIClient()
@@ -116,7 +118,11 @@ class AnovaRAGLite(RAGSystemInterface):
         else:
             raise ValueError(
                 f"Invalid query expansion mode", mode=self.query_expansion_mode)
-
+        if self.enable_hyde:
+            hyde_system_prompt = "Given the question, write a short hypothetical answer that could be true. Be brief and concise."
+            hyde_answer = self.qgen_llm_client.complete_chat_once(
+                question, hyde_system_prompt)
+            queries.append(hyde_answer)
         # Calculate k per query based on total initial retrieval docs
         k_per_query = int(self.initial_retrieval_k_docs / len(queries))
 
