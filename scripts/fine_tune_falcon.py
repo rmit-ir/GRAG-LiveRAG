@@ -90,12 +90,15 @@ lora_config = LoraConfig(
     bias="none",
     task_type="CAUSAL_LM",
     target_modules=[
-        "query_key_value",
-        "dense",
-        "dense_h_to_4h",
-        "dense_4h_to_h",
-    ],  # Falcon-specific attention modules
-    modules_to_save=["lm_head"],  # Also save the LM head for better results
+        "self_attn.q_proj",
+        "self_attn.k_proj", 
+        "self_attn.v_proj",
+        "self_attn.o_proj",
+        "mlp.gate_proj",
+        "mlp.up_proj", 
+        "mlp.down_proj"
+    ],  # Updated to match actual Falcon layer names
+    modules_to_save=["lm_head"],
 )
 
 # Apply LoRA to model
