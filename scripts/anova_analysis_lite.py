@@ -88,18 +88,19 @@ def analyze_factor_importance(file_path_or_data, relevance_col='relevance_score'
             return [], pd.DataFrame()
 
         factor_results = []
+        print("\n=== Individual Factor ANOVA Analysis ===")
 
         # 5. Perform ANOVA for each factor
         for factor in factor_cols:
             temp_df_factor_anova = df_cleaned[[factor, 'weighted_score']].dropna()
 
             if temp_df_factor_anova[factor].nunique() < 2:
-                print(f"Skipping factor '{factor}': Not enough unique values for ANOVA.")
+                print(f"\nSkipping factor '{factor}': Not enough unique values for ANOVA.")
                 factor_results.append({'Factor': factor, 'F-statistic': 0, 'p-value': 1.0, 'Error': 'Not enough unique values'})
                 continue
             
             if len(temp_df_factor_anova) < 2:
-                print(f"Skipping factor '{factor}': Not enough data points for ANOVA.")
+                print(f"\nSkipping factor '{factor}': Not enough data points for ANOVA.")
                 factor_results.append({'Factor': factor, 'F-statistic': 0, 'p-value': 1.0, 'Error': 'Not enough data points'})
                 continue
 
@@ -107,24 +108,43 @@ def analyze_factor_importance(file_path_or_data, relevance_col='relevance_score'
                 formula = f'weighted_score ~ C({factor})'
                 model = ols(formula, data=temp_df_factor_anova).fit()
                 anova_table = sm.stats.anova_lm(model, typ=2)
+                anova_table_df = pd.DataFrame(anova_table)
                 
-                f_statistic = anova_table['F'][f'C({factor})']
-                p_value = anova_table['PR(>F)'][f'C({factor})']
+                print(f"\nANOVA Results for {factor}:")
+                print(anova_table_df.to_markdown())
+                
+                f_statistic = anova_table_df['F'][f'C({factor})']
+                p_value = anova_table_df['PR(>F)'][f'C({factor})']
                 
                 factor_results.append({'Factor': factor, 'F-statistic': f_statistic, 'p-value': p_value, 'Error': None})
             except Exception as e:
-                print(f"Could not perform ANOVA for factor '{factor}': {e}")
+                print(f"\nCould not perform ANOVA for factor '{factor}': {e}")
                 factor_results.append({'Factor': factor, 'F-statistic': float('-inf'), 'p-value': float('inf'), 'Error': str(e)})
-        
+
+        # 6. Perform n-way ANOVA (all factors together)
+        print("\n=== N-way ANOVA Analysis (All Factors) ===")
+        try:
+            # Create formula for all factors
+            # formula = 'weighted_score ~ ' + ' + '.join([f'C({factor})' for factor in factor_cols])
+            formula = 'weighted_score ~ C(query_gen_prompt_level) * C(initial_retrieval_k_docs) * C(first_step_ranker) + C(context_words_limit) * C(rag_prompt_level) * C(query_expansion_mode)'
+            model = ols(formula, data=df_cleaned).fit()
+            n_way_anova = sm.stats.anova_lm(model, typ=2)
+            n_way_anova_df = pd.DataFrame(n_way_anova)
+            
+            print("\nN-way ANOVA Results:")
+            print(n_way_anova_df.to_markdown())
+        except Exception as e:
+            print(f"\nCould not perform n-way ANOVA: {e}")
+
         if not factor_results:
             print("No factors could be analyzed.")
             return [], pd.DataFrame()
 
-        # 6. Create and sort results DataFrame
+        # 7. Create and sort results DataFrame for individual factors
         results_df = pd.DataFrame(factor_results)
         results_df = results_df.sort_values(by='F-statistic', ascending=False)
         
-        # 7. Get sorted factor names
+        # 8. Get sorted factor names
         sorted_factors = results_df['Factor'].tolist()
         
         return sorted_factors, results_df
@@ -138,7 +158,7 @@ def analyze_best_configurations(df, top_n=5):
     # Sort by weighted score
     df_sorted = df.sort_values('weighted_score', ascending=False)
     
-    print("\n--- Top Configurations by Weighted Score ---")
+    print("\n=== Top Configurations by Weighted Score ===")
     for i, (_, row) in enumerate(df_sorted.head(top_n).iterrows(), 1):
         print(f"\nConfiguration {i}:")
         for col in df.columns:
@@ -161,19 +181,19 @@ def main():
     
     args = parser.parse_args()
     
-    print("--- Analyzing AnovaRAGLite Results ---")
+    print("=== Analyzing AnovaRAGLite Results ===")
     
     ordered_factors, factor_details_df = analyze_factor_importance(args.csv_file, 
                                                                   relevance_weight=args.relevance_weight, 
                                                                   faithfulness_weight=args.faithfulness_weight)
 
     if ordered_factors:
-        print("\n--- Factor Importance Order (Most to Least Important) ---")
+        print("\n=== Factor Importance Order (Most to Least Important) ===")
         for i, factor in enumerate(ordered_factors):
             print(f"{i+1}. {factor}")
         
-        print("\n--- Detailed Factor Analysis Results ---")
-        print(factor_details_df.to_string())
+        print("\n=== Detailed Factor Analysis Results ===")
+        print(factor_details_df.to_markdown())
         
         # Load the data again for best configuration analysis
         df = pd.read_csv(args.csv_file)

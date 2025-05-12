@@ -8,9 +8,9 @@ from transformers import (
     TrainingArguments,
     Trainer,
     DataCollatorForLanguageModeling,
-    BitsAndBytesConfig  # Add this import
+    BitsAndBytesConfig
 )
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, get_peft_model
 from huggingface_hub import login
 
 # Set up HuggingFace token from environment variable
@@ -59,26 +59,72 @@ tokenizer = AutoTokenizer.from_pretrained(
 if not tokenizer.pad_token:
     tokenizer.pad_token = tokenizer.eos_token
 
-# Load model with 4-bit quantization but NO device_map when using DeepSpeed
+# Load model with more memory-efficient settings for A100 GPUs
 bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
+    load_in_8bit=True,
+    llm_int8_skip_modules=["lm_head"],
+    llm_int8_threshold=6.0,
+    llm_int8_has_fp16_weight=False,
 )
 
+# First, clear CUDA cache to free up memory
+torch.cuda.empty_cache()
+print("Cleared CUDA cache before model loading")
+
+# Load the model with device_map spread across GPUs for initial loading
+# but in a way compatible with DeepSpeed
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     quantization_config=bnb_config,
-    # Remove device_map="auto" to allow DeepSpeed to handle device mapping
+    device_map="balanced",  # Distribute across GPUs during loading
+    torch_dtype=torch.bfloat16,  # Use bfloat16 for efficiency
     trust_remote_code=True,
     cache_dir=cache_dir,
     token=HF_TOKEN,
+    offload_folder="offload",  # Enable offloading to CPU if needed
+    offload_state_dict=True,   # Offload state dict during loading to save memory
 )
 
-# Prepare model for training
-model = prepare_model_for_kbit_training(model)
+# Prepare model for training more carefully to avoid OOM
+torch.cuda.empty_cache()
+print("Cleared CUDA cache before prepare_model_for_kbit_training")
 
-# Configure LoRA for parameter-efficient fine-tuning
+# Set environment variables to help with memory management
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+# Modify the prepare_model_for_kbit_training approach to conserve memory
+def custom_prepare_model_for_kbit_training(model):
+    """Memory-efficient version of prepare_model_for_kbit_training"""
+    # Find modules to exclude from the preparation process
+    # to avoid unnecessary memory consumption
+    exclude_modules = ["lm_head"]
+    
+    for name, module in model.named_modules():
+        if any(exclude in name for exclude in exclude_modules):
+            continue
+            
+        if isinstance(module, torch.nn.Linear):
+            # Directly set requires_grad without converting to float32 first
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.requires_grad = False
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.requires_grad = False
+    
+    # Enable gradient checkpointing
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    else:
+        def make_inputs_require_grad(module, input, output):
+            output.requires_grad_(True)
+        model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
+    
+    return model
+
+# Use our custom function instead of the PEFT one
+model = custom_prepare_model_for_kbit_training(model)
+print("Model prepared for kbit training with memory optimization")
+
+# Configure LoRA with careful targeting of modules
 lora_config = LoraConfig(
     r=LORA_R,
     lora_alpha=LORA_ALPHA,
@@ -95,7 +141,12 @@ lora_config = LoraConfig(
         "mlp.down_proj"
     ],
     modules_to_save=["lm_head"],
+    inference_mode=False,
 )
+
+# Clear memory again before applying LoRA
+torch.cuda.empty_cache()
+print("Cleared CUDA cache before applying LoRA")
 
 # Apply LoRA to model
 model = get_peft_model(model, lora_config)
