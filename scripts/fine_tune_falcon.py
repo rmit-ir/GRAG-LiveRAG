@@ -59,11 +59,12 @@ tokenizer = AutoTokenizer.from_pretrained(
 if not tokenizer.pad_token:
     tokenizer.pad_token = tokenizer.eos_token
 
-# Load model with 4-bit quantization but NO device_map when using DeepSpeed
+# Load model with 8-bit quantization but NO device_map when using DeepSpeed
 bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
+    load_in_8bit=True,  # Use 8-bit instead of 4-bit
+    llm_int8_skip_modules=["lm_head"],
+    llm_int8_threshold=6.0,
+    llm_int8_has_fp16_weight=False,
 )
 
 model = AutoModelForCausalLM.from_pretrained(
