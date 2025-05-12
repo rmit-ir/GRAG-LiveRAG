@@ -212,8 +212,8 @@ deepspeed_config = {
         "stage3_param_persistence_threshold": 1e6
     },
     "steps_per_print": 10,
-    "train_batch_size": BATCH_SIZE * GRADIENT_ACCUMULATION * 8,  # Total batch across all 8 GPUs
-    "gradient_accumulation_steps": GRADIENT_ACCUMULATION,
+    "train_batch_size": "auto",  # Changed from hard-coded value to "auto"
+    "gradient_accumulation_steps": "auto",  # Also set to "auto"
     "gradient_clipping": 0.3
 }
 
@@ -229,7 +229,7 @@ training_args = TrainingArguments(
     gradient_accumulation_steps=GRADIENT_ACCUMULATION,
     num_train_epochs=3,
     save_strategy="epoch",
-    evaluation_strategy="epoch",  # Add this line to enable evaluation each epoch
+    eval_strategy="epoch",  # Changed from evaluation_strategy to eval_strategy
     save_total_limit=3,
     logging_steps=10,
     learning_rate=1e-4,
