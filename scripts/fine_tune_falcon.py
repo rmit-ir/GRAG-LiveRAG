@@ -229,6 +229,7 @@ training_args = TrainingArguments(
     gradient_accumulation_steps=GRADIENT_ACCUMULATION,
     num_train_epochs=3,
     save_strategy="epoch",
+    evaluation_strategy="epoch",  # Add this line to enable evaluation each epoch
     save_total_limit=3,
     logging_steps=10,
     learning_rate=1e-4,
@@ -248,7 +249,6 @@ training_args = TrainingArguments(
     deepspeed="ds_config.json",
     local_rank=-1,
     fp16=False,
-    # Remove the sharded_ddp parameter as it's not supported
     load_best_model_at_end=True,
     metric_for_best_model="loss",
     greater_is_better=False,
