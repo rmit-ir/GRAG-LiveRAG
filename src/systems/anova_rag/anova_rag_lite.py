@@ -130,6 +130,7 @@ class AnovaRAGLite(RAGSystemInterface):
 
         # Retrieve documents based on first_step_ranker
         listings: List[List[SearchHit]] = []
+        doc_ids_set = set()
         for query in queries:
             if self.first_step_ranker == 'both_concat':
                 embed_results = self.query_service.query_embedding(
@@ -150,7 +151,13 @@ class AnovaRAGLite(RAGSystemInterface):
                 raise ValueError(
                     f"Invalid first step ranker: {self.first_step_ranker}. Options are 'both_concat', 'both_fusion', 'keywords', or 'embedding'.")
 
-            listings.append(results)
+            unique_results: List[SearchHit] = []
+            for result in results:
+                # if not already added
+                if result.metadata.doc_id not in doc_ids_set:
+                    doc_ids_set.add(result.metadata.doc_id)
+                    unique_results.append(result)
+            listings.append(unique_results)
 
         # Flatten the listings to get all documents
         all_docs = [hit for listing in listings for hit in listing]
