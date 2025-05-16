@@ -89,3 +89,52 @@ uv run scripts/run.py --system AnovaRAGLite \
   --rag_prompt_level naive \
   --input data/live_rag_questions/LiveRAG_LCD_Session1_Question_file.jsonl
 ```
+
+## Reproducing Results
+
+Clone and checkout the live day commit
+
+```bash
+git checkout Challenge-Day
+```
+
+Install uv
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Launch the logits server(preferably a GPU instance for faster speed)
+
+```bash
+uv run scripts/aws/apps/mini_tgi/llm_server.py --port 8977
+```
+
+Configure AI71 credentials
+
+```bash
+cp .env.example .env
+# edit AI71_API_KEY= value
+```
+
+Run a config using commands from **Runs** chapter, but without `--llm_client` parameter (it defaults to ai71).
+For example, to run config 3 (which is the final selected run):
+
+```bash
+uv run scripts/run.py --system AnovaRAGLite \
+  --live \
+  --num-threads 20 \
+  --query_expansion_mode none \
+  --n_queries 8 \
+  --query_gen_prompt_level medium \
+  --enable_hyde \
+  --qpp no \
+  --initial_retrieval_k_docs 50 \
+  --first_step_ranker both_fusion \
+  --reranker logits \
+  --context_words_limit 10000 \
+  --rag_prompt_level naive \
+  --input data/live_rag_questions/LiveRAG_LCD_Session1_Question_file.jsonl
+```
+
+Note, if you hit AI71 rate limits, you can reduce `--num-threads`.
