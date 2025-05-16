@@ -2,6 +2,8 @@
 
 A research project for live retrieval-augmented generation for the SIGIR 2025 LiveRAG Challenge.
 
+For live day reproduction, please refer to [LiveRAG_May_12.md](LiveRAG_May_12.md#reproducing-results).
+
 ## Overview
 
 Project management: [rmit-liverag-2025 on Linear](https://linear.app/rmit-liverag-2025/team/RMI/view/kanban-2d49ab9d373f)

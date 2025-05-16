@@ -102,6 +102,7 @@ Install uv
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+uv pip install -e .
 ```
 
 Launch the logits server(preferably a GPU instance for faster speed)
