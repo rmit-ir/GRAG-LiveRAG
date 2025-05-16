@@ -137,4 +137,7 @@ uv run scripts/run.py --system AnovaRAGLite \
   --input data/live_rag_questions/LiveRAG_LCD_Session1_Question_file.jsonl
 ```
 
-Note, if you hit AI71 rate limits, you can reduce `--num-threads`.
+Note
+
+1. If you hit AI71 rate limits, you can reduce `--num-threads`.
+2. By default run.py will connect to logits server at <http://localhost:8977>, if you launch it elsewhere, you need to port forward it to localhost.
