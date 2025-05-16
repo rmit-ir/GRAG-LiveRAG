@@ -137,6 +137,8 @@ uv run scripts/run.py --system AnovaRAGLite \
   --input data/live_rag_questions/LiveRAG_LCD_Session1_Question_file.jsonl
 ```
 
+After it finishes, you can find the results in `data/rag_results/` folder.
+
 Note
 
 1. If you hit AI71 rate limits, you can reduce `--num-threads`.
