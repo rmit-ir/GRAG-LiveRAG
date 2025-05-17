@@ -111,11 +111,14 @@ Launch the logits server(preferably a GPU instance for faster speed)
 uv run scripts/aws/apps/mini_tgi/llm_server.py --port 8977
 ```
 
-Configure AI71 credentials
+Configure OpenSearch, Pinecone and AI71 credentials
 
 ```bash
 cp .env.example .env
-# edit AI71_API_KEY= value
+# edit AWS_LIVE_RAG_REGION=
+# edit AWS_LIVE_RAG_ACCESS_KEY_ID=
+# edit AWS_LIVE_RAG_SECRET_ACCESS_KEY=
+# edit AI71_API_KEY=
 ```
 
 Run a config using commands from **Runs** chapter, but without `--llm_client` parameter (it defaults to ai71).
@@ -144,3 +147,4 @@ Note
 
 1. If you hit AI71 rate limits, you can reduce `--num-threads`.
 2. By default run.py will connect to logits server at <http://localhost:8977>, if you launch it elsewhere, you need to port forward it to localhost.
+3. Error: "An error occurred (UnrecognizedClientException) when calling the GetParameter operation: The security token included in the request is invalid." means you didn't configure the AWS_LIVE_RAG access keys properly.
