@@ -82,7 +82,7 @@ class AnovaRAG(RAGSystemInterface):
         # Load prompts from JSON files
         current_dir = os.path.dirname(os.path.abspath(__file__))
         
-        with open(os.path.join(current_dir, 'rag_prompts.json'), 'r') as f:
+        with open(os.path.join(current_dir, 'answer_gen_prompts.json'), 'r') as f:
             rag_prompts = json.load(f)
         with open(os.path.join(current_dir, 'query_gen_prompts.json'), 'r') as f:
             query_gen_prompts = json.load(f)
