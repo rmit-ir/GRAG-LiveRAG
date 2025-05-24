@@ -132,7 +132,18 @@ def analyze_factor_importance(file_path_or_data, relevance_col='relevance_score'
             n_way_anova_df = pd.DataFrame(n_way_anova)
             
             print("\nN-way ANOVA Results:")
-            print(n_way_anova_df.to_markdown())
+            print(n_way_anova_df.sort_values(by='F', ascending=False)
+                  .to_latex(
+        escape=False,
+        index=True,
+        float_format="%.4f",
+        column_format="lcccc",
+        multirow=True,
+        multicolumn_format="c",
+        label="tab:n-way-anova",
+        caption="N-way ANOVA Results",
+        position="tb",
+    ))
         except Exception as e:
             print(f"\nCould not perform n-way ANOVA: {e}")
 
