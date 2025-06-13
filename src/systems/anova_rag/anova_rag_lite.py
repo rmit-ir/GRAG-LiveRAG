@@ -1,9 +1,11 @@
 import time
 import json
 import os
-from typing import List, Literal
+from typing import List, Literal, Optional
 from services.answer_utils import condense_answer
-from services.indicies import QueryService, SearchHit
+# from services.indicies import QueryService, SearchHit
+from services.indicies import SearchHit
+from services.mock_indicies import MockQueryService
 from services.llms.ai71_client import AI71Client
 from services.llms.ec2_llm_client import EC2LLMClient
 from services.query_variants import QueryVariantsGenerator
@@ -86,9 +88,10 @@ class AnovaRAGLite(RAGSystemInterface):
         self.rag_primary_prompt = rag_prompts[rag_prompt_level]['primary_prompt']
         self.query_gen_sys_prompt = query_gen_prompts[query_gen_prompt_level]['system_prompt']
 
-        self.query_service = QueryService()
+        # self.query_service = QueryService()  # LiveRAG services not available - using mock service instead
+        self.query_service = MockQueryService()
 
-    def process_question(self, question: str, qid: str = None) -> RAGResult:
+    def process_question(self, question: str, qid: Optional[str] = None) -> RAGResult:
         """
         Process the question and return the answer.
         """
