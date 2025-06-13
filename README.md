@@ -69,7 +69,7 @@ uv run -p 3.12 scripts/your_script.py
 
 For notebooks, just open them in VS Code and run them using the python environment from `.venv`.
 
-### Available Scripts and Notebooks
+### Available Scripts and Utilities
 
 This repository includes several scripts and notebooks for working with the LiveRAG system:
 
