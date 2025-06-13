@@ -1,2 +1,0 @@
-evaluator_name	sample_count	system_name	timestamp	is_aggregated	full_command	total_time_ms	total_cost	avg_relevance_score	avg_faithfulness_score	count
-llm_evaluator	100	AnovaRAGLite	2025-05-21T18:10:15.191352	True	scripts/evaluate.py --evaluator LLMEvaluator --results data/rag_results/dmds_85random_15hard_questions.run05211802.AnovaRAGLite.tsv --num_threads 20 --reference data/generated_qa_pairs/dmds_85random_15hard_questions.tsv	83440.43493270874	5.0398200000000015	1.75	0.57	100
