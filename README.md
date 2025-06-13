@@ -1,10 +1,10 @@
 # LiveRAG Public Release
 
-A research project for live retrieval-augmented generation for the SIGIR 2025 LiveRAG Challenge.
+A research project for the SIGIR 2025 LiveRAG Challenge.
 
 ## Overview
 
-This project is part of the SIGIR 2025 LiveRAG Challenge, which focuses on building effective Retrieval-Augmented Generation systems. The challenge documentation and resources are available at <https://huggingface.co/spaces/LiveRAG/Challenge>.
+This project focuses on building effective Retrieval-Augmented Generation systems. The official challenge documentation and resources are available at <https://huggingface.co/spaces/LiveRAG/Challenge>.
 
 ## Reproducing Results
 
