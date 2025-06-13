@@ -8,7 +8,7 @@ This project is part of the SIGIR 2025 LiveRAG Challenge, which focuses on build
 
 ## Reproducing Results
 
-Install uv (please find alternative installation methods at [uv docs](https://docs.astral.sh/uv/getting-started/installation/) if you find `curl | sh` unsafe):
+Install uv (alternative installation methods available at [uv docs](https://docs.astral.sh/uv/getting-started/installation/) if you find `curl | sh` unsafe):
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
