@@ -38,10 +38,13 @@ The evaluator extracts the UUID part from the retrieved chunks to make them comp
 
 ## Usage
 
-evaluate.py interface:
+Command line interface using [`scripts/evaluate.py`](../../../scripts/evaluate.py):
 
 ```bash
-uv run scripts/evaluate.py --evaluator evaluators.context_recall.evaluator.ContextRecall --results data/rag_results/dmds_fJ20pJnq9zcO1_BasicRAGSystem.tsv --reference data/generated_qa_pairs/dmds_fJ20pJnq9zcO1.n100.tsv;
+uv run scripts/evaluate.py \
+  --evaluator ContextRecall \
+  --results data/rag_results/your_results.tsv \
+  --reference data/generated_qa_pairs/your_reference.tsv
 ```
 
 Python interface:
@@ -62,4 +65,3 @@ print(f"Average Context Recall: {evaluation_result.metrics['avg_context_recall']
 print(f"Average Context Precision: {evaluation_result.metrics['avg_context_precision']}")
 print(f"Average Context F1: {evaluation_result.metrics['avg_context_f1']}")
 print(f"NDCG@10: {evaluation_result.metrics['ndcg_10']}")
-```

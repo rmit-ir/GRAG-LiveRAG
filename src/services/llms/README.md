@@ -30,20 +30,6 @@ print(f"Cost: ${raw_response.cost_usd:.6f}")
 
 ## Available LLM Clients
 
-### GeneralOpenAIClient
-
-**Purpose**: Client for interacting with OpenAI-compatible APIs using LangChain.
-
-**Available Models**: This client works with any model that supports the OpenAI API format. By default, it connects to a locally running vLLM server at `http://localhost:8987/v1/`. You can deploy a HuggingFace compatible model using the `uv run scripts/aws/deploy_ec2_llm.py` script.
-
-To list available models, you can query the `/v1/models` endpoint using cURL:
-
-```bash
-curl -X GET "http://localhost:8987/v1/models" \
-  -H "Authorization: Bearer $EC2_LLM_API_KEY" \
-  -H "Content-Type: application/json"
-```
-
 ### AI71Client
 
 **Purpose**: Client for interacting with AI71 API using LangChain.
@@ -60,40 +46,40 @@ curl -X GET "http://localhost:8987/v1/models" \
 
 **Note**: This client automatically calculates and logs token usage and cost information for each request.
 
-### SageMakerClient
+### GeneralOpenAIClient
 
-Deprecated: use GeneralOpenAIClient with `uv run scripts/aws/deploy_ec2_llm.py` instead.
+**Purpose**: Client for interacting with OpenAI-compatible APIs using LangChain.
+
+**Available Models**: This client works with any model that supports the OpenAI API format.
+
+### MiniTGIClient
+
+**Purpose**: Client for connecting to local TGI (Text Generation Interface) servers.
+
+**Usage**: This client is designed to work with the mini TGI server that can be launched using:
+
+```bash
+uv run scripts/aws/apps/mini_tgi/llm_server.py --port 8977
+```
+
+### SageMakerClient
 
 **Purpose**: Client for deploying and interacting with models on Amazon SageMaker.
 
-**Available Models**: This client can deploy any model from Hugging Face. To find available models, visit the [Hugging Face Model Hub](https://huggingface.co/models). Common models include:
+**Available Models**: This client can deploy any model from Hugging Face. To find available models, visit the [Hugging Face Model Hub](https://huggingface.co/models).
 
 **Note**: This client handles the full lifecycle of SageMaker resources, including deployment and cleanup. Make sure to call `cleanup_resources()` when you're done to avoid unnecessary AWS charges.
+
+### EC2LLMClient
+
+**Purpose**: Client for interacting with LLM models deployed on EC2 instances.
 
 ## Environment Variables
 
 The LLM clients use the following environment variables:
 
-- `EC2_LLM_API_KEY`: API key for the GeneralOpenAIClient
 - `AI71_API_KEY`: API key for the AI71Client
 - `RACE_AWS_ACCESS_KEY_ID`: AWS access key ID for Bedrock and SageMaker clients
 - `RACE_AWS_SECRET_ACCESS_KEY`: AWS secret access key for Bedrock and SageMaker clients
 - `RACE_AWS_SESSION_TOKEN`: AWS session token for Bedrock and SageMaker clients (optional)
 - `RACE_AWS_REGION`: AWS region for Bedrock and SageMaker clients (default: us-west-2)
-
-## Deploying a Local LLM
-
-To deploy a local LLM using vLLM on EC2, use the `uv run scripts/aws/deploy_ec2_llm.py` script:
-
-```bash
-uv run scripts/aws/deploy_ec2_llm.py --model-id tiiuae/falcon3-10b-instruct
-```
-
-This will:
-
-1. Create an EC2 instance with the necessary GPU resources (specify with `--instance-type`)
-2. Install vLLM and its dependencies
-3. Download and run the specified model
-4. Set up port forwarding to access the model locally
-
-Once deployed, you can use the GeneralOpenAIClient to interact with the model.

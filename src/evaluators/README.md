@@ -4,11 +4,48 @@ This directory contains evaluators for assessing RAG (Retrieval-Augmented Genera
 
 ## Overview
 
-Evaluators compare RAG system outputs against reference answers generated from DataMorgana and calculate performance metrics. The evaluation workflow:
+Evaluators compare RAG system outputs against reference answers and calculate performance metrics. The evaluation workflow:
 
-1. Run a RAG system on questions using [`scripts/run.py`](../scripts/run.py)
-2. Evaluate the results against reference answers using [`scripts/evaluate.py`](../scripts/evaluate.py)
+1. Run a RAG system on questions using [`scripts/run.py`](../../scripts/run.py)
+2. Evaluate the results against reference answers using [`scripts/evaluate.py`](../../scripts/evaluate.py)
 3. Analyze the evaluation results
+
+## Running Evaluations
+
+### Step 1: Run a RAG system
+
+```bash
+uv run scripts/run.py --system AnovaRAGLite \
+  --live \
+  --input data/live_rag_questions/LiveRAG_LCD_Session1_Question_file.jsonl \
+  --num-threads 5
+```
+
+This generates results in `data/rag_results/` folder.
+
+### Step 2: Evaluate the results
+
+You can evaluate results using either the full path or just the class name:
+
+```bash
+uv run scripts/evaluate.py \
+  --evaluator ContextRecall \
+  --results data/rag_results/your_results.tsv \
+  --reference data/generated_qa_pairs/your_reference.tsv
+```
+
+Both commands generate evaluation results in `data/evaluation_results/` folder:
+
+- `your_results.eval[timestamp].ContextRecall.aggregated.tsv`
+- `your_results.eval[timestamp].ContextRecall.rows.tsv`
+
+For evaluator-specific parameters:
+
+```bash
+uv run scripts/evaluate.py --evaluator ContextRecall --help
+```
+
+The `evaluate.py` script automatically extracts parameters from your evaluator's `__init__` method and makes them available as command-line arguments. For example, if your evaluator has parameters like `normalize=True` in its constructor, you can pass `--normalize` or `--no-normalize` directly on the command line.
 
 ## Creating a New Evaluator
 
@@ -16,52 +53,7 @@ To create a new evaluator:
 
 1. Create a directory under `src/evaluators/` for your evaluator
 2. Implement the [`EvaluatorInterface`](./evaluator_interface.py) abstract base class
-3. See [`basic_evaluator/edit_distance_evaluator.py`](./basic_evaluator/edit_distance_evaluator.py) for a complete example
-
-## Running Evaluations
-
-For a complete overview of the end-to-end workflow, see [The LiveRAG Workflow](../../README.md#the-liverag-workflow) in the main README.
-
-### Step 1: Run a RAG system
-
-```bash
-uv run scripts/run.py --system systems.basic_rag.basic_rag_system.BasicRAGSystem \
-  --input data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv \
-  --num-threads 5
-```
-
-This generates results in `data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv`
-
-### Step 2: Evaluate the results
-
-You can evaluate results using either the full path or just the class name:
-
-```bash
-# Using full path
-uv run scripts/evaluate.py \
-  --evaluator evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator \
-  --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv \
-  --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
-
-# Using just the class name (simpler approach)
-uv run scripts/evaluate.py \
-  --evaluator EditDistanceEvaluator \
-  --results data/rag_results/dmds_JK09SKjyanxs1_BasicRAGSystem.tsv \
-  --reference data/generated_qa_pairs/dmds_JK09SKjyanxs1.n5.tsv
-```
-
-Both commands generate:
-
-- `data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.EditDistanceEvaluator.evaluation.aggregated.tsv`
-- `data/evaluation_results/dmds_JK09SKjyanxs1_BasicRAGSystem.EditDistanceEvaluator.evaluation.rows.tsv`
-
-For evaluator-specific parameters:
-
-```bash
-uv run scripts/evaluate.py --evaluator EditDistanceEvaluator --help
-```
-
-As you might've noticed from running `--help`, the `evaluate.py` script automatically extracts parameters from your evaluator's `__init__` method and makes them available as command-line arguments. For example, if your evaluator has parameters like `normalize=True` in its constructor, you can pass `--normalize` or `--no-normalize` directly on the command line. This means you don't need to modify the evaluation script when creating new evaluators with custom parameters.
+3. See [`context_recall/evaluator.py`](./context_recall/evaluator.py) for a complete example
 
 ## Evaluator Interface
 
@@ -92,16 +84,5 @@ def evaluate(self, rag_results: List[RAGResult], references: List[QAPair]) -> Ev
 
 ## Available Evaluators
 
-- **[EditDistanceEvaluator](./basic_evaluator/edit_distance_evaluator.py)**: Calculates the Levenshtein distance between generated and reference answers
-  - Path: `evaluators.basic_evaluator.edit_distance_evaluator.EditDistanceEvaluator`
-
-## Extending the System
-
-Consider implementing evaluators for:
-
-- Semantic similarity using embeddings
-- Using Claude Sonnet 3.5 just like LiveRAG hosts will do
-- ROUGE or BLEU scores for text generation quality
-- Factual consistency metrics
-- Domain-specific evaluation metrics
-- More evaluators mentioned in [Linear Issue #RMI-25](https://linear.app/rmit-liverag-2025/issue/RMI-25/develop-an-llm-based-evaluator-for-rag-system-assessment)
+- **[ContextRecall](./context_recall/evaluator.py)**: Calculates recall, precision, F1, and NDCG metrics for retrieved context documents
+  - Path: `evaluators.context_recall.evaluator.ContextRecall`

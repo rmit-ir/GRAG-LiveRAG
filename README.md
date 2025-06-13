@@ -71,11 +71,12 @@ For notebooks, just open them in VS Code and run them using the python environme
 
 ### Available Scripts and Utilities
 
-This repository includes several scripts and notebooks for working with the LiveRAG system:
+This repository includes several scripts for working with the LiveRAG system:
 
 #### Scripts
 
 - [run.py](scripts/run.py): Run a specified RAG system on a dataset of questions and save the results
+- [evaluate.py](scripts/evaluate.py): Evaluate RAG system results against reference answers using various evaluators
 
 ### Services and Utilities
 
