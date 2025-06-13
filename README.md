@@ -8,12 +8,6 @@ This project is part of the SIGIR 2025 LiveRAG Challenge, which focuses on build
 
 ## Reproducing Results
 
-Clone and checkout the live day commit
-
-```bash
-git checkout Challenge-Day
-```
-
 Install uv
 
 ```bash
