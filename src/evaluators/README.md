@@ -15,7 +15,7 @@ Evaluators compare RAG system outputs against reference answers and calculate pe
 ### Step 1: Run a RAG system
 
 ```bash
-uv run scripts/run.py --system AnovaRAGLite \
+uv run scripts/run.py --system GRAG \
   --live \
   --input data/live_rag_questions/LiveRAG_LCD_Session1_Question_file.jsonl \
   --num-threads 5

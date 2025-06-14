@@ -18,7 +18,7 @@ from utils.doc_listing_utils import truncate_doc_listings
 from utils.logging_utils import get_logger
 
 
-class AnovaRAGLite(RAGSystemInterface):
+class GRAG(RAGSystemInterface):
     # autopep8: off
     def __init__(self,
                  llm_client: Literal['ai71', 'ec2_llm'] = 'ai71',
@@ -34,7 +34,7 @@ class AnovaRAGLite(RAGSystemInterface):
                  query_expansion_mode: Literal['none', 'variants', 'decomposition'] = 'none'):
     # autopep8: on
         """
-        Initialize the AnovaRAGLite.
+        Initialize the GRAG.
 
         Args:
             llm_client: Client for the LLM. Options are 'ai71' or 'ec2_llm', default is 'ai71'.
@@ -57,7 +57,7 @@ class AnovaRAGLite(RAGSystemInterface):
             self.rag_llm_client = EC2LLMClient()
             self.qgen_llm_client = EC2LLMClient()
 
-        self.logger = get_logger('anova_rag_lite')
+        self.logger = get_logger('grag')
 
         # Controllers set up
         self.qpp = qpp
@@ -122,7 +122,7 @@ class AnovaRAGLite(RAGSystemInterface):
             rephrased_query = qs_res.rephrased_query
         else:
             raise ValueError(
-                f"Invalid query expansion mode", mode=self.query_expansion_mode)
+                f"Invalid query expansion mode: {self.query_expansion_mode}")
         if self.enable_hyde:
             hyde_system_prompt = "Given the question, write a short hypothetical answer that could be true. Be brief and concise."
             hyde_answer, _ = self.qgen_llm_client.complete_chat_once(
@@ -208,18 +208,18 @@ class AnovaRAGLite(RAGSystemInterface):
             doc_ids=[doc.metadata.doc_id for doc in docs],
             generated_queries=queries,
             total_time_ms=(time.time() - start_time) * 1000,
-            system_name="AnovaRAGLite",
+            system_name="GRAG",
         )
 
 
 if __name__ == "__main__":
-    # Test the AnovaRAGLite system
-    rag_system = AnovaRAGLite(initial_retrieval_k_docs=10, enable_hyde=True,
+    # Test the GRAG system
+    rag_system = GRAG(initial_retrieval_k_docs=10, enable_hyde=True,
                               query_gen_prompt_level='naive', reranker='no', first_step_ranker='both_fusion')
 
     result = rag_system.process_question(
         "How does the artwork 'For Proctor Silex' create an interesting visual illusion for viewers as they approach it?",
-        qid=1
+        qid="1"
     )
 
     print("Question:", result.question)

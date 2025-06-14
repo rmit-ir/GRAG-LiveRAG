@@ -33,7 +33,7 @@ cp .env.example .env
 Run the final selected config:
 
 ```bash
-uv run scripts/run.py --system AnovaRAGLite \
+uv run scripts/run.py --system GRAG \
   --live \
   --num-threads 20 \
   --query_expansion_mode none \

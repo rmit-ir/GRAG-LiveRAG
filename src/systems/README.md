@@ -17,14 +17,14 @@ To create a new RAG system:
 
 1. Create a directory under `src/systems/` for your system
 2. Implement the [`RAGSystemInterface`](./rag_system_interface.py) abstract base class
-3. See [`anova_rag/anova_rag_lite.py`](./anova_rag/anova_rag_lite.py) for a complete example
+3. See [`grag/grag.py`](./grag/grag.py) for a complete example
 
 ## Running a System
 
 You can run a system using the class name:
 
 ```bash
-uv run scripts/run.py --system AnovaRAGLite \
+uv run scripts/run.py --system GRAG \
   --live \
   --input data/live_rag_questions/LiveRAG_LCD_Session1_Question_file.jsonl \
   --num-threads 5
@@ -35,7 +35,7 @@ This generates results in `data/rag_results/` folder.
 For system-specific parameters:
 
 ```bash
-uv run scripts/run.py --system AnovaRAGLite --help
+uv run scripts/run.py --system GRAG --help
 ```
 
 Notice that the system's constructor arguments are automatically made available as command line arguments.
@@ -67,5 +67,5 @@ def process_question(self, question: str, qid: Optional[str] = None) -> RAGResul
 
 ## Available Systems
 
-- **[AnovaRAGLite](./anova_rag/anova_rag_lite.py)**: Advanced RAG implementation with query expansion, fusion search, and logits reranking
-  - Path: `systems.anova_rag.anova_rag_lite.AnovaRAGLite`
+- **[GRAG](./grag/grag.py)**: Advanced RAG implementation with query expansion, fusion search, and logits reranking
+  - Path: `systems.grag.grag.GRAG`
