@@ -20,13 +20,10 @@ Launch the logits server(preferably a GPU instance for faster speed)
 uv run scripts/aws/apps/mini_tgi/llm_server.py --port 8977
 ```
 
-Configure OpenSearch, Pinecone and AI71 credentials
+Configure AI71 credentials
 
 ```bash
 cp .env.example .env
-# edit AWS_LIVE_RAG_REGION=
-# edit AWS_LIVE_RAG_ACCESS_KEY_ID=
-# edit AWS_LIVE_RAG_SECRET_ACCESS_KEY=
 # edit AI71_API_KEY=
 ```
 
