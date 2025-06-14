@@ -46,6 +46,8 @@ uv run scripts/run.py --system GRAG \
   --input data/live_rag_questions/LiveRAG_LCD_Session1_Question_file.jsonl
 ```
 
+This command searches for a class named GRAG and runs the input dataset with it, GRAG is located at [src/systems/grag/grag.py](src/systems/grag/grag.py#L21).
+
 After it finishes, you can find the results in `data/rag_results/` folder.
 
 Note
