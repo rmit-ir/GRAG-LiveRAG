@@ -1,17 +1,72 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
 cff-version: 1.2.0
-message: "If you use this work, please cite it as below."
-title: "RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge -- GRAG: Generation-Retrieval-Augmented Generation"
+title: >-
+  RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge -- GRAG:
+  Generation-Retrieval-Augmented Generation
+message: 'If you use this work, please cite it as below.'
+type: software
 authors:
-  - family-names: Ran
-    given-names: Kun
-  - family-names: Sun
-    given-names: Shuoqi
-  - family-names: Spina
-    given-names: Damiano
-  - family-names: Zendel
-    given-names: Oleg
-year: 2025
-conference: "LiveRAG Challenge at SIGIR 2025"
-doi: "10.48550/arXiv.2506.14516"
-url: "https://arxiv.org/abs/2506.14516"
-type: conference-paper	
+  - given-names: Kun
+    family-names: Ran
+    orcid: 'https://orcid.org/0009-0004-6708-703X'
+  - given-names: Shuoqi
+    family-names: Sun
+    orcid: 'https://orcid.org/0009-0000-9329-9731'
+  - given-names: Khoi Nguyen
+    family-names: Dinh Anh
+    orcid: 'https://orcid.org/0009-0004-7668-4290'
+  - given-names: Damiano
+    family-names: Spina
+    orcid: 'https://orcid.org/0000-0001-9913-433X'
+  - given-names: Oleg
+    family-names: Zendel
+    orcid: 'https://orcid.org/0000-0003-1535-0989'
+identifiers:
+  - type: doi
+    value: 10.48550/arXiv.2506.14516
+repository-code: 'https://github.com/rmit-ir/GRAG-LiveRAG'
+abstract: >
+  This paper presents the RMIT-ADM+S participation in the
+  SIGIR 2025 LiveRAG Challenge. Our
+  Generation-Retrieval-Augmented Generation (GRAG) approach
+  relies on generating a hypothetical answer that is used in
+  the retrieval phase, alongside the original question. GRAG
+  also incorporates a pointwise large language model
+  (LLM)-based re-ranking step prior to final answer
+  generation. We describe the system architecture and the
+  rationale behind our design choices. In particular, a
+  systematic evaluation using the Grid of Points (GoP)
+  framework and N-way ANOVA enabled comparison across
+  multiple configurations, including query variant
+  generation, question decomposition, rank fusion
+  strategies, and prompting techniques for answer
+  generation. Our system achieved a Relevance score of 1.199
+  and a Faithfulness score of 0.477 on the private
+  leaderboard, placing among the top four finalists in the
+  LiveRAG 2025 Challenge.
+license: CC-BY-SA-4.0
+preferred-citation:
+  authors:
+  - given-names: Kun
+    family-names: Ran
+    orcid: 'https://orcid.org/0009-0004-6708-703X'
+  - given-names: Shuoqi
+    family-names: Sun
+    orcid: 'https://orcid.org/0009-0000-9329-9731'
+  - given-names: Khoi Nguyen
+    family-names: Dinh Anh
+    orcid: 'https://orcid.org/0009-0004-7668-4290'
+  - given-names: Damiano
+    family-names: Spina
+    orcid: 'https://orcid.org/0000-0001-9913-433X'
+  - given-names: Oleg
+    family-names: Zendel
+    orcid: 'https://orcid.org/0000-0003-1535-0989'
+  title: "RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge -- GRAG:
+  Generation-Retrieval-Augmented Generation"
+  type: conference-paper
+  conference:
+      date-end: "2025-07-17"
+      name: "SIGIR 2025 LiveRAG Challenge"
