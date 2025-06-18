@@ -10,11 +10,7 @@ authors:
     given-names: Damiano
   - family-names: Zendel
     given-names: Oleg
-abstract: "This paper presents the RMIT-ADM+S participation in the SIGIR 2025 LiveRAG Challenge. Our Generation-Retrieval-Augmented Generation (GRAG) approach relies on generating a hypothetical answer that is used in the retrieval phase, alongside the original question. GRAG also incorporates a pointwise large language model (LLM)-based re-ranking step prior to final answer generation. We describe the system architecture and the rationale behind our design choices. In particular, a systematic evaluation using the Grid of Points (GoP) framework and N-way ANOVA enabled comparison across multiple configurations, including query variant generation, question decomposition, rank fusion strategies, and prompting techniques for answer generation. Our system achieved a Relevance score of 1.199 and a Faithfulness score of 0.477 on the private leaderboard, placing among the top four finalists in the LiveRAG 2025 Challenge."
 year: 2025
 conference: "LiveRAG Challenge at SIGIR 2025"
-note: "Chosen as one of the top four finalists."
 doi: "10.48550/arXiv.2506.14516"
-numpages: 9
-type: conference-paper
 url: "https://arxiv.org/abs/2506.14516"
