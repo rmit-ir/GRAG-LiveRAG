@@ -170,12 +170,12 @@ from services.pinecone_index import PineconeService
 If you use this resource please cite the following report:
 
 ```bibtex
-@misc{ran2025grag,
- abstract = {This paper presents the RMIT-ADM+S participation in the SIGIR 2025 LiveRAG Challenge. Our Generation-Retrieval-Augmented Generation (GRAG) approach relies on generating a hypothetical answer that is used in the retrieval phase, alongside the original question. GRAG also incorporates a pointwise large language model (LLM)-based re-ranking step prior to final answer generation. We describe the system architecture and the rationale behind our design choices. In particular, a systematic evaluation using the Grid of Points (GoP) framework and N-way ANOVA enabled comparison across multiple configurations, including query variant generation, question decomposition, rank fusion strategies, and prompting techniques for answer generation. Our system achieved a Relevance score of 1.199 and a Faithfulness score of 0.477 on the private leaderboard, placing among the top four finalists in the LiveRAG 2025 Challenge.},
- author = {Ran, Kun and Sun, Shuoqi and Spina, Damiano and Zendel, Oleg},
+@inproceedings{ran2025grag,
+ author = {Ran, Kun and Sun, Shuoqi and Dinh Anh, Khoi Nguyen and Spina, Damiano and Zendel, Oleg},
+ title = {RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge -- GRAG: Generation-Retrieval-Augmented Generation},
  booktitle = {LiveRAG Challenge at SIGIR 2025},
  note = {Chosen as one of the top four finalists.},
- title = {RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge -- GRAG: Generation-Retrieval-Augmented Generation},
+ abstract = {This paper presents the RMIT-ADM+S participation in the SIGIR 2025 LiveRAG Challenge. Our Generation-Retrieval-Augmented Generation (GRAG) approach relies on generating a hypothetical answer that is used in the retrieval phase, alongside the original question. GRAG also incorporates a pointwise large language model (LLM)-based re-ranking step prior to final answer generation. We describe the system architecture and the rationale behind our design choices. In particular, a systematic evaluation using the Grid of Points (GoP) framework and N-way ANOVA enabled comparison across multiple configurations, including query variant generation, question decomposition, rank fusion strategies, and prompting techniques for answer generation. Our system achieved a Relevance score of 1.199 and a Faithfulness score of 0.477 on the private leaderboard, placing among the top four finalists in the LiveRAG 2025 Challenge.},
  year = {2025},
  doi = {10.48550/arXiv.2506.14516},
  numpages = {9}
