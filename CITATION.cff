@@ -14,3 +14,5 @@ year: 2025
 conference: "LiveRAG Challenge at SIGIR 2025"
 doi: "10.48550/arXiv.2506.14516"
 url: "https://arxiv.org/abs/2506.14516"
+preferred-citation:
+  type: conference-paper	
