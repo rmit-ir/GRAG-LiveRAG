@@ -169,6 +169,8 @@ from services.pinecone_index import PineconeService
 
 If you use this resource please cite the following report:
 
+Ran, K., Sun, S., Dinh Anh, K. N., Spina, D., & Zendel, O. RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge -- GRAG: Generation-Retrieval-Augmented Generation. SIGIR 2025 LiverRAG Challenge. DOI: [10.48550/arXiv.2506.14516](https://doi.org/10.48550/arXiv.2506.14516)
+
 ```bibtex
 @inproceedings{ran2025grag,
  author = {Ran, Kun and Sun, Shuoqi and Dinh Anh, Khoi Nguyen and Spina, Damiano and Zendel, Oleg},
