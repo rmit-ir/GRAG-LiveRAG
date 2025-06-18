@@ -164,6 +164,11 @@ This project is structured as a Python package installed in editable mode, allow
 from services.live_rag_aws_utils import LiveRAGAWSUtils
 from services.pinecone_index import PineconeService
 ```
+## Acknowledgements
+
+We thank the SIGIR 2025 LiveRAG Challenge organizers for the opportunity to participate and their support, and the reviewers for their helpful feedback. This research was conducted by the [ARC Centre of Excellence for Automated Decision-Making and Society (ADM+S, CE200100005)], and funded fully by the Australian Government through the Australian Research Council and was undertaken with the assistance of computing resources from [RACE (RMIT AWS Cloud Supercomputing)](https://www.rmit.edu.au/partner/hubs/race).
+  
+  This work was conducted on the unceded lands of the  Woi wurrung and Boon wurrung language groups of the eastern Kulin Nation. We pay our respect to Ancestors and Elders, past and present, and extend that respect to all Aboriginal and Torres Strait Islander peoples today and their connections to land, sea, sky, and community.
 
 ## Citation
 
