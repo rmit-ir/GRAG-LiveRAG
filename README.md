@@ -1,6 +1,6 @@
 # RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge
 
-This repository provides the source code for the GRAG approach submitted by the RMIT-ADM+S team at the SIGIR LiveRAG Challenge. You can find the paper describing our approach [here](10.48550/arXiv.2506.14516). The official challenge documentation and resources are available at <https://liverag.tii.ae>.
+This repository provides the source code for the GRAG approach submitted by the RMIT-ADM+S team at the SIGIR LiveRAG Challenge. You can find the paper describing our approach [here](https://doi.org/10.48550/arXiv.2506.14516). The official challenge documentation and resources are available at <https://liverag.tii.ae>.
 
 ## Reproducing Results
 
