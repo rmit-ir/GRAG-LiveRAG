@@ -2,8 +2,7 @@
 # Visit https://bit.ly/cffinit to generate yours today!
 
 cff-version: 1.2.0
-title: >-
-  RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge -- GRAG:
+title: RMIT-ADM+S at the SIGIR 2025 LiveRAG Challenge -- GRAG:
   Generation-Retrieval-Augmented Generation
 message: 'If you use this work, please cite it as below.'
 type: software
